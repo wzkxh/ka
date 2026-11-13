@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-run_tests.py - compile every tests/*.tiny, run the program, compare with expectations.
+run_tests.py - compile every tests/*.ka, run the program, compare with expectations.
 
     python run_tests.py              run everything (on Windows: really runs the .exe files)
     python run_tests.py -k closure   only tests whose name contains "closure"
@@ -10,11 +10,12 @@ run_tests.py - compile every tests/*.tiny, run the program, compare with expecta
     python run_tests.py --keep       keep the generated .exe files in ./build
 
 Test files (all in tests/, same base name):
-    NAME.tiny      program
+    NAME.ka        program
     NAME.expected  expected stdout            (runtime tests)
     NAME.in        stdin to feed              (optional)
     NAME.exit      expected exit code         (optional, default 0)
-    err_NAME.tiny + err_NAME.error : the compiler must FAIL, and its message must
+    NAME.warn      text that must appear in a compiler warning (optional)
+    err_NAME.ka + err_NAME.error : the compiler must FAIL, and its message must
                                      contain the text in the .error file (first line)
 """
 import argparse
@@ -28,7 +29,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "tools"))
-import tinyc  # noqa: E402
+import ka  # noqa: E402
 
 
 def read(path, mode="r"):
@@ -39,7 +40,7 @@ def read(path, mode="r"):
 
 
 def norm(b):
-    return b.decode("utf-8", "replace").replace("\r\n", "\n")
+    return b.replace(b"\r\n", b"\n")
 
 
 def run_exe(exe, stdin, emu):
@@ -52,18 +53,19 @@ def run_exe(exe, stdin, emu):
     try:
         p = subprocess.run([exe], input=stdin, capture_output=True, timeout=30)
     except subprocess.TimeoutExpired:
-        return "", None, "timeout (30 s)"
+        return b"", None, "timeout (30 s)"
     return norm(p.stdout), p.returncode, None
 
 
 def run_one(path, outdir, emu):
-    base = path[:-len(".tiny")]
+    base = path[:-len(".ka")]
     name = os.path.basename(base)
     src = read(path)
+    warnings = []
     try:
-        exe_bytes = tinyc.compile_source(src)
+        exe_bytes = ka.compile_source(src, warnings)
         compile_error = None
-    except tinyc.CompileError as e:
+    except ka.CompileError as e:
         exe_bytes, compile_error = None, str(e)
 
     if name.startswith("err_"):
@@ -76,18 +78,21 @@ def run_one(path, outdir, emu):
     if compile_error is not None:
         return False, f"unexpected compile error: {compile_error}"
 
+    want_warn = (read(base + ".warn") or "").strip()
+    if want_warn and not any(want_warn in w for w in warnings):
+        return False, f"expected a warning containing: {want_warn}\n   got: {warnings}"
     exe = os.path.join(outdir, name + ".exe")
     with open(exe, "wb") as f:
         f.write(exe_bytes)
     stdin = read(base + ".in", "rb") or b""
-    want_out = (read(base + ".expected") or "").replace("\r\n", "\n")
+    want_out = (read(base + ".expected", "rb") or b"").replace(b"\r\n", b"\n")
     want_code = int((read(base + ".exit") or "0").strip())
     out, code, err = run_exe(exe, stdin, emu)
     problems = []
     if err:
         problems.append(err)
     if out != want_out:
-        problems.append(f"stdout differs\n--- expected\n{want_out}--- actual\n{out}---")
+        problems.append(f"stdout differs\n--- expected\n{want_out.decode('utf-8', 'replace')}--- actual\n{out.decode('utf-8', 'replace')}---")
     if code != want_code:
         problems.append(f"exit code {code}, expected {want_code}")
     return (not problems), "\n   ".join(problems)
@@ -104,13 +109,13 @@ def main():
         print("note: not Windows, using --emu automatically")
         args.emu = True
 
-    tests = sorted(p for p in glob.glob(os.path.join(HERE, "tests", "*.tiny"))
+    tests = sorted(p for p in glob.glob(os.path.join(HERE, "tests", "*.ka"))
                    if args.k in os.path.basename(p))
-    outdir = os.path.join(HERE, "build") if args.keep else tempfile.mkdtemp(prefix="tinytests_")
+    outdir = os.path.join(HERE, "build") if args.keep else tempfile.mkdtemp(prefix="katests_")
     os.makedirs(outdir, exist_ok=True)
     failed, t0 = [], time.time()
     for path in tests:
-        name = os.path.basename(path)[:-5]
+        name = os.path.basename(path)[:-3]
         try:
             ok, msg = run_one(path, outdir, args.emu)
         except Exception as e:                      # compiler crash etc.

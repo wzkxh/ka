@@ -1,129 +1,156 @@
-# NOTES for Claude (working memory of the Tiny compiler project)
+# NOTES for Claude (working memory of the Ka compiler project)
 
-Read this first in every new session, then LANGUAGE.md, then skim `tinyc.py`.
+Read this first in every new session, then LANGUAGE.md, then skim `ka.py`.
 The user cannot be assumed to remember details; this file is the source of truth for *how* and *why*.
+(The language was called "Tiny" with extension `.tiny` until the rename to Ka / `.ka`.)
 
 ## 0. Working agreement with the user
 - The user writes the language design, tests on real Windows (`python run_tests.py`) and pastes failures.
   Claude cannot run Windows; Claude checks code with the Unicorn emulator (`tools/emu.py`,
-  `python run_tests.py --emu` after `pip install unicorn pefile pefile capstone` as needed).
-- Every language change = update `tinyc.py` + `LANGUAGE.md` + tests (+ this file if the design changes).
-  Tests are the language definition: expected outputs are derived by hand/by reasoning, not copied blindly.
+  `python run_tests.py --emu` after `pip install unicorn pefile`).
+- Every language change = update `ka.py` + `LANGUAGE.md` + tests (+ this file if the design changes).
+  Tests are the language definition: expected outputs are derived by hand/by reasoning, not copied blindly
+  (a wrong hand-computed expectation was found twice this way: always re-check which side is wrong).
 - Keep the compiler a **single file, pure Python 3, no dependencies**, emitting the PE directly.
-- The user thinks in small incremental steps with "huge plans" later. They accept pragmatic limits
-  (e.g. `global`/`nonlocal` exist although not originally planned) - ask before big redesigns,
-  but do the whole job of a requested feature (parser, analysis, codegen, docs, tests).
-- Keep answers short: what changed, notable behaviour/limits, how it was verified.
+- The user thinks in small incremental steps, wants "as simple as you can", accepts pragmatic limits and says
+  explicitly what may be skipped ("it is not that Microsoft will adopt this language instead of C++").
+  Ask before big redesigns, but do the whole job of a requested feature (parser, analysis, codegen, docs, tests).
+- Keep answers short: what changed, notable behaviour/limits, open questions, how it was verified.
 - End of session: update LANGUAGE.md, NOTES.md, tests; zip; tell the user to download.
 
-## 1. Pipeline (tinyc.py)
-`tokenize` -> `Parser` (AST of tuples + `Scope` objects) -> `CodeGen.analyze` (captures) ->
-`CodeGen` (x86-64 bytes via `Asm`) -> `build_pe` (PE32+ writer). `compile_source(src)` does it all;
-`CompileError` carries messages `line N: ...`.
+## 1. Pipeline (ka.py)
+`check_tabs` -> `strip_comments` -> `tokenize` -> `Parser` (AST of tuples + `Scope` objects) ->
+`Checker` (static types) -> `CodeGen.analyze` (captures) -> `CodeGen` (x86-64 bytes via `Asm`) ->
+`build_pe` (PE32+ writer). `compile_source(src, warnings=None)` does it all; `CompileError` carries
+messages `line N: ...`; warnings (list of strings) are only collected, never fatal.
+
+### Source preparation
+- `check_tabs`: any TAB anywhere is an error (decision: strict, also in strings/comments).
+- `strip_comments` runs before the lexer and replaces comments by spaces (newlines kept, so line numbers and
+  columns survive). It is string-aware (`"..."`, `'...'`, `^` escapes). Forms: `--` line; `--[[ ... ]]--` if the
+  closer is on the same line (and before any `--]]`); otherwise `--[[ ... --]]` multi-line, blanked up to the
+  end of the closing line (rest of that line is ignored). Unclosed -> error.
 
 ### Lexer
-- Token = `(kind, value, line)`; kinds: `num id kw str op nl indent dedent eof`.
-- Emits NEWLINE (`nl`) only when the line is *finished*: suppressed if paren depth > 0 or if the
-  previous token is a continuation operator (`CONT_OPS`, `and/or/not`). Duplicated nl are avoided.
-- Indentation: one indent stack per open `{` (`stacks`), parens saved/reset per `{` (`paren_saved`).
-  INDENT is emitted only if the previous line ended with `:` (`colon_pending`); extra indent otherwise is
-  an error. Lines starting with `}` skip indentation processing; `}` emits DEDENTs for blocks still open
-  inside that brace. Blank/comment-only lines are skipped. Tab = next multiple of 8.
-- Comments are `--`. (`#` and `//` removed on purpose.)
+- Token = `(kind, value, line)`; kinds: `num hex id kw str op nl indent dedent eof`. `hex` tokens carry the
+  value already wrapped to signed 64 bit; `str` tokens carry `(bytes, 'b'|'u')`.
+- Strings are scanned by hand (`lex_string`), not by regex. Escapes: `^n ^t ^r ^^ ^" ^'`, `^XX` (byte in `'..'`,
+  code point U+00XX in `".."`), `^uXXXX`, `^UXXXXXX`. Both string kinds are stored as UTF-8 bytes for now
+  (the user plans: `'..'` bytes, `".."` array of 32-bit code points later; print must then encode).
+- Numbers: `\d\w*` is taken whole and validated (`\d+(_\d+)*`), so `1_`, `1__0`, `12ab` are one clear error.
+  Hex: `#\w*` validated against `#hex(_hex)*`; `#'...'` is reserved (currently "bad hex literal").
+- Emits NEWLINE (`nl`) only when the line is *finished*: suppressed if paren depth > 0 or if the previous
+  token is a continuation operator (`CONT_OPS`: `+ - * / % == != < <= > >= && || ! = , & | ~ ^`).
+- Indentation: spaces only. One indent stack per open `{` (`stacks`), parens saved/reset per `{`.
+  INDENT only if the previous line ended with `:` (`colon_pending`). Lines starting with `}` skip indentation
+  processing; `}` emits DEDENTs for blocks still open inside that brace.
+- `^` and `\` are plain `op` tokens; the parser decides (power vs. global prefix).
 
 ### Parser
-- Recursive descent; statements end via `end_stmt()` (accepts `;`, nl, or leaves `}`/dedent/eof/`else`).
-- **`closed_at` trick:** a nested body (indented block, or one-line body) may already have consumed the
-  line terminator; `end_stmt` then returns immediately when `self.i == self.closed_at`. Needed for
-  `x = fn(n):` + indented body, and `xyz = fn(n): a; return a`.
-- `block(allman=True)`: brace block / `:`-indented / `:`-one-line (`stmt()` repeated while the previous
-  token was `;` and the line is not over / no `else`). Literals call it with `allman=False`.
-- `if`: after the then-block, skip newlines and look for `else` (restore position if none).
-- Statements starting with an id: `=` -> assignment, otherwise expression statement.
-  `fn name` -> definition, `fn (` -> literal expression statement.
-- `parse_function`: params, then block or a single expression body (`fn.expr_body`). A final `exprstmt`
-  of any function body is rewritten to `return`.
-- Scopes: `Scope` per function + the global scope (`parent is None`). `declare()` registers assigned
-  names: global scope `slots[name] = index` (data slot); function `slots[name] = rbp offset`
-  (params at +24+8*(n-1-i), locals at -8*k). `named_fns` collects `fn name` defs (hoisted).
-- Function name vs variable are the **same namespace** (a named fn is a variable holding a closure).
-- AST nodes: `("assign",name,expr,line) ("print",items) ("if",c,then,else) ("while",c,body)
-  ("break",) ("continue",) ("exit",e) ("return",e|None) ("fn",Scope) ("exprstmt",e) ("pass",)`;
-  expressions `("num",n) ("var",name,line) ("call",callee,args,line) ("fnlit",Scope) ("bin",op,l,r)
-  ("and"|"or",l,r) ("neg"|"not",e) ("input",)`.
+- Recursive descent. `end_stmt()` accepts `;`, nl, a closing `)`/`,` (only when the innermost open bracket is `(`,
+  tracked in `self.ctx`), `}`, eof/dedent, `else/elif`, or a statement keyword (`STMT_KW` and `fn`) - that is the
+  "`;` optional where clear" rule.
+- **`closed_at` trick:** a nested body (indented block, or one-line body) may already have consumed the line
+  terminator; `end_stmt` then returns immediately when `self.i == self.closed_at`.
+- `block(allman=True)`: brace block / `:` + `{` / `:`-indented / `:`-one-line. A one-line body is
+  `stmt()` repeated while `body_continues()` (previous token was not nl/dedent and either a statement keyword or
+  something that is not an end follows). Nested one-line bodies fall out of the recursion.
+- `if_stmt`: after the then-block skip newlines and look for `elif` / `else` (restore position if none). This is
+  what makes dangling else bind to the nearest `if` that has no else yet, also across lines.
+- `=` at statement start is a `return` (needs an expression); `return` may be bare.
+- Operators: `chain()` builds `("cmp", ops, operands)` for 2+ comparisons on the same level, a plain `("bin",..)`
+  for one. `power()` = `postfix ['^' unary]` gives right associativity and `-a^b = -(a^b)` (the folding of
+  `-5` into a literal is skipped when `^` follows).
+- Print items: `string_item()` collects adjacent string tokens, or a parenthesised group of them (so newlines
+  inside parentheses concatenate). Mixed `'`/`"` -> error. Strings elsewhere -> error.
+- Scopes: `Scope` per function + the global scope (`parent is None`). `declare(name, mode, line)` registers
+  assigned names (`mode`: None / `^` / `\`). Function-level sets `globals_decl` / `nonlocal_decl` record names used
+  as `^x` / `\x`; a name may not be both local and marked in one function (decision: no shadowed globals).
+  `^x` in a function also creates the global slot and adds it to `fn_globals` (so top-level reads before the
+  assignment are allowed).
+- AST (line last): `("assign",name,expr,line,mode) ("print",items,line) ("if",c,then,else,line)
+  ("while",c,body,line) ("exit",e,line) ("exprstmt",e,line) ("return",e|None,line) ("fn",Scope) ("break",)
+  ("continue",)`; expressions `("num",n) ("var",name,line,mode) ("call",callee,args,line) ("fnlit",Scope)
+  ("bin",op,l,r) ("cmp",ops,xs) ("and"|"or",l,r) ("neg"|"not"|"bnot",e)`.
+- Warning: expression statements that are not calls ("the value of this expression is not used").
 
-### Analysis (CodeGen.analyze / lookup / capture)
-- `lookup(name, scope)` -> `("g",name)` global | `("l",scope,name)` own local | `("f",owner,name)`
-  variable of an enclosing function. `global`/`nonlocal` declarations steer it.
-- `capture` marks `owner.boxed` and adds `(owner,name)` to `free` of every function between the user
-  and the owner (flat closures: each function passes boxes on to the closures it creates).
-- Must run over the whole program before any code is generated (`program()` does this).
+### Name resolution (`Resolver.lookup`)
+Shared by Checker and CodeGen. `lookup(name, scope, line, mode)` -> `("g",name)` | `("l",scope,name)` |
+`("f",owner,name)`. `mode` `^` -> global; `\` -> nearest enclosing function that owns the name; plain names
+follow `globals_decl` / `nonlocal_decl` first, then local, then enclosing functions, then globals.
+
+### Type checker (`Checker`)
+- Monomorphic unification (Hindley-Milner without generalisation). `Ty` kinds: `int`, `fn(params, ret)`, `var`.
+  Variables are keyed `("g",name)` or `(scope,name)`. Every function gets a type with a fresh variable per
+  parameter and for the result (`fn_ty`); bodies are checked once (`check_body`).
+- Fixed by decision: variable keeps the type of its first value; one signature per function; `==`/`!=` need equal
+  types; everything else needs int. Bare `return` / falling off the end are NOT unified (user: "don't deal with it").
+- Unresolved variables at the end are simply ignored (they cannot change code generation: both types are one word).
+- Because of the checks, runtime arity/not-a-function errors are gone; only the null check of a call remains
+  (a function variable assigned only inside a function that has not run).
 
 ### Code generation conventions
 - Expression result in **rax**. Binary ops: eval left, `push rax`, eval right, `mov rcx,rax`, `pop rax`.
   Only rax/rcx/rdx are used by generated code as scratch; runtime routines clobber
   rcx, rdx, r8-r11, rsi, rax and preserve rbp. No value is ever kept in a register across a call.
-- Runtime routines (`rt_print_str`, `rt_print_int`, `rt_read`, `rt_alloc`, `rt_divzero`, `rt_notfn`,
-  `rt_badarity`) set up their own aligned frame (`push rbp; mov rbp,rsp; sub rsp,0x30; and rsp,-16`),
-  so callers never worry about 16-byte alignment. `exit_process` aligns itself too.
-- `Asm.rip(opcode_bytes, symbol)`: instruction whose **last 4 bytes** are the rip-relative disp32
-  (do not use for instructions with a trailing immediate). `Asm._ref(label)` + `call/jmp/jcc`
-  for rel32 to labels. `lea rax,[rip+label]` is `48 8D 05` + `_ref`.
+- Chained comparison: the previous operand lives at `[rsp]` while the next one is evaluated; each link
+  jumps to a fail label when false (`FAIL_CC`).
+- Power: square-and-multiply loop inline; negative exponent -> `rt_negexp`.
+- Runtime routines (`rt_print_str`, `rt_print_int`, `rt_alloc`, `rt_divzero`, `rt_notfn`, `rt_negexp`)
+  set up their own aligned frame, so callers never worry about 16-byte alignment. `exit_process` aligns too.
+- `Asm.rip(opcode_bytes, symbol)`: instruction whose **last 4 bytes** are the rip-relative disp32.
+  `Asm._ref(label)` + `call/jmp/jcc` for rel32 to labels. `lea rax,[rip+label]` is `48 8D 05` + `_ref`.
 - **Calling convention (own):** caller pushes args left->right, evaluates the callee value (closure
-  pointer) into rax, checks null (`rt_notfn`) and `[rax+8] == nargs` (`rt_badarity`), `push rax`,
-  `call [rax]`. Callee: `push rbp; mov rbp,rsp; push 0 * nlocals`, `ret 8*(nparams+1)` pops args and
-  closure. Result in rax. Frame: `[rbp+16]` = closure ptr, params above, locals below rbp.
-- **Closure object:** `[code address, nparams, box ptr 0, box ptr 1, ...]`. Closures with no free
-  variables use one static 16-byte object in `.data` (`clo:<label>`), filled at run time with
-  `lea`+`mov` (no absolute addresses anywhere; the image has no relocations and DYNAMIC_BASE is off).
-  Others are `rt_alloc`ed (HeapAlloc, zeroed, never freed).
-- **Boxed variables:** locals/params captured by nested functions are moved into 8-byte heap boxes
-  at function entry (params copied in); their frame slot holds the box pointer. Free variables are
-  reached through the closure: `mov rdx,[rbp+16]; mov rdx,[rdx+16+8*i]; mov rax,[rdx]`.
-- **Hoisting:** `hoist(scope)` creates closures for all `named_fns` right after box allocation
-  (function entry) / after heap init (program start), then the body runs.
+  pointer) into rax, checks null (`rt_notfn`), `push rax`, `call [rax]`. Callee: `push rbp; mov rbp,rsp;
+  push 0 * nlocals`, `ret 8*(nparams+1)`. Result in rax. Frame: `[rbp+16]` = closure ptr, params above, locals below.
+- **Closure object:** `[code address, nparams, box ptr 0, box ptr 1, ...]` (`nparams` is no longer used at run
+  time). Closures without free variables use one static 16-byte object in `.data`; others are `rt_alloc`ed.
+- **Boxed variables:** locals/params captured by nested functions live in 8-byte heap boxes; free variables are
+  reached through the closure.
+- **Hoisting:** `hoist(scope)` creates closures of all `named_fns` at scope entry.
 - Use-before-assignment is checked textually in codegen (`scope.defined`).
-- Globals live at fixed `.data` addresses (`var:<name>`, 8 bytes, zero-initialised).
+- Program start: GetStdHandle(stdout), `SetConsoleOutputCP(65001)`, GetProcessHeap. (Side effect: the console
+  keeps UTF-8 afterwards; restoring the old code page was judged not worth it.)
 
 ### PE writer (`build_pe`)
-- Sections: `.text` (RX) at 0x1000, `.idata` (RW), `.data` (RW). ImageBase 0x140000000, no relocs,
-  console subsystem, 1 MB stack reserve. Imports from kernel32: GetStdHandle, WriteFile, ReadFile,
-  ExitProcess, GetProcessHeap, HeapAlloc (list `IMPORTS`; add names there to import more).
-- `.data` layout: 0 stdout handle, 8 stdin handle, 0x10 `written`, 0x18 heap handle, 0x20..0x40
-  number buffer (end symbol `numbuf_end`), 0x40..0x80 input buffer, then global variables (8 bytes each),
-  then static closures (16 each), then string literals (NUL-terminated).
-  Strings 0..3 are reserved for the runtime (newline and three error messages).
-- Verified with `pefile` (no warnings except the harmless "many 0x00 bytes").
+- Sections `.text` (RX) at 0x1000, `.idata` (RW), `.data` (RW). ImageBase 0x140000000, no relocs, console
+  subsystem, 1 MB stack. kernel32 imports (list `IMPORTS`): GetStdHandle, WriteFile, SetConsoleOutputCP,
+  ExitProcess, GetProcessHeap, HeapAlloc.
+- `.data` layout: 0 stdout handle, 8 (unused), 0x10 `written`, 0x18 heap handle, 0x20..0x40 number buffer
+  (`numbuf_end`), 0x40..0x80 unused (was the input buffer), then globals (8 bytes each), static closures
+  (16 each), then strings (a NUL byte is appended but lengths are always explicit, so NUL inside strings is fine).
+  Strings 0..3 are reserved for the runtime (newline, division by zero, unset function, negative exponent).
 
 ## 2. Decision log (why things are the way they are)
 - Direct PE output instead of assembler/linker: no dependencies, user asked for "compiler in Python".
-- `--` comments, newline-terminated statements, `;` optional, indentation blocks and braces mixed.
-- One-line bodies run to end of line (`if a: b; c` => c inside). User explicitly accepted that this
-  cannot express every variant; do not extend it.
-- Assignment inside a function always creates a local unless `global`/`nonlocal` (Python rules);
-  user accepted this "for now".
-- Functions are first-class; named `fn` = hoisted variable. Closures capture variables **by reference**
-  via heap boxes (so escaping closures are safe). No GC (leak) accepted.
-- Arity and callee checks are at run time (callee is a dynamic value).
-- Last bare expression of a function body is returned (any function, not only `{}` literals).
-- `input()` is minimal (one `ReadFile` per call, 63 bytes). Known weak spot.
+- Comments `--`, `--[[ ]]--`, `--[[ --]]`; newline-terminated statements, `;` optional where clear.
+- One-line bodies run to the end of the line and nest; dangling else binds to the nearest `if`.
+- Globals via `^x`, enclosing-function variables via `\x` (draft, user expects to redo it). No shadowing of a
+  global by a local with the same name in one function (user: "forget shadowed global vars").
+- Types: int and function only, inferred, checked statically; no annotations; falling off the end not checked.
+- Signed ints everywhere except `& | ~` which just see 64 bits; hex literals wrap to signed.
+- `'..'` byte string vs `".."` unicode string differ only in the meaning of `^XX` for now.
+- Power operator `^`: right associative, above unary minus, negative exponent is a runtime error (simplest).
+- Closures capture by reference via heap boxes; no GC (leak) accepted.
+- `input` was removed on purpose (no way to read values for now).
+- Expression-bodied functions (`fn f(x) x*x`) and the "last expression is the result" rule were removed.
 
 ## 3. Known limitations / ideas for later
-- Buffered `input()` (several lines from a pipe), string values/variables/concatenation, arrays,
-  `for`, GC or arena freeing, integer overflow checks, `INT_MIN / -1`, compile-time arity check when the
-  callee is statically known, better error recovery (the compiler stops at the first error),
-  `else` on one-line bodies of nested ifs (dangling else binds to the nearest `if`).
-- Calling a non-null garbage value (e.g. `5(1)`) crashes with an access violation (not caught).
+- Strings as values, unicode strings as 32-bit arrays, hex byte strings `#'..'`, input, arrays, `for`, GC,
+  overflow checks, `INT_MIN / -1`, shifts, generalised (polymorphic) function types, checking returns on all
+  paths, better error recovery (the compiler stops at the first error), `\\x` at more than one level.
+- The unused-expression warning is intentionally simple (any non-call expression statement).
+- Not verified on real Windows in this session: `SetConsoleOutputCP` (faked in the emulator) and the UTF-8
+  console output. Everything else is exercised through the emulator.
 
 ## 4. Testing
-- `python run_tests.py [-k name] [-v] [--emu] [--keep]`; see header of run_tests.py for file conventions
-  (`NAME.tiny/.expected/.in/.exit`, `err_NAME.tiny/.error`).
+- `python run_tests.py [-k name] [-v] [--emu] [--keep]`; see the header of run_tests.py for file conventions
+  (`NAME.ka/.expected/.exit/.warn`, `err_NAME.ka/.error`). Expected output is compared as raw bytes.
 - The emulator fakes kernel32 and asserts 16-byte stack alignment at every API call.
 - When adding a feature add tests for: normal use, interaction with blocks/continuation lines,
   error messages, and at least one regression for any bug found.
-- `input` tests must use a single `input()` per program (pipe limitation above).
 
 ## 5. Session checklist
-1. User uploads the zip/folder. Unzip, read NOTES.md, LANGUAGE.md; run `python run_tests.py --emu`.
+1. User uploads the zip/folder. Unzip, read NOTES.md, LANGUAGE.md; `pip install unicorn pefile`; run `python run_tests.py --emu`.
 2. Implement the requested change; run all tests; add/adjust tests and docs.
-3. Re-zip (`tiny.zip`) and present it; summarise what to test on Windows.
+3. Re-zip (`ka.zip`) and present it; summarise what to test on Windows.

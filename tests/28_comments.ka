@@ -1,0 +1,9 @@
+print 1 --[[ inline ]]-- + 2
+print 3 --[[ x ]]-- --[[ y ]]-- + 1
+--[[ first line
+print "hidden"
+--]] print "the rest of the closing line is ignored"
+print "visible --[[ not a comment ]]--"
+--[[ one-line multi --]] print "ignored too"
+print 7 -- --[[ a plain line comment
+print 8

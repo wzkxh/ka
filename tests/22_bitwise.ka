@@ -1,0 +1,7 @@
+print 12 & 10, " ", 12 | 10, " ", 12 ~ 10, " ", ~0, " ", ~5, " ", ~#f0 & #ff
+print #ffffffffffffffff, " ", #8000000000000000
+print -1 & #ff
+print 1 | 2 + 4   -- '|' is on the level of '+': (1|2)+4
+print 2 + 4 & 6   -- '&' is on the level of '*': 2+(4&6)
+print 6 & 3 == 2
+print #ff_ff, " ", 1_000_000, " ", #FF, " ", #ff

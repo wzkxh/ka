@@ -1,0 +1,7 @@
+fn boom():
+    print "boom"
+    return 1
+print 0 && boom()
+print 1 || boom()
+print 1 && boom()
+print 0 || boom()

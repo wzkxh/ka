@@ -1,0 +1,22 @@
+^a = 1            -- the same as a = 1 at the top level
+fn inc(): ^a = a + 1
+fn show(): print ^a, " ", a
+inc(); inc()
+show()
+print a
+fn newg(): ^created = 42
+newg()
+print created
+fn mixed(x):
+    r = x * 2
+    ^total = r + 1     -- total is global, r is local
+    return r
+print mixed(5), " ", total
+fn outer():
+    v = 1
+    fn inner():
+        ^v = 100       -- the global v, not the v of outer
+        return v       -- after ^v the plain name is the global too
+    r = inner()
+    return r * 1000 + v
+print outer(), " ", v

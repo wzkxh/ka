@@ -1,0 +1,3 @@
+fn f(a):
+    if a: return 1
+    return fn(): return 2

@@ -1,0 +1,5 @@
+fn f(x):=x*2
+fn g(x) {=x+1}
+fn h(x): if x > 0: =1 else: =-1
+fn z(): return
+print f(4), " ", g(4), " ", h(5), " ", h(-5), " ", z()

@@ -1,0 +1,14 @@
+a = 1; b = 2; print a + b
+x = 1 +
+    2 +
+    3
+print x
+y = (1
+     + 2)
+print y
+print "a",
+      "b",
+      x
+z = 5 > 3 &&
+    2 > 1
+print z

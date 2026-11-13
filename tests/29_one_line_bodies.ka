@@ -1,0 +1,15 @@
+a = 1; i = 0
+if a: print "a"; while i < 3: i = i + 1; if i == 2: print "two" else: print "other ", i; print "end"
+x = 1
+if x == 1: if x == 2: print "inner" else: print "inner else"
+print "next"
+y = 0
+if y == 1: if y == 2: print "a" else: print "b"
+else: print "outer else"
+z = 5
+if z < 3: print "low" elif z < 10: print "mid" else: print "high"
+i = 0
+while i < 3: i = i + 1 if i == 2: print "two again"
+if a: {print "p1"; print "p2"} else: print "no"
+if 1 {print "b1"}else:print "b2";print "b3"
+if 0 {print "c1"}else:print "c2";print "c3"

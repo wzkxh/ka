@@ -1,0 +1,8 @@
+print 1 < 2 < 3, " ", 1 < 3 < 2, " ", 3 > 2 > 1, " ", 1 <= 1 <= 1, " ", 1 < 2 > 1
+print 1 == 1 == 1, " ", 1 == 1 == 2, " ", 1 != 2 != 1
+n = 0
+fn next(): ^n = n + 1; return n
+print 0 < next() < 5, " ", n       -- the middle operand is evaluated once
+print 5 < 3 < next(), " ", n       -- stops at the first false link
+print 1 < 2 < 3 < 4, " ", 1 < 2 < 3 < 3
+print 1 < 2 == 1                   -- different levels are not chained

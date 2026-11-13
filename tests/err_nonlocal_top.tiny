@@ -1,3 +1,0 @@
-fn f():
-    nonlocal q
-    q = 1

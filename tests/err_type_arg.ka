@@ -1,0 +1,3 @@
+fn f(a): print "x"
+f(1)
+f(f)

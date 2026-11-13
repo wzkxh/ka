@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-emu.py - run a Windows x64 console .exe produced by tinyc inside a CPU emulator
+emu.py - run a Windows x64 console .exe produced by ka.py inside a CPU emulator
 (Unicorn), with fake kernel32 functions. Lets the compiler be tested on Linux/macOS
 (or by Claude in its sandbox). Windows itself remains the final word.
 
@@ -8,7 +8,7 @@ emu.py - run a Windows x64 console .exe produced by tinyc inside a CPU emulator
     python tools/emu.py prog.exe ["stdin text with \\n escapes"]
 
 Library use:  stdout, exit_code, error = run_pe(path, stdin=b"...")
-Faked API: GetStdHandle, WriteFile, ReadFile (line by line), ExitProcess,
+Faked API: GetStdHandle, WriteFile, SetConsoleOutputCP (no-op), ExitProcess,
 GetProcessHeap, HeapAlloc (bump allocator). Checks stack alignment at every call.
 """
 import struct

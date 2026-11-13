@@ -1,7 +1,0 @@
-fn boom():
-    print "boom"
-    return 1
-print 0 and boom()
-print 1 or boom()
-print 1 and boom()
-print 0 or boom()

@@ -1,3 +1,0 @@
-f = fn(a) a
-print "x"
-print f(1, 2)
