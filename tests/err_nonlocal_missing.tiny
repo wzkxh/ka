@@ -1,0 +1,5 @@
+fn outer():
+    fn inner():
+        nonlocal zz
+        zz = 1
+    inner()

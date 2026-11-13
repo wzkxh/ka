@@ -1,0 +1,1 @@
+line 3: variable 'g' is local to function 'f' and used before assignment

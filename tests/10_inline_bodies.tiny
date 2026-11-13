@@ -1,0 +1,6 @@
+k = 3
+while k < 6: k = k + 1; print k
+if 1: print "ok"; print "ok2"
+if 0: print "no"; print "no2" else: print "else"; print "else2"
+f = 1
+if f: print "a"; else: print "b"

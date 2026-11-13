@@ -1,0 +1,22 @@
+i = 0
+while i < 3:
+    j = 0
+    while j < 2:
+        if i == j:
+            print "eq ", i
+
+        -- comment line inside block
+        j = j + 1
+    i = i + 1
+print "done"
+
+k = 0
+if 1:
+    while k < 3 {
+        k = k + 1
+    }
+    print "k=", k
+if k == 3
+{
+    print "allman"
+}

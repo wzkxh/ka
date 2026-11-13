@@ -1,0 +1,23 @@
+g = 10
+fn readg(): return g * 2
+fn setg():
+    global g
+    g = g + 1
+fn shadow():
+    g2 = 5
+    return g2
+fn newglobal():
+    global ng
+    ng = 77
+setg()
+setg()
+newglobal()
+print g, " ", readg(), " ", ng, " ", shadow()
+fn blocks():
+    i = 0
+    while i < 3 { inner = i; i = i + 1 }
+    return inner -- blocks do not create scopes
+print blocks()
+x = 1
+fn f(): x = 2; return x
+print f(), " ", x

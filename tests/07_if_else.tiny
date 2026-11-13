@@ -1,0 +1,21 @@
+fn sign(x):
+    if x < 0: return -1
+    else if x == 0: return 0
+    else: return 1
+print sign(-5), " ", sign(0), " ", sign(9)
+x = 3
+if x > 1 { print "big" } else { print "small" }
+if x > 5 { print "huge" }
+else if x > 2 { print "medium" }
+else { print "tiny" }
+if x == 3: print "yes"; print "yes2" else: print "no"; print "no2"
+if x == 4: print "no"; print "no2"
+else: print "else1"; print "else2"
+if x == 3
+{
+    print "allman"
+}
+else
+{
+    print "no"
+}

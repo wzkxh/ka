@@ -1,0 +1,9 @@
+let a = 5
+b = a * 2
+a = a + b
+print a, " ", b
+let c = a
+c = c - 1
+print a, " ", c
+my_var2 = 3
+print my_var2

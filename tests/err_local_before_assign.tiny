@@ -1,0 +1,4 @@
+g = 1
+fn f():
+    print g
+    g = 2
