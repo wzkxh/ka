@@ -1,16 +1,3 @@
-a) Precedence - ok, if you insist, let's make `^`>`*`>`+`>`&`>`|` i.e. like in C, I guess.
-b) Replace `fn` with `function` and add synonym `\\` (backslash). Also please allow if possible a simple case - one argument can go without '()'. I.e. allow '\\foo x:=x` and `\\foo x{=x}` and full forms
-`function foo x: return x` and `function foo x {return x}`. outer level variable reference becomes `@x` (this is temporary too, but let's do it now).
-c) {...} as a simple statement - do it as you described above, all is ok. I see there are quirks and not all could work as people would expect, but the only people now is me, so do as you described.
-d) If you don't mind, please use 2 spaces as indent in py and ka programs, not 4.
-e) I fixed in doc: operators `...&& ||`, unary `!` `-`...
-f) why "Power binds tighter than unary minus: `-2^2` is -4."? i'd say it must be the reverse. in general unary ops are tighter than binary ops. so -2^2 would be (-2)^2.
-g) add empty statement doing nothing - skip. and keyword `skip`.
-h) it seems you have a special processing of TABs - don't do it. let them be treated like all other unimportant/unprocessed characters like ESC, BEL, FS, etc etc. or '@' '$' '°' etc.
-i) can you use 7zip instead of zip? if it's not a problem, please do. if it requires you to install it each time or so, don't.
-j) `if a: v = 1` -- what if it's never set? undefined value? probably init all with 0?
-k) in 24_chained_comparisons.ka, use also <= and >=
-l) let's implement conditinal expression with some changes i.e. a?b!c (note `!` instead of `:`). Otherwise it's the same as in C. With low precedence.
 
 ==== STATUS (iteration 3) ====
 a) done. Order now: ^ > * > + > & > ~ > |, then comparisons. NOTE: bit operators bind tighter than == and < (not like C, where
