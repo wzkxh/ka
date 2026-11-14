@@ -1,0 +1,51 @@
+Constants
+
+A name with at least one capital letter and no lowercase letters is a constant (MAX_SPEED, X2, _N). Languages with constants (C, Go, Rust, Pascal const) all define them once and unconditionally, so I did the same:
+
+Where: only directly at the top level. Inside a function, if, loop or { } it is a compile error, and so are constant-like parameter names.
+
+Once: any second assignment, including X += 1, is an error.
+
+Value: it must be a constant expression: numbers, constants defined above, operators, and function literals. A constant can therefore be a function, and may call itself by name. Variables and calls are not allowed.
+
+Timing: constants are created at program start, like named functions. That is what makes them safe, because a function that runs early can’t see a half-set constant. The cost is that print X above X = 5 is legal. It is a small deviation from your “gets its value when created”, so say if you’d rather have a “used before definition” error there.
+
+Named functions: a capital-named function NAME(...) counts as a constant too.
+
+
+Floats are in the new ka.zip, and a clean unzip passes all 169 tests under the emulator. The float routines have only been run in the emulator, not on real Windows, so a Windows run is worth doing.
+
+What works
+Literals: 1.5, 2.0, 1_000.25, 6.02e23, 1E-9, 5e3 (a float, not an int). .5, 1., INF and NAN give clear errors, as do 1e999 and 1.5abc.
+Arithmetic: + - * / % ^ and unary - work on floats. Bitwise operators, shifts and exit take ints only, and floats there are a compile error.
+Mixing: int op float converts the int to float: 7 / 2 is 3, 7 / 2.0 is 3.5, 1 == 1.0 is 1. The same promotion applies to c ? 1 ! 2.5.
+Comparisons: they are exact, so 0.1 + 0.2 == 0.3 is 0. Comparisons with NaN are false except !=. Chained comparisons work with floats.
+Conditions: 0.0 and -0.0 are false, any other number is true, in if, while, !, &&, || and ?:.
+Constants: PI = 3.14159 and TAU = PI * 2 work as constants.
+Printing
+Format: 15 significant digits, trailing zeros dropped, always .0 when it would look like an int. Layout is Python-like, with fixed notation from 1e-4 up to 1e15.
+Examples: 0.1 + 0.2 prints 0.3, 1/3.0 prints 0.333333333333333, and other values print as 100.0, 1e-05, 1.5e+300, inf, -inf, nan.
+Why not exact repr: exact shortest-round-trip printing (Python’s repr) needs big-number arithmetic. 15 digits hides binary noise like APL does.
+Known limitation: the 15th digit can be off by one in roughly 1 case in 10,000. Fuzzing 3,000+ values against Python’s formatting, including random bit patterns and denormals, found no mismatch.
+
+
+Decisions to check
+Strict conversions: int and float mix only inside operators. Assignment, call arguments and return are strict, so x = 0 then x = 0.5 is an error (write x = 0.0). f(1) and f(1.5) can’t both be called, because a function has one signature. Say if you want assignment relaxed (int widens to float).
+Zero divisor: float / or % by zero (0.0 or -0.0) is a runtime error, like for ints. There are no INF/NAN literals yet, but overflow still produces inf, and inf - inf gives nan.
+Float ^:
+An integer-valued exponent works for any base, negative included.
+A fractional exponent needs a positive base; (-8.0) ^ (1/3.0) is a runtime error.
+0.0 ^ -1 is division by zero.
+Float %: it is C’s fmod, exact, with the sign of the left operand (-7.5 % 2 is -1.5). That matches int %.
+Implementation notes
+Type checker: + - * / % ^, ==/!= and ?: can’t be typed by simple unification, since an operand may be a parameter whose type a later call decides. The checker now records them as constraints and solves them after the whole program is seen. Anything still unknown becomes int.
+Runtime routines: float printing, power and modulo are machine code assembled from tools/float_rt.asm and embedded in ka.py. I used x87 extended precision for the digit generation and for powers, and an exact integer algorithm for %, because the emulator approximates the hardware’s remainder instruction. The routines set the x87 precision themselves, since Windows starts processes at 53 bits.
+Dev tools: tools/fuzz_float.py fuzzes these routines in the emulator against Python. You only need tools/build_float_rt.py and keystone-engine if you change the assembly.
+Fractional-power accuracy: the emulator computes these only to about 4e-15, so the tests use cases where the 15-digit result agrees with the exact value. The real FPU should be more accurate. Treat fractional powers as the least verified part when you run on Windows.
+Docs and tests
+
+The “yet to do” list you asked for is in LANGUAGE.md section 10: more literals, INF, NAN, comparison tolerance, formatting, explicit conversion. I also added implicit conversion on assignment and math functions there. NOTES.md and TODO.txt are updated. There are 36 new tests. Their expected outputs come from an independent Python reference (math.fmod, math.pow, Python’s own float formatting), not from the compiler’s output.
+
+Ka
+ZIP
+
