@@ -1,7 +1,10 @@
 print 12 & 10, " ", 12 | 10, " ", 12 ~ 10, " ", ~0, " ", ~5, " ", ~#f0 & #ff
 print #ffffffffffffffff, " ", #8000000000000000
 print -1 & #ff
-print 1 | 2 + 4   -- '|' is on the level of '+': (1|2)+4
-print 2 + 4 & 6   -- '&' is on the level of '*': 2+(4&6)
+print 1 | 1 + 1     -- '+' binds tighter than '|': 1|(1+1)
+print 6 & 1 + 1     -- '+' binds tighter than '&': 6&(1+1)
+print 1 | 2 ~ 3     -- '~' (xor) binds tighter than '|': 1|(2~3)
+print 6 ~ 3 & 1     -- '&' binds tighter than '~': 6~(3&1)
+print 1 | 2 == 3    -- comparisons are below the bit operators: (1|2)==3
 print 6 & 3 == 2
 print #ff_ff, " ", 1_000_000, " ", #FF, " ", #ff

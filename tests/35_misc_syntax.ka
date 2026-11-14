@@ -1,19 +1,19 @@
-fn apply(f, v): =f(v)
-print apply(fn(x): =x*2, 5)
-print (fn(a): if a: =2*a; else: =0)(4), (fn(a): if a: =2*a; else: =0)(0)
+function apply(f, v): =f(v)
+print apply(function(x): =x*2, 5)
+print (function(a): if a: =2*a; else: =0)(4), (function(a): if a: =2*a; else: =0)(0)
 c = 1
-fn t1():
-    if c: while c < 3:
-        ^c = c + 1
-        print "c=", c
+function t1():
+  if c: while c < 3:
+    ^c = c + 1
+    print "c=", c
 t1()
 if 0: print "x"
 else if c == 3: print "else-if ok"
 a = 3; b = 2
 print a ^b, " ", a ^ b ^ 2
-fn g(): ^gg = 5
+function g(): ^gg = 5
 g()
 print a, ^gg
 print "é ^u00e9", 'é'
-fn deep(n): if n == 0: =0 else: =1 + deep(n - 1)
+function deep(n): if n == 0: =0 else: =1 + deep(n - 1)
 print deep(5000)

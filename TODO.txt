@@ -1,0 +1,33 @@
+a) Precedence - ok, if you insist, let's make `^`>`*`>`+`>`&`>`|` i.e. like in C, I guess.
+b) Replace `fn` with `function` and add synonym `\\` (backslash). Also please allow if possible a simple case - one argument can go without '()'. I.e. allow '\\foo x:=x` and `\\foo x{=x}` and full forms
+`function foo x: return x` and `function foo x {return x}`. outer level variable reference becomes `@x` (this is temporary too, but let's do it now).
+c) {...} as a simple statement - do it as you described above, all is ok. I see there are quirks and not all could work as people would expect, but the only people now is me, so do as you described.
+d) If you don't mind, please use 2 spaces as indent in py and ka programs, not 4.
+e) I fixed in doc: operators `...&& ||`, unary `!` `-`...
+f) why "Power binds tighter than unary minus: `-2^2` is -4."? i'd say it must be the reverse. in general unary ops are tighter than binary ops. so -2^2 would be (-2)^2.
+g) add empty statement doing nothing - skip. and keyword `skip`.
+h) it seems you have a special processing of TABs - don't do it. let them be treated like all other unimportant/unprocessed characters like ESC, BEL, FS, etc etc. or '@' '$' '°' etc.
+i) can you use 7zip instead of zip? if it's not a problem, please do. if it requires you to install it each time or so, don't.
+j) `if a: v = 1` -- what if it's never set? undefined value? probably init all with 0?
+k) in 24_chained_comparisons.ka, use also <= and >=
+l) let's implement conditinal expression with some changes i.e. a?b!c (note `!` instead of `:`). Otherwise it's the same as in C. With low precedence.
+
+==== STATUS (iteration 3) ====
+a) done. Order now: ^ > * > + > & > ~ > |, then comparisons. NOTE: bit operators bind tighter than == and < (not like C, where
+   `a & 1 == 0` means `a & (1 == 0)`). Easy to change if you want exactly C.
+b) done. `function`, synonym `\` (single backslash - tell me if you meant two), one parameter without (), `@x` for the variable
+   of an enclosing function. `fn` is no longer a keyword. A one-parameter literal works too: `\x: =x+1`.
+c) done. `{...}` is a statement everywhere; no special case after ':' any more.
+d) done. 2 spaces in ka.py, run_tests.py, tools/emu.py and all tests/*.ka.
+e) ok, kept.
+f) done. Unary operators bind tighter than ^: -2^2 is 4. Test 23 changed.
+g) done. `skip`.
+h) done. No TAB handling at all: error "unexpected character '\t'" outside strings/comments, plain text inside.
+i) NOT done: 7-Zip is not installed in my sandbox, it would have to be installed each session -> still ka.zip.
+j) done (it already was so, now documented + tested): all variables start as 0. A function variable that is 0 = "unset",
+   calling it gives the runtime error. Tests 40_unset_variables, rt_unset_fn_branch.
+k) done. 24_chained_comparisons has <= and >= (also with side effects: evaluated once, stops early).
+l) done. `c ? a ! b`, lowest precedence, right-associative, only the chosen branch is evaluated, branches need the same type.
+   A one-line function literal inside it needs parentheses: c ? (\x: =x+1) ! (\x: =x-1).
+Also done: recursive function types are allowed (test 41_recursive_types), the doc says why.
+Still open: should named functions become constants (see chat)? Not changed.

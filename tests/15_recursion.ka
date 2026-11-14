@@ -1,24 +1,24 @@
-fn fact(n):
-    if n <= 1: return 1
-    return n * fact(n - 1)
-fn fib(n):
-    if n < 2: return n
-    return fib(n - 1) + fib(n - 2)
-fn count(n):
-    if n == 0: return 0
-    return 1 + count(n - 1)
-fn inc(x): return x + 1
-fn even(n):
-    if n == 0: return 1
-    return odd(n - 1)
-fn odd(n):
-    if n == 0: return 0
-    return even(n - 1)
+function fact(n):
+  if n <= 1: return 1
+  return n * fact(n - 1)
+function fib(n):
+  if n < 2: return n
+  return fib(n - 1) + fib(n - 2)
+function count(n):
+  if n == 0: return 0
+  return 1 + count(n - 1)
+function inc(x): return x + 1
+function even(n):
+  if n == 0: return 1
+  return odd(n - 1)
+function odd(n):
+  if n == 0: return 0
+  return even(n - 1)
 print fact(10), " ", fib(20), " ", count(10000)
 s = 0
 i = 0
 while i < 100000:
-    s = s + inc(i)
-    i = i + 1
+  s = s + inc(i)
+  i = i + 1
 print s
 print even(10), " ", odd(7), " ", odd(10)

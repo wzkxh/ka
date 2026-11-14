@@ -1,5 +1,5 @@
-fn hello(): print "hello"
-fn world(): print "world"
+function hello(): print "hello"
+function world(): print "world"
 say = hello
 say()
 say = world

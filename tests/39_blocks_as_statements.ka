@@ -1,0 +1,21 @@
+function a(): print "a"
+function b(): print "b"
+function c(): print "c"
+function d(): print "d"
+a(); {b(); c()}; d()
+a() {b(); c()} d()
+a(){b()}c(){d()}
+if 0: a(); {b()} elif 1: c(); {d()}
+if 1: skip else: a()
+x = 1
+{ x = 2; { x = x + 1 } }                  -- blocks do not create scopes
+print x
+if 1: {print "p"} print "q"               -- the rest of the line belongs to the body
+if 0 {print "r"} print "s"                -- here it does not
+i = 0
+while i < 5: i = i + 1; { if i == 2 {continue}; if i == 4 {break}; print "i=", i }
+{
+ print "multi"
+ print "line"
+}
+skip; skip

@@ -1,0 +1,4 @@
+print "a	b" -- comment	with	tabs
+--[[ block	
+comment --]]
+print 'x	y'

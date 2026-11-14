@@ -1,0 +1,18 @@
+function counter():
+  n = 0
+  function bump(): @n = n + 1
+  function get(): =n
+  bump(); bump(); bump()
+  return get()
+print counter()
+function outer():
+  a = 1
+  function mid():
+    b = 10
+    function inner():
+      @b = b + 1    -- the b of mid (@ = variable of an enclosing function)
+      @a = a + 100  -- no a in mid: the a of outer
+    inner()
+    return b
+  return mid() * 1000 + a
+print outer()

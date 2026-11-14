@@ -1,12 +1,12 @@
-fn apply(f, x): =f(x)
-fn inc(a): =a + 1
-fn dbl(a): =a * 2
+function apply(f, x): =f(x)
+function inc(a): =a + 1
+function dbl(a): =a * 2
 print apply(inc, 5), " ", apply(dbl, 5)
 print inc == inc, " ", inc == dbl, " ", inc != dbl
 op = inc
 x = 1
 if x: op = dbl
 print op(10)
-fn twice(f, v): =f(f(v))
+function twice(f, v): =f(f(v))
 print twice(inc, 1), " ", twice(dbl, 3)
 print -9223372036854775808

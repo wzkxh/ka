@@ -1,0 +1,17 @@
+a = 5
+print a > 3 ? 1 ! 2, " ", a > 9 ? 1 ! 2
+print a < 3 ? 10 ! a < 6 ? 20 ! 30       -- right-associative: a<3 ? 10 ! (a<6 ? 20 ! 30)
+x = 0
+function bump(): ^x = x + 1; return x
+print 1 ? bump() ! bump(), " ", x         -- only the chosen branch is evaluated
+print 0 ? bump() ! 7, " ", x
+f = a > 3 ? (\x: =x + 1) ! (\x: =x - 1)  -- functions work too (same type in both branches)
+print f(10)
+print (a ? 1 ! 2) + 10
+print 1 ? 2 ? 3 ! 4 ! 5
+print a != 5 ? 1 ! 2
+print !0 ? 8 ! 9
+print a >
+ 3 ?
+ 1 !
+ 0

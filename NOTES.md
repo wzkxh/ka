@@ -3,6 +3,7 @@
 Read this first in every new session, then LANGUAGE.md, then skim `ka.py`.
 The user cannot be assumed to remember details; this file is the source of truth for *how* and *why*.
 (The language was called "Tiny" with extension `.tiny` until the rename to Ka / `.ka`.)
+**Code style (user decision): 2 spaces per indentation level in `.py` and `.ka` files.**
 
 ## 0. Working agreement with the user
 - The user writes the language design, tests on real Windows (`python run_tests.py`) and pastes failures.
@@ -19,13 +20,14 @@ The user cannot be assumed to remember details; this file is the source of truth
 - End of session: update LANGUAGE.md, NOTES.md, tests; zip; tell the user to download.
 
 ## 1. Pipeline (ka.py)
-`check_tabs` -> `strip_comments` -> `tokenize` -> `Parser` (AST of tuples + `Scope` objects) ->
+`strip_comments` -> `tokenize` -> `Parser` (AST of tuples + `Scope` objects) ->
 `Checker` (static types) -> `CodeGen.analyze` (captures) -> `CodeGen` (x86-64 bytes via `Asm`) ->
 `build_pe` (PE32+ writer). `compile_source(src, warnings=None)` does it all; `CompileError` carries
 messages `line N: ...`; warnings (list of strings) are only collected, never fatal.
 
 ### Source preparation
-- `check_tabs`: any TAB anywhere is an error (decision: strict, also in strings/comments).
+- No TAB check (user decision): TAB is a character like ESC or `$`: plain text inside strings/comments, an
+  `unexpected character` error elsewhere (the lexer simply has no rule for it).
 - `strip_comments` runs before the lexer and replaces comments by spaces (newlines kept, so line numbers and
   columns survive). It is string-aware (`"..."`, `'...'`, `^` escapes). Forms: `--` line; `--[[ ... ]]--` if the
   closer is on the same line (and before any `--]]`); otherwise `--[[ ... --]]` multi-line, blanked up to the
@@ -40,49 +42,61 @@ messages `line N: ...`; warnings (list of strings) are only collected, never fat
 - Numbers: `\d\w*` is taken whole and validated (`\d+(_\d+)*`), so `1_`, `1__0`, `12ab` are one clear error.
   Hex: `#\w*` validated against `#hex(_hex)*`; `#'...'` is reserved (currently "bad hex literal").
 - Emits NEWLINE (`nl`) only when the line is *finished*: suppressed if paren depth > 0 or if the previous
-  token is a continuation operator (`CONT_OPS`: `+ - * / % == != < <= > >= && || ! = , & | ~ ^`).
+  token is a continuation operator (`CONT_OPS`: `+ - * / % == != < <= > >= && || ! = , & | ~ ^ ?`).
 - Indentation: spaces only. One indent stack per open `{` (`stacks`), parens saved/reset per `{`.
   INDENT only if the previous line ended with `:` (`colon_pending`). Lines starting with `}` skip indentation
   processing; `}` emits DEDENTs for blocks still open inside that brace.
-- `^` and `\` are plain `op` tokens; the parser decides (power vs. global prefix).
+- `^ \ @ ?` are plain `op` tokens; the parser decides (`^`: power vs. global prefix; `\`: `function` synonym; `@`: prefix of
+  an enclosing function's variable; `?`: conditional). Keywords: `if elif else while break continue print exit function return skip`.
 
 ### Parser
 - Recursive descent. `end_stmt()` accepts `;`, nl, a closing `)`/`,` (only when the innermost open bracket is `(`,
-  tracked in `self.ctx`), `}`, eof/dedent, `else/elif`, or a statement keyword (`STMT_KW` and `fn`) - that is the
-  "`;` optional where clear" rule.
+  tracked in `self.ctx`), `}`, `{`, `\`, eof/dedent, `else/elif`, or a statement keyword (`STMT_KW` and `function`) -
+  that is the "`;` optional where clear" rule.
 - **`closed_at` trick:** a nested body (indented block, or one-line body) may already have consumed the line
   terminator; `end_stmt` then returns immediately when `self.i == self.closed_at`.
-- `block(allman=True)`: brace block / `:` + `{` / `:`-indented / `:`-one-line. A one-line body is
+- `block(allman=True)`: brace block / `:`-indented / `:`-one-line. A `{...}` after `:` is NOT special: it is a
+  statement (`("block", stmts)`, see `stmt()`) that happens to be the first one of a one-line body. A one-line body is
   `stmt()` repeated while `body_continues()` (previous token was not nl/dedent and either a statement keyword or
   something that is not an end follows). Nested one-line bodies fall out of the recursion.
 - `if_stmt`: after the then-block skip newlines and look for `elif` / `else` (restore position if none). This is
   what makes dangling else bind to the nearest `if` that has no else yet, also across lines.
-- `=` at statement start is a `return` (needs an expression); `return` may be bare.
-- Operators: `chain()` builds `("cmp", ops, operands)` for 2+ comparisons on the same level, a plain `("bin",..)`
-  for one. `power()` = `postfix ['^' unary]` gives right associativity and `-a^b = -(a^b)` (the folding of
-  `-5` into a literal is skipped when `^` follows).
+- `=` at statement start is a `return` (needs an expression); `return` may be bare. `skip` is the empty statement.
+- Functions: `function`/`\` followed by `name (` or `name param` is a definition (`fn_def`, lookahead of two tokens
+  in `stmt()`); anything else (`function (`, `function x:`) is a literal used as a statement. Parameters: `(a, b)` or one bare
+  name (`parse_function`).
+- Expression levels (low to high): `cond` (`c ? a ! b`, right assoc) `or_ and_ eq cmp bor bxor band add mul power unary postfix`.
+  Bit operators sit between `+` and the comparisons (Python-like, NOT C-like; user said "like in C, I guess" - the order
+  `& > ~ > |` is C's, the position relative to `==` is a deliberate deviation: tell the user if it matters).
+  `chain()` builds `("cmp", ops, operands)` for 2+ comparisons on the same level, a plain `("bin",..)`
+  for one. `power()` = `unary ['^' power]` gives right associativity; unary operators bind tighter than `^`
+  (`-2^2 = (-2)^2`, user decision), so `-5` is always folded into a literal.
 - Print items: `string_item()` collects adjacent string tokens, or a parenthesised group of them (so newlines
   inside parentheses concatenate). Mixed `'`/`"` -> error. Strings elsewhere -> error.
 - Scopes: `Scope` per function + the global scope (`parent is None`). `declare(name, mode, line)` registers
   assigned names (`mode`: None / `^` / `\`). Function-level sets `globals_decl` / `nonlocal_decl` record names used
-  as `^x` / `\x`; a name may not be both local and marked in one function (decision: no shadowed globals).
+  as `^x` / `@x`; a name may not be both local and marked in one function (decision: no shadowed globals).
   `^x` in a function also creates the global slot and adds it to `fn_globals` (so top-level reads before the
   assignment are allowed).
 - AST (line last): `("assign",name,expr,line,mode) ("print",items,line) ("if",c,then,else,line)
   ("while",c,body,line) ("exit",e,line) ("exprstmt",e,line) ("return",e|None,line) ("fn",Scope) ("break",)
   ("continue",)`; expressions `("num",n) ("var",name,line,mode) ("call",callee,args,line) ("fnlit",Scope)
-  ("bin",op,l,r) ("cmp",ops,xs) ("and"|"or",l,r) ("neg"|"not"|"bnot",e)`.
+  ("bin",op,l,r) ("cmp",ops,xs) ("cond",c,a,b) ("and"|"or",l,r) ("neg"|"not"|"bnot",e)`;
+  statements also `("block",stmts)` and `("skip",)`.
 - Warning: expression statements that are not calls ("the value of this expression is not used").
 
 ### Name resolution (`Resolver.lookup`)
 Shared by Checker and CodeGen. `lookup(name, scope, line, mode)` -> `("g",name)` | `("l",scope,name)` |
-`("f",owner,name)`. `mode` `^` -> global; `\` -> nearest enclosing function that owns the name; plain names
+`("f",owner,name)`. `mode` `^` -> global; `@` -> nearest enclosing function that owns the name; plain names
 follow `globals_decl` / `nonlocal_decl` first, then local, then enclosing functions, then globals.
 
 ### Type checker (`Checker`)
 - Monomorphic unification (Hindley-Milner without generalisation). `Ty` kinds: `int`, `fn(params, ret)`, `var`.
   Variables are keyed `("g",name)` or `(scope,name)`. Every function gets a type with a fresh variable per
   parameter and for the result (`fn_ty`); bodies are checked once (`check_body`).
+- Function types may be recursive (user decision; `fn(T) -> T`): there is no occurs check, `unify_raw` skips pairs of
+  function types already being compared (`seen`), `show()` cuts cycles with `...`.
+- Conditional `c ? a ! b`: `c` int, both branches unified.
 - Fixed by decision: variable keeps the type of its first value; one signature per function; `==`/`!=` need equal
   types; everything else needs int. Bare `return` / falling off the end are NOT unified (user: "don't deal with it").
 - Unresolved variables at the end are simply ignored (they cannot change code generation: both types are one word).
@@ -125,23 +139,28 @@ follow `globals_decl` / `nonlocal_decl` first, then local, then enclosing functi
 - Direct PE output instead of assembler/linker: no dependencies, user asked for "compiler in Python".
 - Comments `--`, `--[[ ]]--`, `--[[ --]]`; newline-terminated statements, `;` optional where clear.
 - One-line bodies run to the end of the line and nest; dangling else binds to the nearest `if`.
-- Globals via `^x`, enclosing-function variables via `\x` (draft, user expects to redo it). No shadowing of a
+- Globals via `^x`, enclosing-function variables via `@x` (draft, user expects to redo it). No shadowing of a
   global by a local with the same name in one function (user: "forget shadowed global vars").
 - Types: int and function only, inferred, checked statically; no annotations; falling off the end not checked.
 - Signed ints everywhere except `& | ~` which just see 64 bits; hex literals wrap to signed.
 - `'..'` byte string vs `".."` unicode string differ only in the meaning of `^XX` for now.
-- Power operator `^`: right associative, above unary minus, negative exponent is a runtime error (simplest).
+- Power operator `^`: right associative, BELOW unary operators (`-2^2 = 4`), negative exponent is a runtime error (simplest).
 - Closures capture by reference via heap boxes; no GC (leak) accepted.
+- Keyword `function` with synonym `\`; `fn` is gone. One parameter may be written without parentheses. `@x` replaced `\x`
+  as the enclosing-function variable ("temporary", user). `{...}` is an ordinary statement; `skip` the empty statement.
+- All variables start as 0 (frames are zeroed, `.data` is zero, boxes are `HEAP_ZERO_MEMORY`); a function variable that is
+  still 0 gives `runtime error: call of an unset function`.
+- Archive: a `.zip` is delivered, not 7z (7-Zip is not installed in the sandbox and would have to be installed each session).
 - `input` was removed on purpose (no way to read values for now).
-- Expression-bodied functions (`fn f(x) x*x`) and the "last expression is the result" rule were removed.
+- Expression-bodied functions (`function f(x) x*x`) and the "last expression is the result" rule were removed.
 
 ## 3. Known limitations / ideas for later
 - Strings as values, unicode strings as 32-bit arrays, hex byte strings `#'..'`, input, arrays, `for`, GC,
   overflow checks, `INT_MIN / -1`, shifts, generalised (polymorphic) function types, checking returns on all
-  paths, better error recovery (the compiler stops at the first error), `\\x` at more than one level.
+  paths, better error recovery (the compiler stops at the first error), `@x` at more than one level.
 - The unused-expression warning is intentionally simple (any non-call expression statement).
 - Not verified on real Windows in this session: `SetConsoleOutputCP` (faked in the emulator) and the UTF-8
-  console output. Everything else is exercised through the emulator.
+  console output. Everything else is exercised through the emulator. (User added: all tests passed on real Windows.)
 
 ## 4. Testing
 - `python run_tests.py [-k name] [-v] [--emu] [--keep]`; see the header of run_tests.py for file conventions

@@ -1,9 +1,9 @@
 print 'single', " ", "double"
 print 'a' 'b' 'c'
 print "x" "y",
-      "z"
+   "z"
 print ("one"
-       "two")
+    "two")
 print 'tab[^t] caret ^^ dq ^" sq ^''
 print "q: ^" and ^' and ^^"
 print 'AB^43^44'

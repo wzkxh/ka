@@ -1,4 +1,4 @@
-fn outer():
-    fn inner():
-        \zz = 1
-    inner()
+function outer():
+  function inner():
+    @zz = 1
+  inner()

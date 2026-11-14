@@ -1,7 +1,7 @@
-fn sign(x):
-    if x < 0: return -1
-    elif x == 0: return 0
-    else: return 1
+function sign(x):
+  if x < 0: return -1
+  elif x == 0: return 0
+  else: return 1
 print sign(-5), " ", sign(0), " ", sign(9)
 x = 3
 if x > 1 { print "big" } else { print "small" }
@@ -13,9 +13,9 @@ if x == 4: print "no"; print "no2"
 else: print "else1"; print "else2"
 if x == 3
 {
-    print "allman"
+  print "allman"
 }
 else
 {
-    print "no"
+  print "no"
 }

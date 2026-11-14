@@ -7,8 +7,9 @@ covered by a test in `tests/`.
 
 ## 1. Lexical structure
 - Source is UTF-8 text. Line endings `\n` or `\r\n`.
-- A **TAB character is an error everywhere** (also inside strings and comments); use spaces
-  (and `^t` inside strings).
+- TAB is not special: like ESC, BEL or `$` it is just a character. Inside strings and comments it is ordinary
+  text; anywhere else it is an `unexpected character` error. Indentation consists of spaces only
+  (convention in this project: 2 spaces per level, in `.ka` and `.py` files).
 - **Comments:**
   - `--` to the end of the line. (`#` and `//` are *not* comments.)
   - `--[[ ... ]]--` inside one line; code continues after it: `print 1 --[[ one ]]-- + 2`.
@@ -17,8 +18,9 @@ covered by a test in `tests/`.
     inside-line form.)
   - An unclosed `--[[` is an error. `--` inside a string literal is just text.
 - **Identifiers:** ASCII letters, digits, `_`; not starting with a digit.
-- **Keywords:** `if elif else while break continue print exit fn return`.
-  (`and or not let global nonlocal input` are *not* keywords; they are ordinary names.)
+- **Keywords:** `if elif else while break continue print exit function return skip`.
+  `\` is a synonym of `function`. (`fn and or not let global nonlocal input` are *not* keywords; they are
+  ordinary names.)
 - **Integer literals:** decimal digits, range -9223372036854775808 .. 9223372036854775807
   (a literal larger than the maximum is a compile error; `-9223372036854775808` is fine).
   `_` may separate digits for readability: `1_000_000` (not at the start or the end, not doubled).
@@ -44,40 +46,47 @@ covered by a test in `tests/`.
   - Currently both kinds are stored as UTF-8 bytes and printed as such. The generated program
     switches the console to UTF-8 (`SetConsoleOutputCP(65001)`) at start, so Unicode text shows
     correctly; the console keeps that code page after the program ends.
-- **Operators / punctuation:** `+ - * / % ^ & | ~ == != < <= > >= && || ! = ( ) { } ; , : \`
-  (`^` is also the prefix of a global variable, `\` the prefix of an enclosing function's variable; see 7.)
+- **Operators / punctuation:** `+ - * / % ^ & | ~ == != < <= > >= && || ! ? = ( ) { } ; , : \ @`
+  (`^` is also the prefix of a global variable and `@` the prefix of an enclosing function's variable, see 7;
+  `\` is a synonym of `function`; `?` and `!` make the conditional expression `c ? a ! b`, see 5.
+  `!` directly followed by `=` is always `!=`.)
 
 ## 2. Values and types
 Two types:
 - **int** - 64-bit signed integer (two's complement, arithmetic wraps on overflow);
-- **function** - a pointer to a closure object, written `fn(T1, T2) -> R` in messages.
+- **function** - a pointer to a closure object, written `fn(T1, T2) -> R` in compiler messages (that notation is only used there).
 
 Types are checked **at compile time** and never written in the program; they are inferred:
 - A variable gets the type of the first value assigned to it and keeps it: `x = 1` then
-  `x = fn(): =1` is an error.
+  `x = \(): =1` is an error.
 - A parameter gets its type from how it is used in the body and from the calls of the function:
-  `fn f(a): print "x"` called as `f(1)` makes `f(int)`, then `f(f)` is an error.
+  `function f(a): print "x"` called as `f(1)` makes `f(int)`, then `f(f)` is an error.
   One function has one signature, not one per call.
 - A function's result has the type of its `return` expressions, which must all agree.
   (`return` without a value and falling off the end give the integer 0; that is not checked yet.)
 - Calls check the number and the types of the arguments. Calling an int is an error.
-- Operators `+ - * / % ^ & | ~ && || !`, unary `-` `~`, `<` `<=` `>` `>=`, conditions of `if` and
+- Operators `+ - * / % ^ & | ~ && ||`, unary `!` `-` `~`, `<` `<=` `>` `>=`, conditions of `if` and
   `while`, the value of `exit`, and items of `print` need ints.
   `==` and `!=` accept two values of the *same* type (two ints or two functions of the same
   signature); functions are equal when they are the same function object.
-- A function cannot contain itself in its own signature (`fn f(a): return a(a)` is an error).
+- The two branches of a conditional `c ? a ! b` must have the same type (`c` needs an int).
+- Function types may refer to themselves. With `function q(x): return x`, `function f(a): return a(a)` and
+  `d = f(q)` the call executes as `q(q)`, which is `q`, so the type of `q` is `T = fn(T) -> T`. That is safe
+  (an int is never called) and costs nothing at run time, so the compiler accepts it. It does not warn about
+  calls that never finish (`function w(x): return x(x)`, then `w(w)` recurses forever like any endless recursion).
 
 Truth: `0` is false, any other value is true. Comparison and logical operators yield `0` or `1`.
 
 ## 3. Statements and lines
 - A statement ends at the **end of the line**, at `;`, at a closing `)` or `}`, at `else`/`elif`, or
-  where another statement starts with a keyword (`if while break continue print exit return fn`).
+  where another statement starts with a keyword (`if while break continue print exit return skip function`),
+  with `\` (a function) or with `{` (a block).
   So `;` is really needed only to separate statements on one line where the next one does not
-  start with a keyword: `a = 1; b = 2`. Several statements starting with keywords can follow each other:
+  start like that: `a = 1; b = 2`. Several statements starting with keywords can follow each other:
   `i = i + 1 if i == 2: print i`.
 - A statement **continues on the next line** if
   - the line ends with a binary/unary operator, `=` or `,`:
-    `+ - * / % ^ & | ~ ! == != < <= > >= && || = ,`   (`x = 1 +`, `print "a",`, `ok = a &&`), or
+    `+ - * / % ^ & | ~ ! ? == != < <= > >= && || = ,`   (`x = 1 +`, `print "a",`, `ok = a &&`), or
   - a `(` is still open (a newline inside parentheses is ignored).
   Inside `{ ... }` newlines count again, even if the braces are inside parentheses.
 - Blank lines and comment-only lines are ignored everywhere.
@@ -87,10 +96,10 @@ Truth: `0` is false, any other value is true. Comparison and logical operators y
 
 ## 4. Blocks
 A block is a list of statements. There are three ways to write one (after `if cond`,
-`elif cond`, `else`, `while cond`, `fn name(...)`, `fn(...)`):
+`elif cond`, `else`, `while cond`, `function name(...)`, `function(...)`):
 
 1. **Braces** `{ ... }` - everything inside is one block; layout is free. The `{` may be on the
-   next line (Allman style). `:` directly before `{` is accepted: `if a: {b; c} else: d`.
+   next line (Allman style).
 2. **Indented block** - `:` at the end of the line, then more-indented lines. The block ends when
    the indentation returns to the previous level. Extra indentation on a line that does not
    follow a `:` is an error; so is a dedent to a column that matches no open level.
@@ -103,8 +112,15 @@ A block is a list of statements. There are three ways to write one (after `if co
    One-line bodies nest:
    `if a: b; while c: d; if e: g else: h; i` means `if a {b; while c {d; if e {g} else {h; i}}}`.
    They also end at `)` (a function literal inside a call) or `}`:
-   `(fn(a): if a: =2*a; else: =0)(1)`, `apply(fn(x): =x*2, 5)`. Mixtures work: `if a{b();c()}else:d();e()`.
+   `(\(a): if a: =2*a; else: =0)(1)`, `apply(\x: =x*2, 5)`. Mixtures work: `if a{b();c()}else:d();e()`.
    An indented block may follow a one-line prefix: `if a: while c:` + indented lines.
+
+**A block is a statement.** `{ ... }` stands anywhere a statement can: `a(); {b(); c()}; d()`,
+`a() {b(); c()} d()`, `a(){b()}c(){d()}`, inside a one-line body between `if cond:` and `elif cond:`
+(`if a: b(); {c()} elif d: e()`), and as the first statement of a one-line body (`if a: {b} c`). No `;` is
+needed next to `{` or `}`. Such a block creates no scope. A one-line body runs to the end of the line, so in
+`if a: {b} c()` the `c()` belongs to the body, but in `if a {b} c()` it does not.
+The empty statement is `skip`: `if a: skip else: b()`.
 
 `else`/`elif` may also be on the line after the closing `}` / after the dedent.
 **Dangling else:** an `else`/`elif` belongs to the nearest `if` that can still take one, also
@@ -116,15 +132,19 @@ Precedence, lowest to highest (binary operators are left-associative, except `^`
 
 | level | operators |
 |---|---|
-| 1 | `\|\|` |
-| 2 | `&&` |
-| 3 | `==` `!=` (chained) |
-| 4 | `<` `<=` `>` `>=` (chained) |
-| 5 | `+` `-` `\|` `~` |
-| 6 | `*` `/` `%` `&` |
-| 7 | unary `-` `~` `!` |
-| 8 | `^` power (right-associative: `a^b^c` is `a^(b^c)`), operand on the right may be unary: `2^-1` |
-| 9 | call `f(args)`, then primary: number, variable, `(expr)`, `fn` literal |
+| 1 | `c ? a ! b` conditional (right-associative: `c ? a ! d ? e ! f` is `c ? a ! (d ? e ! f)`) |
+| 2 | `\|\|` |
+| 3 | `&&` |
+| 4 | `==` `!=` (chained) |
+| 5 | `<` `<=` `>` `>=` (chained) |
+| 6 | `\|` bitwise or |
+| 7 | `~` bitwise xor |
+| 8 | `&` bitwise and |
+| 9 | `+` `-` |
+| 10 | `*` `/` `%` |
+| 11 | `^` power (right-associative: `a^b^c` is `a^(b^c)`) |
+| 12 | unary `-` `~` `!` |
+| 13 | call `f(args)`, then primary: number, variable, `(expr)`, `function` / `\` literal |
 
 - `&&` / `||` short-circuit and yield 0 or 1.
 - `/` truncates toward zero; `%` takes the sign of the left operand (`-7 / 2 == -3`, `-7 % 3 == -1`).
@@ -134,65 +154,79 @@ Precedence, lowest to highest (binary operators are left-associative, except `^`
   (as unsigned bits): `~0` is -1, `-1 & #ff` is 255. All other operations, including comparisons
   `< > <= >=`, treat integers as signed. There is no shift yet.
 - `a ^ b` is `a` to the power `b` (wraps like `*`). A negative exponent is a runtime error.
-  Power binds tighter than unary minus: `-2^2` is -4.
-- `|` has the level of `+` and `&` the level of `*`: `1 | 2 + 4` is `(1|2)+4`. Use parentheses when mixing.
+  Unary operators bind tighter than any binary one, `^` included: `-2^2` is `(-2)^2` = 4 (write `-(2^2)` for -4).
+- The bit operators sit between `+` and the comparisons, in the order of C (`&` over `~` over `|`), but unlike C
+  they bind tighter than `==` and `<`: `a & 1 == 0` is `(a & 1) == 0`, and `1 | 1 + 1` is `1 | (1 + 1)`.
+- **Conditional expression** `c ? a ! b`: `c` is evaluated first, then only `a` or only `b` (as in C, but `!`
+  instead of `:`). It has the lowest precedence; `a` may be any expression, `b` is parsed as a conditional again.
+  A function literal with a one-line body must be put in parentheses inside it: `c ? (\x: =x+1) ! (\x: =x-1)`.
+  A line may end with `?` or `!` to continue.
 - **Chained comparisons:** `a < b <= c` means `a < b && b <= c` with `b` evaluated once; evaluation
-  stops at the first false link. Chains form within level 3 (`==` `!=`) or within level 4
-  (`<` `<=` `>` `>=`), e.g. `1 < 2 > 1` is fine. The two levels are not mixed:
+  stops at the first false link. Chains form within one level, `==` `!=` or `<` `<=` `>` `>=`,
+  e.g. `1 < 2 > 1` and `1 <= 2 >= 2` are fine. The two levels are not mixed:
   `a < b == c` is `(a < b) == c`.
-- **`^` after an operand is the power operator; `^name` where an operand is expected is a global
-  variable** (see 7). `print a ^b` is a power; `print a, ^b` prints a and the global b.
+- **Power operator `^`:** after an operand (i.e. as a binary operator) is the power operator;
+  although `^name` where an operand is expected is a global variable (i.e. it serves as an unary
+  operator) - see 7. `print a ^b` is a power; `print a, ^b` prints a and the global b.
 
 ## 6. Statements
 | statement | meaning |
 |---|---|
 | `name = expr` | assign (creates the variable if needed) |
-| `^name = expr`, `\name = expr` | assign a global / an enclosing function's variable (see 7) |
+| `^name = expr`, `@name = expr` | assign a global / an enclosing function's variable (see 7) |
 | `print a, b, "text", ...` | print the items one after another (no separators added), then a newline. `print` alone prints an empty line. Items are int expressions or string literals |
 | `if cond block [elif cond block]... [else block]` | conditional (`else if` also works) |
 | `while cond block` | loop |
 | `break`, `continue` | only inside a `while` of the same function |
 | `exit expr` | end the program with that exit code (reaching the end of the file exits with 0) |
 | `return [expr]` or `= expr` | only inside a function (see below). `=` needs a value |
-| `fn name(params) body` | named function definition |
+| `function name(params) body` | named function definition; `\name(params) body` is the same; with one parameter the parentheses may be left out: `function name p body` |
+| `skip` | the empty statement, does nothing |
+| `{ ... }` | a block used as a statement (see 4) |
 | `expr` | an expression as a statement (typically a call); its value is discarded |
 
 ## 7. Functions and scope
 ```
-fn f1(a, b) { print a, b }
-fn f2(x) { return 2*x }
-fn f3(x) { = 2*x }            -- the same as f2
-fn f4(x): return 2*x          -- the same as f2
-fn f5(x):=2*x                 -- the same as f4
-fn baz():
+function f1(a, b) { print a, b }
+function f2(x) { return 2*x }
+function f3(x) { = 2*x }            -- the same as f2
+function f4(x): return 2*x          -- the same as f2
+function f5(x):=2*x                 -- the same as f4
+function f6 x: return 2*x           -- one parameter: no parentheses needed
+function f7 x {=2*x}
+\f8 x: =2*x                         -- '\' is a short 'function'
+\f9(a, b) {=a+b}
+function baz():
   a = 2; b = 3
   return a + b
 
-foo = fn(){ =10 }             -- function literals have the same body forms
-bar = fn(): =10
-baz = fn(a,b): return a+b
-xyz = fn(n): m = 2*n; return m  -- one-line block
-abc = fn(n){m=2*n;=m}           -- the same as xyz
-big = fn(n):
-    m = n * n
-    return m
-print (fn(a,b): =a*b)(6,7)
+foo = function(){ =10 }             -- function literals have the same body forms
+bar = \(): =10
+baz = function(a,b): return a+b
+xyz = \n: m = 2*n; return m         -- one-line block, one parameter without ()
+abc = \(n){m=2*n;=m}                -- the same as xyz
+big = function(n):
+  m = n * n
+  return m
+print (\(a,b): =a*b)(6,7)
 ```
-- **Body forms** after `fn name(...)` / `fn(...)`: a block (`{ }`, `:`-indented, `:`-one-line).
+- **Parameters:** `(a, b)` in parentheses, or a single name without them (`function f x: ...`, `\x: =x+1`).
+  `function name x ...` is a definition (a name and a parameter), `function x ...` is a literal with parameter `x`.
+- **Body forms** after the parameters: a block (`{ }`, `:`-indented, `:`-one-line).
   There are no expression bodies and no implicit result: a function returns only through
   `return` / `=`.
 - **Result:** `return expr` (or `= expr`) returns a value; `return` or falling off the end returns 0.
-- **Calls:** any expression can be called: `f(x)`, `f(x)(y)`, `(fn(a): =a)(1)`. Arguments are
+- **Calls:** any expression can be called: `f(x)`, `f(x)(y)`, `(\a: =a)(1)`. Arguments are
   evaluated left to right, then the callee. At most 20 parameters / arguments.
   Types and the number of arguments are checked at compile time. The only call failure left at
   run time is a function variable that was never set (see 8).
-- **Definitions are hoisted:** all `fn name` definitions of a scope are created when the scope is
-  entered (program start / function entry), so they can be used before the definition. A `fn`
-  inside an `if`/`while` block still belongs to the enclosing function/global scope and is not
+- **Definitions are hoisted:** all `function name` definitions of a scope are created when the scope is
+  entered (program start / function entry), so they can be used before the definition. A `function`
+  definition inside an `if`/`while` block still belongs to the enclosing function/global scope and is not
   conditional. A named function is simply a variable holding a function value, so it can be
   passed around or reassigned to a function of the same signature (`say = hello`, `hello = world`).
-  Defining the same name twice with `fn` in one scope is an error. A function cannot be defined
-  as global from inside another function (`fn ^name` does not exist).
+  Defining the same name twice with `function` in one scope is an error. A function cannot be defined
+  as global from inside another function (`function ^name` does not exist).
 - **Recursion** works (also mutual, and through variables holding literals).
 
 ### Scope
@@ -207,10 +241,13 @@ print (fn(a,b): =a*b)(6,7)
   Inside a function, once `^name` is used, the plain `name` in that function is the global too.
   A name cannot be both a local variable (or parameter) and `^name` in the same function: compile error.
   So there is no way to have a local `x` and read the global `x` in the same function; rename one.
-- **`\name`** (draft, may change) is the variable `name` of the nearest enclosing *function* that has it
-  as a local or parameter: `\name = e` assigns it, `\name` reads it, and the plain name in this
+- **`@name`** (draft, may change) is the variable `name` of the nearest enclosing *function* that has it
+  as a local or parameter: `@name = e` assigns it, `@name` reads it, and the plain name in this
   function then means the same. It is an error if there is no such enclosing function variable, and a
-  name cannot be both local and `\name` in one function. (`^name` is the outermost level, `\name` the nearest.)
+  name cannot be both local and `@name` in one function. (`^name` is the outermost level, `@name` the nearest.)
+- **Initial value:** every variable (global, local, captured) starts as 0, so a variable assigned only on a path that
+  was not taken has the value 0: after `if a: v = 1` the `v` is 0 when `a` is 0. For a variable that is
+  meant to hold a function, 0 means "unset"; calling it is a runtime error (see 8).
 - **Closures:** a function value keeps the variables it uses alive and shares them by reference
   with the creating function and with other closures; this also holds after the creating
   function has returned (`make_counter`, `adder(n)`). Captured variables and closures live on the
@@ -228,28 +265,86 @@ Very deep recursion overflows the 1 MB stack and crashes (about 10 000 levels ar
 ## 9. Compile errors and warnings
 All are `file: error: line N: message` (warnings: `file: warning: line N: message`). The exact texts
 are pinned by the `tests/err_*.ka` / `.error` pairs (and `.warn` for warnings). Groups:
-- *lexical:* `TAB character is not allowed`, `string is not closed`, `bad escape ^q`, `bad unicode escape`,
+- *lexical:* `unexpected character '\t'` (TAB, like `$`, outside strings and comments), `string is not closed`, `bad escape ^q`, `bad unicode escape`,
   `cannot join '...' and "..." strings`, `comment '--[[' is never closed`, `bad number '1__0'`,
   `bad hex literal`, `hex literal too large`, `integer literal too large`, `unexpected character`.
 - *layout / syntax:* `unexpected indentation`, `inconsistent indentation`, `expected an indented block after ':'`,
   `'(' is never closed`, `'{' is never closed`, `unmatched '}'`, `unmatched ')'`,
   `expected end of statement, found ...`, `unexpected end of line in expression`, `unexpected 'else'`,
-  `expected '{' or ':' after the parameters`, `a string can only be printed (it is not a value)`,
+  `expected '{' or ':' after the parameters`, `expected '(' or a parameter name`, `expected '!'` (conditional expression), `a string can only be printed (it is not a value)`,
   `'break' outside of a loop`, `'return' outside of a function`, `'=' (return) needs a value`,
   `duplicate parameter 'a'`, `too many parameters (at most 20)`, `function 'f' is already defined in this scope`.
 - *names:* `undefined variable 'x'`, `undefined global variable 'x'`, `variable 'x' used before assignment`,
   `variable 'x' is local to function 'f' and used before assignment (use '^x' ...)`,
   `'x' is already local to 'f', it cannot also be used as '^x'`, `'x' is used as '^x' in 'f', so it cannot
-  also be a local variable there`, `'\x' needs an enclosing function`, `'\x': no variable 'x' in an enclosing function`.
+  also be a local variable there`, `'@x' needs an enclosing function`, `'@x': no variable 'x' in an enclosing function`.
 - *types:* `type mismatch <where>: expected T, found U` (where: `in assignment to 'x'`, `in argument 2 of the call`,
   `left operand of '+'`, `in the condition of 'if'`, `in 'print' (only integers can be printed)`,
   `in 'return' (all returns of a function must agree)`, ...), `wrong number of arguments: the function takes N,
-  called with M`, `an int is not a function`, `a function would have to take itself as an argument`.
+  called with M`, `an int is not a function`, `in '?!' (both branches must have the same type)`, `in the condition of '?'`.
 - *warning:* `the value of this expression is not used`.
 
 ## 10. Not in the language (yet)
-Strings (bytes and unicode) as values, floats, arrays (lists), dictionaries, `for` loops,
-`else` on loops, modules, a garbage collector, integer overflow detection, big integers,
-shift ops, string ops, other integer and float types, named and optional arguments, input (no way
-to read a value yet), standard library - file i/o, strings, math, time, etc.
-Checking that every path of a function returns a value of the declared kind.
+- binary literals 2#1001;
+- function f(x):y === f=\(x):y. stackless?
+- strings (bytes and unicode) as values;
+- a garbage collector;
+- ops += -= /= etc;
+- call syntax: f a; f a,b,c; etc;
+- multi-value assignment, returns;
+- floats, many ints and floats, arrays (lists), dictionaries, sets, tuples, enums;
+- constants (BIG_IDS);
+- big integers;
+- shift ops (signed, unsigned, rot);
+- `for` loops;
+- `until cond loop`;
+- `else` on loops;
+- `break 2` or `break break`
+- modules, import;
+- integer overflow detection (as **pragma**? other checks as pragmas);
+- named and optional arguments;
+- input (no way to read a value yet);
+- operations on strings (+ etc), numbers (?);
+- standard library:
+  - file system, i/o;
+  - strings;
+  - math;
+  - time, etc;
+- checking that every path of a function returns a value of the declared kind;
+- optimization.
+- if it's not too much work (≈10%), make an option to print out AST. This is rather optional.
+- if it's not too much work (≈10%), make an option to print out Assembler listing. This is VERY optional.
+- like in PL/I, dump vars with their types. Very optional too.
+
+## 11. Characters (JFYI)
+| char | usage |
+|---|---|
+| ! | unary not, conditional ops, != - not equal |
+| ? | conditional `c ? a ! b` |
+| ' | byte string |
+| " | unicode string |
+| # | hex literal, binary - nothing |
+| / | unary - nothing, divide (future: float divide) |
+| % | unary - nothing, modulo |
+| & | unary - nothing, bitwise and, && - logical and |
+| \| | unary - nothing, bitwise or, \|\| - logical or |
+| ~ | bitwise not, xor |
+| * | unary - nothing (scatter?), multiply; \*= |
+| + | identity, plus; += |
+| - | negative, minus; -= |
+| < | unary - nothing, less; <= - le |
+| > | unary - nothing, greater; >= - ge |
+| = | return, assignment, == - equal |
+| , | separate parameters, arguments |
+| : | start block, unary - nothing |
+| ; | separate statements, unary - nothing |
+| \\ | function (synonym of `function`), binary - nothing |
+| () | expressions, parameters, arguments |
+| ^ | global variable, binary - nothing |
+| _ | can be in ids and numbers |
+| {} | block |
+| [] | - |
+| . | - |
+| @ | upper-level variable |
+| $ | - |
+| ` | - |

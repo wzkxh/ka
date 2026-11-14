@@ -1,0 +1,11 @@
+a = 0
+if a: v = 1
+print v                                   -- never assigned: 0
+function f(c):
+ if c: x = 5
+ return x
+print f(0), " ", f(1)
+function h(c):
+ if c: z = 9
+ return \(): =z                          -- a captured variable is 0 too
+print h(0)(), " ", h(1)()

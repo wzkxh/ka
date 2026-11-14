@@ -1,2 +1,2 @@
-f = fn(): return 1
+f = function(): return 1
 print f == 1
