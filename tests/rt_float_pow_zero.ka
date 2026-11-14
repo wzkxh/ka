@@ -1,0 +1,2 @@
+print "x"
+print 0.0 ^ -1

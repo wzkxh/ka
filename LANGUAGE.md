@@ -1,6 +1,6 @@
 # Ka - language reference
 
-Ka is a small imperative language with 64-bit integers, first-class functions and
+Ka is a small imperative language with 64-bit integers and floats, first-class functions and
 closures, statically type-checked. `ka.py` compiles a `.ka` source file straight into a
 Windows x64 console `.exe`. This file describes the language; every rule here is meant to be
 covered by a test in `tests/`.
@@ -21,6 +21,11 @@ covered by a test in `tests/`.
 - **Keywords:** `if elif else while break continue print exit function return skip`.
   `\` is a synonym of `function`. (`fn and or not let global nonlocal input` are *not* keywords; they are
   ordinary names.)
+- **Float literals** (64-bit): `digits.digits`, `digits.digits e sign digits`, `digits e sign digits`, where digits are
+  one or more of 0-9 (with `_` between digits), `e` is `e` or `E` and the sign is `+`, `-` or nothing: `1.5`, `2.0`,
+  `1_000.25`, `6.02e23`, `1E-9`, `5e3` (that is the float 5000.0, not an integer). There is no `.5`, no `1.` (write `0.5`, `1.0`)
+  and no literal for infinity or NaN (yet). A literal that is too large for a double is an error; one that is too small becomes 0.0
+  or a denormal number.
 - **Integer literals:** decimal digits, range -9223372036854775808 .. 9223372036854775807
   (a literal larger than the maximum is a compile error; `-9223372036854775808` is fine).
   `_` may separate digits for readability: `1_000_000` (not at the start or the end, not doubled).
@@ -55,8 +60,9 @@ covered by a test in `tests/`.
   `!` directly followed by `=` is always `!=`.)
 
 ## 2. Values and types
-Two types:
+Three types:
 - **int** - 64-bit signed integer (two's complement, arithmetic wraps on overflow);
+- **float** - 64-bit IEEE 754 floating point number (a double);
 - **function** - a pointer to a closure object, written `fn(T1, T2) -> R` in compiler messages (that notation is only used there).
 
 Types are checked **at compile time** and never written in the program; they are inferred:
@@ -68,17 +74,25 @@ Types are checked **at compile time** and never written in the program; they are
 - A function's result has the type of its `return` expressions, which must all agree.
   (`return` without a value and falling off the end give the integer 0; that is not checked yet.)
 - Calls check the number and the types of the arguments. Calling an int is an error.
-- Operators `+ - * / % ^ & | ~ && ||`, unary `!` `-` `~`, `<` `<=` `>` `>=`, conditions of `if` and
-  `while`, the value of `exit`, and items of `print` need ints.
-  `==` and `!=` accept two values of the *same* type (two ints or two functions of the same
-  signature); functions are equal when they are the same function object.
-- The two branches of a conditional `c ? a ! b` must have the same type (`c` needs an int).
+- **Numbers** (int and float) are accepted by `+ - * / % ^`, unary `-`, `< <= > >=`, `== !=`, `&& || !`, conditions of `if`
+  and `while` and of `?:`, and by `print`. Only **ints** are accepted by `& | ~ << >> +> <* *>`, unary `~`, and `exit`.
+  Functions are accepted by `==` and `!=` (two functions of the same signature; equal when they are the same function object).
+- **Int and float mix inside operators:** `+ - * / % ^` give a float if either side is a float (the other side is
+  converted to float first), otherwise an int. In a comparison (`< <= > >= == !=`) both sides are converted to float when
+  one of them is a float. `1 + 0.5` is 1.5, `7 / 2` is 3 (int division) but `7 / 2.0` is 3.5, `1 == 1.0` is 1.
+- **There are no other implicit conversions** (yet): assigning, passing or returning a float where an int variable, parameter
+  or result is expected is an error, and the other way round too. `x = 0` and later `x = 0.5` is an error, write `x = 0.0`.
+  A parameter has one type: `function f(a): return a` called as `f(1)` and as `f(1.5)` is an error.
+  (An int converted to float loses precision beyond 2^53.)
+- The two branches of a conditional `c ? a ! b` must have the same type, but int and float mix like in an operator
+  (`c ? 1 ! 2.5` is a float whichever branch is taken); `c` is a number.
 - Function types may refer to themselves. With `function q(x): return x`, `function f(a): return a(a)` and
   `d = f(q)` the call executes as `q(q)`, which is `q`, so the type of `q` is `T = fn(T) -> T`. That is safe
   (an int is never called) and costs nothing at run time, so the compiler accepts it. It does not warn about
   calls that never finish (`function w(x): return x(x)`, then `w(w)` recurses forever like any endless recursion).
 
-Truth: `0` is false, any other value is true. Comparison and logical operators yield `0` or `1`.
+Truth: `0` and `0.0` (also `-0.0`) are false, any other number is true (NaN is true). Comparison and logical operators yield the
+int `0` or `1`.
 
 ## 3. Statements and lines
 - A statement ends at the **end of the line**, at `;`, at a closing `)` or `}`, at `else`/`elif`, or
@@ -151,12 +165,20 @@ Precedence, lowest to highest (binary operators are left-associative, except `^`
 | 14 | call `f(args)`, then primary: number, variable, `(expr)`, `function` / `\` literal |
 
 - `&&` / `||` short-circuit and yield 0 or 1.
-- `/` truncates toward zero; `%` takes the sign of the left operand (`-7 / 2 == -3`, `-7 % 3 == -1`).
+- **Float arithmetic** follows IEEE 754 double arithmetic. Results that are too large become `inf`/`-inf` and `inf - inf` is `nan` (they
+  are printed like that; there are no literals for them yet). Division or modulo by zero (also `0.0`, `-0.0`) is a runtime error
+  for floats as for ints, so `1.0 / 0` does not produce `inf`.
+- Float `%` is the C `fmod`: exact, the result has the sign of the left operand (`-7.5 % 2` is `-1.5`).
+- Float `^`: with an integer-valued exponent (`2.5 ^ 3`, `10.0 ^ -2`) the result is computed in extended precision and rounded once; the
+  base may be negative. With a fractional exponent the base must be positive (`(-8.0) ^ (1/3.0)` is a runtime error) and the result is
+  `exp(y * ln x)` evaluated by the FPU. `0.0 ^ negative` is division by zero; `x ^ 0` is 1.0. Int `^` int stays an int (see below).
+- **Comparisons of floats are exact** (no tolerance): `0.1 + 0.2 == 0.3` is 0. Comparing with NaN is false, except `!=`.
+- `/` of two ints truncates toward zero; int `%` takes the sign of the left operand (`-7 / 2 == -3`, `-7 % 3 == -1`).
   Division or modulo by zero stops the program with a runtime error.
   (`-9223372036854775808 / -1` raises a hardware exception - not handled.)
 - `&` `|` `~` are bitwise and, or, xor; unary `~` is bitwise not. They work on the 64 bits as they are
   (as unsigned bits): `~0` is -1, `-1 & #ff` is 255. All other operations, including comparisons
-  `< > <= >=`, treat integers as signed. There is no shift yet.
+  `< > <= >=`, treat integers as signed.
 - `a ^ b` is `a` to the power `b` (wraps like `*`). A negative exponent is a runtime error.
   Unary operators bind tighter than any binary one, `^` included: `-2^2` is `(-2)^2` = 4 (write `-(2^2)` for -4).
 - The bit operators and shifts sit between `+` and the comparisons, in the order of C (`&` over `~` over `|`), but unlike C
@@ -187,7 +209,7 @@ Precedence, lowest to highest (binary operators are left-associative, except `^`
 | `name = expr` | assign (creates the variable if needed) |
 | `name op= expr` | `name = name op expr` for `+ - * / % ^ & \| ~ && \|\| << >> +> <* *>`, e.g. `c += 1`, `x <<= 2`, `ok &&= f()` (`&&=` and `\|\|=` short-circuit). Also `^name op= expr` and `@name op= expr` |
 | `^name = expr`, `@name = expr` | assign a global / an enclosing function's variable (see 7) |
-| `print a, b, "text", ...` | print the items one after another (no separators added), then a newline. `print` alone prints an empty line. Items are int expressions or string literals |
+| `print a, b, "text", ...` | print the items one after another (no separators added), then a newline. `print` alone prints an empty line. Items are numbers or string literals; floats are written as described in the next paragraph |
 | `if cond block [elif cond block]... [else block]` | conditional (`else if` also works) |
 | `while cond block` | loop |
 | `break`, `continue` | only inside a `while` of the same function |
@@ -197,6 +219,14 @@ Precedence, lowest to highest (binary operators are left-associative, except `^`
 | `skip` | the empty statement, does nothing |
 | `{ ... }` | a block used as a statement (see 4) |
 | `expr` | an expression as a statement (typically a call); its value is discarded |
+
+### Printing floats
+`print` writes a float with at most **15 significant digits**, trailing zeros removed, always with a `.0` if it would otherwise look like
+an int: `1.5`, `100.0`, `0.1`, `0.3` (for `0.1 + 0.2`), `0.333333333333333`. Numbers from 1e-4 up to (not including) 1e15 are written
+in fixed notation, others as `d.ddde+XX` / `d.ddde-XX` with at least two exponent digits (`1e+15`, `1.5e-07`, `5e-324` is
+`4.94065645841247e-324`). Special values: `0.0`, `-0.0`, `inf`, `-inf`, `nan`. The digits are computed in extended precision, so the last
+digit can be wrong by one unit in about one case of ten thousand (values whose 16th digit is very close to 5). This format is
+provisional: no control of precision or layout exists yet.
 
 ## 7. Functions and scope
 ```
@@ -286,8 +316,9 @@ is an ordinary variable.
 
 ## 8. Runtime errors
 Printed to standard output, exit code 1:
-`runtime error: division by zero`,
-`runtime error: negative exponent`,
+`runtime error: division by zero` (int and float `/` `%`, and `0 ^ negative` for floats),
+`runtime error: negative exponent` (int `^`),
+`runtime error: power of a negative number with a fractional exponent`,
 `runtime error: call of an unset function` (a function variable that is only assigned by a function that has not run yet).
 Very deep recursion overflows the 1 MB stack and crashes (about 10 000 levels are fine).
 
@@ -296,7 +327,8 @@ All are `file: error: line N: message` (warnings: `file: warning: line N: messag
 are pinned by the `tests/err_*.ka` / `.error` pairs (and `.warn` for warnings). Groups:
 - *lexical:* `unexpected character '\t'` (TAB, like `$`, outside strings and comments), `string is not closed`, `bad escape ^q`, `bad unicode escape`,
   `cannot join '...' and "..." strings`, `comment '--[[' is never closed`, `bad number '1__0'`,
-  `bad hex literal`, `hex literal too large`, `bad binary literal`, `binary literal too large`, `integer literal too large`, `unexpected character`.
+  `bad hex literal`, `hex literal too large`, `bad binary literal`, `binary literal too large`, `bad number '1.5abc...'`, `a float needs digits after the dot` / `before the dot`,
+  `float literal too large`, `integer literal too large`, `unexpected character`.
 - *layout / syntax:* `unexpected indentation`, `inconsistent indentation`, `expected an indented block after ':'`,
   `'(' is never closed`, `'{' is never closed`, `unmatched '}'`, `unmatched ')'`,
   `expected end of statement, found ...`, `unexpected end of line in expression`, `unexpected 'else'`,
@@ -312,9 +344,9 @@ are pinned by the `tests/err_*.ka` / `.error` pairs (and `.warn` for warnings). 
   `parameter 'N' looks like a constant`, `the value of constant 'X' must be a constant expression (...): it uses the variable 'a'`
   (or `it calls a function`, `it uses 'B', which is defined later`).
 - *types:* `type mismatch <where>: expected T, found U` (where: `in assignment to 'x'`, `in argument 2 of the call`,
-  `left operand of '+'`, `in the condition of 'if'`, `in 'print' (only integers can be printed)`,
+  `left operand of '+'`, `in the condition of 'if'`, `in 'print' (only numbers can be printed)`,
   `in 'return' (all returns of a function must agree)`, ...), `wrong number of arguments: the function takes N,
-  called with M`, `an int is not a function`, `in '?!' (both branches must have the same type)`, `in the condition of '?'`.
+  called with M`, `an int is not a function` (or `a float ...`), `the result is float, expected int`, `expected a number, found fn()`, `in '?!' (both branches must have the same type)`, `in the condition of '?'`.
 - *warning:* `the value of this expression is not used`.
 
 ## 10. Not in the language (yet)
@@ -323,17 +355,22 @@ are pinned by the `tests/err_*.ka` / `.error` pairs (and `.warn` for warnings). 
 - a garbage collector;
 - call syntax: f a; f a,b,c; etc;
 - multi-value assignment, returns;
-- floats, many ints and floats, arrays (lists), dictionaries, sets, tuples, enums;
+- floats: **yet to do:** more float literals (pi-based), `INF` and `NAN` (literals, tests, and `0.0/0.0`-like
+  results are only reachable through overflow now), comparison with tolerance (comparisons are exact for now),
+  (**pragma** tolerance?), output formatting (**pragma** precision? proper formatting: precision, width, layout;
+  the 15-digit format is provisional), explicit conversion int <-> float (`int(x)`, `float(i)`, rounding,
+  floor/ceil), implicit conversion on assignment (strict now), math functions (sqrt, sin, ...);
+- many ints and floats (other sizes), arrays (lists), dictionaries, sets, tuples, enums;
 - big integers;
 - `for` loops;
 - `until cond loop`;
 - `else` on loops;
 - `break 2` or `break break`
-- fix: constants (MAX_LEN) inside fns, ifs, loops, etc; constant expression;
+- fix: constants (MAX_LEN) inside fns (ifs, loops, etc); constant expression;
 - fix: shift ops -- negative counts;
 - radix 3..36 literals 3#122 8#377 36#zzz;
 - modules, import;
-- integer overflow detection (as **pragma**? other checks as pragmas);
+- integer overflow detection (as **pragma** intoverflow? other checks as pragmas);
 - named and optional arguments;
 - input (no way to read a value yet);
 - operations on strings (+ etc), numbers (?);
@@ -356,7 +393,7 @@ are pinned by the `tests/err_*.ka` / `.error` pairs (and `.warn` for warnings). 
 | ' | byte string |
 | " | unicode string |
 | # | hex literal `#ff`, binary literal `2#101` |
-| / | unary - nothing, divide (future: float divide); /= |
+| / | unary - nothing, float division; /= |
 | % | unary - nothing, modulo; %= |
 | & | unary - nothing, bitwise and, && - logical and; &= &&= |
 | \| | unary - nothing, bitwise or, \|\| - logical or; \|= \|\|= |
@@ -370,13 +407,13 @@ are pinned by the `tests/err_*.ka` / `.error` pairs (and `.warn` for warnings). 
 | , | separate parameters, arguments |
 | : | start block, unary - nothing |
 | ; | separate statements, unary - nothing |
-| \\ | function (synonym of `function`), binary - nothing |
-| () | expressions, parameters, arguments |
+| \\ | function (synonym of `function`), binary - todo: int.div.; \\= |
 | ^ | global variable (prefix), power (binary); ^= |
-| _ | can be in ids and numbers |
+| _ | 'blank' in ids and numbers, ids can start/end with it |
+| @ | upper-level variable |
+| () | expressions, parameters, arguments |
 | {} | block |
 | [] | - |
 | . | - |
-| @ | upper-level variable |
-| $ | - |
 | ` | - |
+| $ | - |

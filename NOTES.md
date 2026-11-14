@@ -102,6 +102,40 @@ messages `line N: ...`; warnings (list of strings) are only collected, never fat
   after `hoist(g)` (before the other statements) and skipped at their textual place, so constants can be read anywhere, even above
   their definition. `nblock` is incremented in `block()` and `brace_block()` (any `if`/`while`/`{}`/function body).
 
+### Floats (iteration 5)
+- Value representation: every value is still one 64-bit word; a float is the bit pattern of a double (`mov rax, imm64` for literals).
+  Variables, arguments, results and closures need no change. Only operators and `print` care about the type.
+- Lexer: `flt` token (`digits[.digits][e[+-]digits]` with `_` inside digit groups, Python `float()` for the value, `inf` -> error);
+  `1.`, `.5`, `1.5abc`, `1.5.2` give specific errors. Parser: `("flt", x)` nodes, `-1.5` is folded like `-5`.
+- **Type checker** (`Checker`): types are `int`, `float`, `fn`, `var`. Operators that mix int and float cannot be typed by plain unification
+  (an operand may be a parameter whose type is only fixed by a later call), so `+ - * / % ^`, `== !=` and `?:` are recorded as
+  constraints (`arith`, `eq`, `cond`, `num` in `Checker.pending`) and settled by `step()`/`solve()` when their operand types are known
+  (`arith`: float if either side is float, int if both are int). `finish()` makes whatever is still unknown int, then solves again.
+  Assignments, arguments and returns stay strict (plain unify), by design: no implicit int->float outside operators.
+  `Checker.types` maps `id(expression node)` to its Ty; the AST must stay alive (it does, compile_source keeps it).
+- **CodeGen** reads those types (`tk(e)`: int/float/fn; unknown counts as int). Float arithmetic: operands are put in xmm0/xmm1
+  (`load_xmm`: `movq` for a float, `cvtsi2sd` for an int), then `addsd/subsd/mulsd/divsd`; `/` and `%` check the divisor bits
+  (`shl 1` ignores the sign) and jump to `rt_divzero`. Comparisons use `ucomisd` through `fcmp_false(op, label)` (nan-correct:
+  false for everything except `!=`); chains convert per link. Truth tests use `test_rax(kind)` (floats: `shl rcx,1` so -0.0 is false).
+  Unary minus on a float flips the sign bit (`btc rax,63`). `?:` converts an int branch when the result is float.
+- **Runtime blobs** (`FLOAT_RT` in ka.py between BEGIN/END markers) are machine code generated from `tools/float_rt.asm` by
+  `tools/build_float_rt.py` (needs `pip install keystone-engine`; Keystone assembles single instructions, the script does labels and
+  rel32 jumps itself because Keystone hung on larger label-heavy input). Routines: `rt_fmt_float` (rax = bits, rdx = buffer -> rax = length;
+  15 significant digits via x87 extended precision: N = round(x * 10^(14-e10)) with 10^k by repeated squaring, then layout), `rt_fpow`
+  (integral exponent: x87 square-and-multiply in extended precision; fractional: `fyl2x`/`f2xm1`/`fscale`; edx = error code),
+  `rt_fmod` (exact integer shift-and-subtract, like musl; replaces `fprem` because QEMU emulates fprem inexactly). The routines set the x87
+  control word themselves (Windows starts processes with 53-bit precision, which would break the digit generation). They may clobber
+  every register except rbp/rsp. `rt_print_float` (hand-written in `runtime()`) calls `rt_fmt_float` and `rt_print_str`.
+- `tools/fuzz_float.py [count]` runs the three routines in Unicorn on many values against Python (`'%.14e'` reference for the format, `math.fmod`,
+  `math.pow`). Last result: formatting 0 differences on ~3000 values (random bit patterns, denormals, boundaries); fmod 0; integral pow within 1 ulp.
+  Fractional pow in the emulator is only ~4e-15 accurate because QEMU computes `fyl2x`/`f2xm1` in double precision; the real FPU is better,
+  so tests with fractional exponents use values whose 15-digit result agrees (e.g. `2 ^ 0.5`, `4.0 ^ 0.5`).
+- Output format decision: 15 significant digits (APL-like, hides binary noise: `0.1 + 0.2` prints `0.3`), Python-like layout (`1e-05`, `1.5e+300`,
+  `100.0`). A shortest-round-trip (Python repr) printer needs bignum or Ryu tables and was judged too much for now. Known limitation: the 15th
+  digit may be off by one in roughly 1 case in 10 000 (extended-precision rounding), none seen in the fuzz run.
+- Decisions: float `/` or `%` by zero is a runtime error (like ints; no INF/NAN literals yet, but overflow can still produce inf/nan);
+  comparisons are exact; truthiness of numbers works for floats; `^` with float operands needs a positive base for fractional exponents.
+
 ### Name resolution (`Resolver.lookup`)
 Shared by Checker and CodeGen. `lookup(name, scope, line, mode)` -> `("g",name)` | `("l",scope,name)` |
 `("f",owner,name)`. `mode` `^` -> global; `@` -> nearest enclosing function that owns the name; plain names
@@ -172,11 +206,12 @@ follow `globals_decl` / `nonlocal_decl` first, then local, then enclosing functi
 - Expression-bodied functions (`function f(x) x*x`) and the "last expression is the result" rule were removed.
 
 ## 3. Known limitations / ideas for later
+- (floats are done, see above; open: INF/NAN, tolerance, formatting, conversions)
 - Strings as values, unicode strings as 32-bit arrays, hex byte strings `#'..'`, input, arrays, `for`, GC,
   overflow checks, `INT_MIN / -1`, shifts, generalised (polymorphic) function types, checking returns on all
   paths, better error recovery (the compiler stops at the first error), `@x` at more than one level.
 - The unused-expression warning is intentionally simple (any non-call expression statement).
-- Not verified on real Windows in this session: `SetConsoleOutputCP` (faked in the emulator) and the UTF-8
+- Not verified on real Windows in this session: the x87/SSE float routines (verified in Unicorn only), `SetConsoleOutputCP` (faked in the emulator) and the UTF-8
   console output. Everything else is exercised through the emulator. (User added: all tests passed on real Windows.)
 
 ## 4. Testing

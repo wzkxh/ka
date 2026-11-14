@@ -1,0 +1,2 @@
+print "x"
+print 1 / -0.0

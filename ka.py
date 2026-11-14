@@ -83,6 +83,7 @@ TOKEN_RE = re.compile(r"""
     (?P<ws>[ \r]+)
   | (?P<nl>\n)
   | (?P<hex>\#\w*)
+  | (?P<flt>\d+(?:_\d+)*(?:\.\d+(?:_\d+)*(?:[eE][-+]?\d+(?:_\d+)*)?|[eE][-+]?\d+(?:_\d+)*))
   | (?P<num>\d\w*(?:\#\w*)?)
   | (?P<id>[A-Za-z_]\w*)
   | (?P<op>&&=|\|\|=|<<=|>>=|\+>=|<\*=|\*>=|==|!=|<=|>=|&&|\|\||<<|>>|\+>|<\*|\*>|\+=|-=|\*=|/=|%=|\^=|&=|\|=|~=|[-+*/%<>=!(){};,:&|~^\\?@])
@@ -188,6 +189,8 @@ def tokenize(src):
       continue
     m = TOKEN_RE.match(src, pos)
     if not m:
+      if src[pos] == "." and src[pos + 1:pos + 2].isdigit():
+        raise CompileError(f"line {line}: bad number '.{src[pos + 1]}...' (a float needs digits before the dot: 0.5)")
       raise CompileError(f"line {line}: unexpected character {src[pos]!r}")
     kind, text = m.lastgroup, m.group()
     pos = m.end()
@@ -200,6 +203,13 @@ def tokenize(src):
       line += 1
     elif kind == "ws":
       pass
+    elif kind == "flt":                                  # 1.5   1.5e-3   2e10   (digits may contain '_')
+      if pos < n and (src[pos].isalnum() or src[pos] in "_."):
+        raise CompileError(f"line {line}: bad number '{text}{src[pos]}...'")
+      v = float(text.replace("_", ""))
+      if v == float("inf"):
+        raise CompileError(f"line {line}: float literal too large")
+      toks.append(("flt", v, line))
     elif kind == "num" and "#" in text:                  # binary literal 2#0001_1011
       m = re.fullmatch(r"2#([01]+(?:_[01]+)*)", text)
       if not m:
@@ -211,6 +221,8 @@ def tokenize(src):
     elif kind == "num":
       if not re.fullmatch(r"\d+(_\d+)*", text):
         raise CompileError(f"line {line}: bad number '{text}' ('_' is allowed only between digits)")
+      if pos < n and src[pos] == ".":
+        raise CompileError(f"line {line}: bad number '{text}.' (a float needs digits after the dot: {text}.0)")
       toks.append(("num", int(text.replace("_", "")), line))
     elif kind == "hex":
       if not re.fullmatch(r"#[0-9a-fA-F]+(_[0-9a-fA-F]+)*", text):
@@ -264,7 +276,7 @@ def tokenize(src):
 #     ("while", cond, body, line)  ("exit", e, line)  ("exprstmt", e, line)  ("return", e|None, line)
 #     ("fn", Scope)  ("block", stmts)  ("skip",)  ("break",)  ("continue",)
 #   expressions:
-#     ("num", n) ("var", name, line, mode) ("fnlit", Scope) ("call", callee, args, line)
+#     ("num", n) ("flt", x) ("var", name, line, mode) ("fnlit", Scope) ("call", callee, args, line)
 #     ("bin", op, l, r) ("cmp", ops, operands) ("and"/"or", l, r) ("neg"/"not"/"bnot", e)
 #   mode: None = plain name, "^" = global (^x), "@" = variable of an enclosing function (@x)
 # ----------------------------------------------------------------------------
@@ -331,7 +343,8 @@ class Parser:
     # strings 0..3 are used by the runtime
     self.strings = [b"\n", b"runtime error: division by zero\n",
                     b"runtime error: call of an unset function\n",
-                    b"runtime error: negative exponent\n"]
+                    b"runtime error: negative exponent\n",
+                    b"runtime error: power of a negative number with a fractional exponent\n"]
     self.loop_depth = 0
     self.nblock = 0                     # how many blocks are open (0 = directly at the top level)
     self.consts = {}                    # constant name -> line of its definition
@@ -657,7 +670,7 @@ class Parser:
         self.i += 2
         return self.assign(t1[1], v)
       return self.expr_stmt()
-    if k in ("num", "hex") or (k == "op" and v in ("(", "-", "!", "~")):
+    if k in ("num", "hex", "flt") or (k == "op" and v in ("(", "-", "!", "~")):
       return self.expr_stmt()
     self.err(f"unexpected {describe(self.peek())}")
 
@@ -833,6 +846,8 @@ class Parser:
         if n < INT_MIN:
           self.err("integer literal too large")
         return ("num", n)
+      if self.peek()[0] == "flt":                     # fold -1.5
+        return ("flt", -self.next()[1])
       return ("neg", self.unary())
     if self.accept("!"):
       return ("not", self.unary())
@@ -865,6 +880,8 @@ class Parser:
       if v > INT_MAX:
         raise CompileError(f"line {line}: integer literal too large")
       return ("num", v)
+    if k == "flt":
+      return ("flt", v)
     if k == "hex":
       return ("num", v)
     if k == "id":
@@ -934,10 +951,14 @@ class Resolver:
 
 
 # ----------------------------------------------------------------------------
-# Static types: int and functions.  Every variable, parameter and function result
-# gets a type variable; types are found by unification (no annotations needed).
-# A variable keeps the type of its first value; a parameter takes its type from
-# the way it is used and from the calls of the function.
+# Static types: int, float and functions.  Every variable, parameter and function result gets a type variable;
+# types are found by unification (no annotations needed). A variable keeps the type of its first value (no
+# implicit conversion on assignment, in calls or in `return`); a parameter takes its type from the way it is
+# used and from the calls of the function.
+# Inside operators int and float mix: `+ - * / % ^` give float if either side is float (a number is converted
+# to float), comparisons convert both sides to float. As the types of operands may only be known later (a
+# parameter, for instance), such operators are kept as constraints and solved after the whole program has been
+# seen (Checker.solve); what is still unknown at the end becomes int.
 # ----------------------------------------------------------------------------
 class Ty:
   def __init__(self, kind, params=None, ret=None):
@@ -945,6 +966,8 @@ class Ty:
 
 
 INT = Ty("int")
+FLOAT = Ty("float")
+ARITH_OPS = ("+", "-", "*", "/", "%", "^")
 
 
 def prune(t):
@@ -955,8 +978,8 @@ def prune(t):
 
 def show(t, seen=()):
   t = prune(t)
-  if t.kind == "int":
-    return "int"
+  if t.kind in ("int", "float"):
+    return t.kind
   if t.kind == "var":
     return "?"
   if id(t) in seen:
@@ -996,7 +1019,8 @@ class Checker(Resolver):
     self.g = gscope
     self.env = {}                       # variable key -> Ty
     self.fns = []                       # functions whose body is being checked
-    self.line = 0
+    self.types = {}                     # id(expression node) -> Ty   (the code generator reads this)
+    self.pending = []                   # constraints whose operand types are not known yet
 
   def unify(self, expected, found, line, what):
     try:
@@ -1032,6 +1056,107 @@ class Checker(Resolver):
 
   def run(self, ast):
     self.stmts(ast, self.g)
+    self.finish()
+
+  # -- numeric constraints
+  def need_num(self, t, line, what):
+    """t must be a number (int or float)"""
+    t = prune(t)
+    if t.kind == "fn":
+      self.err(line, f"type mismatch {what}: expected a number, found {show(t)}")
+    if t.kind == "var":
+      self.pending.append(("num", t, line, what))
+
+  def constrain(self, c):
+    if not self.step(c):
+      self.pending.append(c)
+
+  def result(self, res, t, line, op):
+    try:
+      unify_raw(res, t)
+    except Mismatch:
+      self.err(line, f"type mismatch in '{op}': the result is {t.kind}, expected {show(res)}")
+
+  def step(self, c):
+    """try to settle one constraint; False if its operand types are still unknown"""
+    kind = c[0]
+    if kind == "num":
+      t = prune(c[1])
+      if t.kind == "var":
+        return False
+      self.need_num(t, c[2], c[3])
+      return True
+    if kind == "arith":                 # result = float if one side is float, else int
+      _, res, a, b, line, op = c
+      a, b = prune(a), prune(b)
+      if a.kind == "fn":
+        self.err(line, f"type mismatch in left operand of '{op}': expected a number, found {show(a)}")
+      if b.kind == "fn":
+        self.err(line, f"type mismatch in right operand of '{op}': expected a number, found {show(b)}")
+      if a.kind == "float" or b.kind == "float":
+        self.result(res, FLOAT, line, op)
+        for t in (a, b):
+          if t.kind == "var":
+            self.pending.append(("num", t, line, f"in operand of '{op}'"))
+        return True
+      if a.kind == "int" and b.kind == "int":
+        self.result(res, INT, line, op)
+        return True
+      return False
+    if kind == "eq":                    # two numbers (any mix) or two functions of the same type
+      _, a, b, line, what = c
+      a, b = prune(a), prune(b)
+      if a.kind == "fn" or b.kind == "fn":
+        self.unify(a, b, line, what)
+        return True
+      if a.kind != "var" and b.kind != "var":
+        return True
+      if a.kind == "var" and b.kind == "var":
+        return False
+      self.pending.append(("num", a if a.kind == "var" else b, line, what))
+      return True
+    if kind == "cond":                  # c ? a ! b : numbers mix like in an operator, functions must agree
+      _, res, a, b, line, what = c
+      a, b = prune(a), prune(b)
+      if a.kind == "fn" or b.kind == "fn":
+        self.unify(a, b, line, what)
+        self.unify(res, a, line, what)
+        return True
+      if a.kind == "float" or b.kind == "float":
+        self.unify(res, FLOAT, line, what)
+        for t in (a, b):
+          if t.kind == "var":
+            self.pending.append(("num", t, line, what))
+        return True
+      if a.kind == "int" and b.kind == "int":
+        self.unify(res, INT, line, what)
+        return True
+      return False
+    raise AssertionError(kind)
+
+  def solve(self):
+    progress = True
+    while progress and self.pending:
+      progress = False
+      batch, self.pending = self.pending, []
+      for c in batch:
+        if self.step(c):
+          progress = True
+        else:
+          self.pending.append(c)
+
+  def finish(self):
+    """after the whole program: types that were never determined are int"""
+    while True:
+      self.solve()
+      if not self.pending:
+        return
+      for c in self.pending:
+        ops = c[1:2] if c[0] == "num" else c[1:4] if c[0] in ("arith", "cond") else c[1:3]
+        for t in ops:
+          t = prune(t)
+          if t.kind == "var":
+            unify_raw(t, INT)
 
   # -- statements
   def stmts(self, lst, sc):
@@ -1046,13 +1171,13 @@ class Checker(Resolver):
     elif k == "print":
       for kind, v in s[1]:
         if kind == "expr":
-          self.unify(INT, self.expr(v, sc, s[2]), s[2], "in 'print' (only integers can be printed)")
+          self.need_num(self.expr(v, sc, s[2]), s[2], "in 'print' (only numbers can be printed)")
     elif k == "if":
-      self.unify(INT, self.expr(s[1], sc, s[4]), s[4], "in the condition of 'if'")
+      self.need_num(self.expr(s[1], sc, s[4]), s[4], "in the condition of 'if'")
       self.stmts(s[2], sc)
       self.stmts(s[3], sc)
     elif k == "while":
-      self.unify(INT, self.expr(s[1], sc, s[3]), s[3], "in the condition of 'while'")
+      self.need_num(self.expr(s[1], sc, s[3]), s[3], "in the condition of 'while'")
       self.stmts(s[2], sc)
     elif k == "exit":
       self.unify(INT, self.expr(s[1], sc, s[2]), s[2], "in 'exit'")
@@ -1074,9 +1199,16 @@ class Checker(Resolver):
     self.unify(INT, self.expr(e, sc, line), line, f"in {what}")
 
   def expr(self, e, sc, line):
+    t = self.expr_(e, sc, line)
+    self.types[id(e)] = t               # the code generator needs the type of every expression
+    return t
+
+  def expr_(self, e, sc, line):
     k = e[0]
     if k == "num":
       return INT
+    if k == "flt":
+      return FLOAT
     if k == "var":
       return self.var_ty(e[1], sc, e[2], e[3])
     if k == "fnlit":
@@ -1086,8 +1218,8 @@ class Checker(Resolver):
       _, callee, args, cl = e
       ct = prune(self.expr(callee, sc, cl))
       ats = [self.expr(a, sc, cl) for a in args]
-      if ct.kind == "int":
-        self.err(cl, "type mismatch in call: an int is not a function")
+      if ct.kind in ("int", "float"):
+        self.err(cl, f"type mismatch in call: {'an' if ct.kind == 'int' else 'a'} {ct.kind} is not a function")
       if ct.kind == "fn":
         if len(ct.params) != len(ats):
           self.err(cl, f"wrong number of arguments: the function takes {len(ct.params)}, "
@@ -1100,10 +1232,18 @@ class Checker(Resolver):
       return r
     if k == "bin":
       op = e[1]
+      if op in ARITH_OPS:
+        ta, tb = self.expr(e[2], sc, line), self.expr(e[3], sc, line)
+        res = Ty("var")
+        self.constrain(("arith", res, ta, tb, line, op))
+        return res
       if op in ("==", "!="):
-        lt, rt = self.expr(e[2], sc, line), self.expr(e[3], sc, line)
-        self.unify(lt, rt, line, f"in '{op}' (both sides must have the same type)")
-      else:
+        ta, tb = self.expr(e[2], sc, line), self.expr(e[3], sc, line)
+        self.constrain(("eq", ta, tb, line, f"in '{op}' (both sides must have the same type, or both be numbers)"))
+      elif op in ("<", "<=", ">", ">="):
+        self.need_num(self.expr(e[2], sc, line), line, f"in left operand of '{op}'")
+        self.need_num(self.expr(e[3], sc, line), line, f"in right operand of '{op}'")
+      else:                             # bitwise operators and shifts: integers only
         self.operand(e[2], sc, line, f"left operand of '{op}'")
         self.operand(e[3], sc, line, f"right operand of '{op}'")
       return INT
@@ -1112,22 +1252,31 @@ class Checker(Resolver):
       ts = [self.expr(x, sc, line) for x in xs]
       for op, a, b in zip(ops, ts, ts[1:]):
         if op in ("==", "!="):
-          self.unify(a, b, line, f"in '{op}' (both sides must have the same type)")
+          self.constrain(("eq", a, b, line, f"in '{op}' (both sides must have the same type, or both be numbers)"))
         else:
-          self.unify(INT, a, line, f"in operand of '{op}'")
-          self.unify(INT, b, line, f"in operand of '{op}'")
+          self.need_num(a, line, f"in operand of '{op}'")
+          self.need_num(b, line, f"in operand of '{op}'")
       return INT
     if k == "cond":
-      self.operand(e[1], sc, line, "condition of '?'")
+      self.need_num(self.expr(e[1], sc, line), line, "in the condition of '?'")
       ta, tb = self.expr(e[2], sc, line), self.expr(e[3], sc, line)
-      self.unify(ta, tb, line, "in '?!' (both branches must have the same type)")
-      return ta
+      res = Ty("var")
+      self.constrain(("cond", res, ta, tb, line, "in '?!' (both branches must have the same type, or both be numbers)"))
+      return res
     if k in ("and", "or"):
-      self.operand(e[1], sc, line, f"left operand of '{'&&' if k == 'and' else '||'}'")
-      self.operand(e[2], sc, line, f"right operand of '{'&&' if k == 'and' else '||'}'")
+      sym = '&&' if k == 'and' else '||'
+      self.need_num(self.expr(e[1], sc, line), line, f"in left operand of '{sym}'")
+      self.need_num(self.expr(e[2], sc, line), line, f"in right operand of '{sym}'")
       return INT
-    if k in ("neg", "not", "bnot"):
-      self.operand(e[1], sc, line, f"operand of '{ {'neg': '-', 'not': '!', 'bnot': '~'}[k] }'")
+    if k == "neg":
+      t = self.expr(e[1], sc, line)
+      self.need_num(t, line, "in operand of '-'")
+      return t
+    if k == "not":
+      self.need_num(self.expr(e[1], sc, line), line, "in operand of '!'")
+      return INT
+    if k == "bnot":
+      self.operand(e[1], sc, line, "operand of '~'")
       return INT
     raise AssertionError(k)
 
@@ -1190,8 +1339,51 @@ FAIL_CC = {"==": 5, "!=": 4, "<": 0x0D, "<=": 0x0F, ">": 0x0E, ">=": 0x0C}   # j
 CMP_SETCC = {"==": 0x94, "!=": 0x95, "<": 0x9C, "<=": 0x9E, ">": 0x9F, ">=": 0x9D}
 
 
+# ---- BEGIN FLOAT_RT (generated by tools/build_float_rt.py from tools/float_rt.asm; do not edit by hand)
+FLOAT_RT = {
+  "rt_fmod": bytes.fromhex(
+    "66480f7ec666480f7ecf4989f249c1ea3f4989f049c1e8344981e0ff0700004989f949c1e9344981e1ff0700004981f8ff07"
+    "00000f84210000004889f248d1e24989fb49d1e34c39da0f871c0000000f8505000000e93f010000c348b8000000000000f8"
+    "7f66480f6ec0c34d85c00f852d0000004889f248c1e20c4885d20f880b00000049ffc848d1e2e9ecffffff48c7c101000000"
+    "4c29c148d3e6e91a00000048b8ffffffffffff0f004821c648b800000000000010004809c64d85c90f852d0000004889fa48"
+    "c1e20c4885d20f880b00000049ffc948d1e2e9ecffffff48c7c1010000004c29c948d3e7e91a00000048b8ffffffffffff0f"
+    "004821c748b800000000000010004809c74d39c80f8e200000004889f24829fa0f88090000000f84730000004889d648d1e6"
+    "49ffc8e9d7ffffff4889f24829fa0f88090000000f84530000004889d648b800000000000010004839c60f830b00000048d1"
+    "e649ffc8e9ecffffff4d85c00f8e0f0000004829c649c1e0344c09c6e90d00000048c7c1010000004c29c148d3ee49c1e23f"
+    "4c09d666480f6ec6c34c89d048c1e03f66480f6ec0c3"
+  ),
+  "rt_fpow": bytes.fromhex(
+    "31d266490f7ec166480f7ec84889c148d1e10f851000000048b8000000000000f03f66480f6ec0c3f2480f2cc9f2480f2ad1"
+    "660f2ed10f85840000000f8a7e0000004989c84885c90f890300000048f7d94883ec1866c74424107f03d96c2410f20f1104"
+    "24d9e8dd04244885c90f8415000000f6c1010f8402000000dcc9d8c848d1e9e9e2ffffffddd84d85c00f891e0000004c89c8"
+    "48d1e00f850c000000ddd84883c418ba01000000c3d9e8d9c9def9dd1c24f20f1004244883c41831d2c34c89c84889c148d1"
+    "e10f844b0000004885c00f885b0000004883ec1866c74424107f03d96c2410f20f110c24dd0424f20f110424dd0424d9f1d9"
+    "c0d9fcdce9d9c9d9f0d9e8dec1d9fdddd9dd1c24f20f1004244883c41831d2c366480f7ec84885c00f8805000000660f57c0"
+    "c3ba01000000c3ba02000000c3"
+  ),
+  "rt_fmt_float": bytes.fromhex(
+    "4883ec404989d74889d74889c34889d948d1e148ba000000000000e0ff4839d10f87480200004885db0f8906000000c6072d"
+    "48ffc7480fbaf33f48b9000000000000f07f4839cb0f84300200004885db0f843602000066c74424287f03d96c242848891c"
+    "2448c74424080a0000004889d848c1e834482dff0300004869c0d104000048c1f80c4989c448c7c10e0000004c29e14989c8"
+    "4885c90f890300000048f7d9dd0424d9e8df6c24084885c90f8415000000f6c1010f8402000000dcc9d8c848d1e9e9e2ffff"
+    "ffddd84d85c00f8807000000dec9e902000000def9d9fcdf7c24104c8b6c241048b80080c6a47e8d03004939c50f8c080000"
+    "0049ffc4e986ffffff48b800407a10f35a00004939c50f8d0800000049ffcce96bffffff49c7c60f00000048c7c10a000000"
+    "4983fe010f8e1c0000004c89e831d248f7f14885d20f850b0000004989c549ffcee9daffffff488d7424184c89e84d89f031"
+    "d248f7f180c23049ffc8428814064d85c00f85e8ffffff4983fcfc0f8c760000004983fc0e0f8f6c0000004d85e40f884300"
+    "00004d8d4c24014d39ce0f8e180000004c89c9f3a4c6072e48ffc74c89f14c29c9f3a4e9de0000004c89f1f3a44c89c94c29"
+    "f1b030f3aa66c7072e304883c702e9c100000066c707302e4883c7024c89e148f7d948ffc9b030f3aa4c89f1f3a4e9a10000"
+    "00a44983fe010f8e0c000000c6072e48ffc7498d4efff3a4c6076548ffc74c89e04885c00f8808000000c6072be906000000"
+    "c6072d48f7d848ffc748c7c16400000031d248f7f14885c00f84070000000430880748ffc74889d048c7c10a00000031d248"
+    "f7f10430880748ffc780c230881748ffc7e928000000c7076e616e004883c703e919000000c707696e66004883c703e90a00"
+    "0000c707302e30004883c7034889f84c29f84883c440c3"
+  ),
+}
+# ---- END FLOAT_RT
+
+
 class CodeGen(Resolver):
-  def __init__(self, gscope, strings, fn_globals):
+  def __init__(self, gscope, strings, fn_globals, types):
+    self.types = types                  # id(expression node) -> Ty, from the Checker
     self.a = Asm()
     self.g = gscope
     self.scope = gscope
@@ -1377,6 +1569,47 @@ class CodeGen(Resolver):
     a.emit(0x31, 0xC0)                                   # xor eax,eax  (default result 0)
     self.epilogue()
 
+  # -- types in the generated code: values are always 64 bits; a float is the bit pattern of a double
+  def tk(self, e):
+    """'int', 'float' or 'fn' (a type that was never determined counts as int)"""
+    t = prune(self.types.get(id(e), INT))
+    return t.kind if t.kind in ("float", "fn") else "int"
+
+  def load_xmm(self, xmm, reg, kind):
+    """xmm := the number in the general register reg (0 = rax, 1 = rcx, 2 = rdx); an int is converted to float"""
+    modrm = 0xC0 | (xmm << 3) | reg
+    if kind == "float":
+      self.a.emit(0x66, 0x48, 0x0F, 0x6E, modrm)       # movq xmm,reg
+    else:
+      self.a.emit(0xF2, 0x48, 0x0F, 0x2A, modrm)       # cvtsi2sd xmm,reg
+
+  def test_rax(self, kind):
+    """set ZF when the value in rax is false: 0 (for a float: +0.0 or -0.0)"""
+    if kind == "float":
+      self.a.emit(0x48, 0x89, 0xC1, 0x48, 0xD1, 0xE1)  # mov rcx,rax; shl rcx,1   (drops the sign bit)
+    else:
+      self.a.emit(0x48, 0x85, 0xC0)                    # test rax,rax
+
+  def fcmp_false(self, op, lab):
+    """xmm0 = left, xmm1 = right: jump to lab if `left op right` is false (a comparison with nan is false, except !=)"""
+    a = self.a
+    if op in ("<", "<="):
+      a.emit(0x66, 0x0F, 0x2E, 0xC8)                   # ucomisd xmm1,xmm0
+      a.jcc(6 if op == "<" else 2, lab)                # jbe / jb
+    elif op in (">", ">="):
+      a.emit(0x66, 0x0F, 0x2E, 0xC1)                   # ucomisd xmm0,xmm1
+      a.jcc(6 if op == ">" else 2, lab)
+    elif op == "==":
+      a.emit(0x66, 0x0F, 0x2E, 0xC1)
+      a.jcc(5, lab)                                    # jne
+      a.jcc(0xA, lab)                                  # jp  (unordered)
+    else:                                              # "!="
+      ok = a.new_label("fne_ok")
+      a.emit(0x66, 0x0F, 0x2E, 0xC1)
+      a.jcc(0xA, ok)                                   # unordered: not equal
+      a.jcc(4, lab)                                    # equal: false
+      a.label(ok)
+
   def mov_rax_imm(self, n):
     a = self.a
     if -2 ** 31 <= n < 2 ** 31:
@@ -1388,6 +1621,8 @@ class CodeGen(Resolver):
     a, k = self.a, e[0]
     if k == "num":
       self.mov_rax_imm(e[1])
+    elif k == "flt":
+      self.mov_rax_imm(struct.unpack("<q", struct.pack("<d", e[1]))[0])
     elif k == "var":
       self.var_load(e[1], e[2], e[3])
     elif k == "fnlit":
@@ -1404,12 +1639,16 @@ class CodeGen(Resolver):
       a.emit(0xFF, 0x10)                               # call [rax]
     elif k == "neg":
       self.expr(e[1])
-      a.emit(0x48, 0xF7, 0xD8)                         # neg rax
+      if self.tk(e[1]) == "float":
+        a.emit(0x48, 0x0F, 0xBA, 0xF8, 0x3F)           # btc rax,63   (flip the sign bit)
+      else:
+        a.emit(0x48, 0xF7, 0xD8)                       # neg rax
     elif k == "bnot":
       self.expr(e[1])
       a.emit(0x48, 0xF7, 0xD0)                         # not rax
     elif k == "cmp":                                     # chained comparison: a < b <= c
       ops, xs = e[1], e[2]
+      tys = [self.tk(x) for x in xs]
       lf, le = a.new_label("ch_f"), a.new_label("ch_e")
       self.expr(xs[0])
       a.emit(0x50)                                     # push rax  (previous operand)
@@ -1417,8 +1656,13 @@ class CodeGen(Resolver):
         self.expr(xs[i + 1])                         # each operand is evaluated once
         a.emit(0x48, 0x89, 0xC2)                     # mov rdx,rax
         a.emit(0x48, 0x8B, 0x0C, 0x24)               # mov rcx,[rsp]
-        a.emit(0x48, 0x39, 0xD1)                     # cmp rcx,rdx
-        a.jcc(FAIL_CC[op], lf)                       # stop at the first false link
+        if "float" in (tys[i], tys[i + 1]):
+          self.load_xmm(0, 1, tys[i])                  # previous operand (rcx) -> xmm0
+          self.load_xmm(1, 2, tys[i + 1])              # this operand (rdx) -> xmm1
+          self.fcmp_false(op, lf)
+        else:
+          a.emit(0x48, 0x39, 0xD1)                   # cmp rcx,rdx
+          a.jcc(FAIL_CC[op], lf)                     # stop at the first false link
         if i < len(ops) - 1:
           a.emit(0x48, 0x89, 0x14, 0x24)           # mov [rsp],rdx
       a.emit(0xB8, 1, 0, 0, 0)                         # mov eax,1
@@ -1429,24 +1673,31 @@ class CodeGen(Resolver):
       a.emit(0x48, 0x83, 0xC4, 0x08)                   # add rsp,8
     elif k == "cond":                                    # c ? a ! b
       lel, len_ = a.new_label("cd_else"), a.new_label("cd_end")
+      tres = self.tk(e)
       self.expr(e[1])
-      a.emit(0x48, 0x85, 0xC0)                         # test rax,rax
+      self.test_rax(self.tk(e[1]))
       a.jcc(4, lel)
-      self.expr(e[2])
-      a.jmp(len_)
-      a.label(lel)
-      self.expr(e[3])
+      for branch, lab in ((e[2], len_), (e[3], None)):
+        self.expr(branch)
+        if tres == "float" and self.tk(branch) == "int":
+          a.emit(0xF2, 0x48, 0x0F, 0x2A, 0xC0)         # cvtsi2sd xmm0,rax   (an int branch becomes float)
+          a.emit(0x66, 0x48, 0x0F, 0x7E, 0xC0)         # movq rax,xmm0
+        if lab is not None:
+          a.jmp(lab)
+          a.label(lel)
       a.label(len_)
     elif k == "not":
       self.expr(e[1])
-      a.emit(0x48, 0x85, 0xC0, 0x0F, 0x94, 0xC0, 0x0F, 0xB6, 0xC0)  # test; sete al; movzx
+      self.test_rax(self.tk(e[1]))
+      a.emit(0x0F, 0x94, 0xC0, 0x0F, 0xB6, 0xC0)       # sete al; movzx eax,al
     elif k == "and":
       lf, le = a.new_label("and_f"), a.new_label("and_e")
       self.expr(e[1])
-      a.emit(0x48, 0x85, 0xC0)
+      self.test_rax(self.tk(e[1]))
       a.jcc(4, lf)
       self.expr(e[2])
-      a.emit(0x48, 0x85, 0xC0, 0x0F, 0x95, 0xC0, 0x0F, 0xB6, 0xC0)  # test; setne al; movzx
+      self.test_rax(self.tk(e[2]))
+      a.emit(0x0F, 0x95, 0xC0, 0x0F, 0xB6, 0xC0)       # setne al; movzx eax,al
       a.jmp(le)
       a.label(lf)
       a.emit(0x31, 0xC0)                               # xor eax,eax
@@ -1454,10 +1705,11 @@ class CodeGen(Resolver):
     elif k == "or":
       lt, le = a.new_label("or_t"), a.new_label("or_e")
       self.expr(e[1])
-      a.emit(0x48, 0x85, 0xC0)
+      self.test_rax(self.tk(e[1]))
       a.jcc(5, lt)
       self.expr(e[2])
-      a.emit(0x48, 0x85, 0xC0, 0x0F, 0x95, 0xC0, 0x0F, 0xB6, 0xC0)
+      self.test_rax(self.tk(e[2]))
+      a.emit(0x0F, 0x95, 0xC0, 0x0F, 0xB6, 0xC0)
       a.jmp(le)
       a.label(lt)
       a.emit(0xB8, 1, 0, 0, 0)                         # mov eax,1
@@ -1469,7 +1721,43 @@ class CodeGen(Resolver):
       self.expr(e[3])
       a.emit(0x48, 0x89, 0xC1)                         # mov rcx,rax
       a.emit(0x58)                                     # pop rax
-      if op == "+":
+      tl, tr = self.tk(e[2]), self.tk(e[3])
+      if op in ARITH_OPS and self.tk(e) == "float":    # float arithmetic; an int operand is converted
+        self.load_xmm(0, 0, tl)                      # left  (rax) -> xmm0
+        self.load_xmm(1, 1, tr)                      # right (rcx) -> xmm1
+        if op in ("+", "-", "*"):
+          a.emit(0xF2, 0x0F, {"+": 0x58, "-": 0x5C, "*": 0x59}[op], 0xC1)   # addsd / subsd / mulsd xmm0,xmm1
+        elif op in ("/", "%"):
+          if tr == "float":
+            a.emit(0x48, 0x89, 0xCA, 0x48, 0xD1, 0xE2)   # mov rdx,rcx; shl rdx,1   (+0.0 and -0.0)
+          else:
+            a.emit(0x48, 0x85, 0xC9)                 # test rcx,rcx
+          a.jcc(4, "rt_divzero")
+          if op == "/":
+            a.emit(0xF2, 0x0F, 0x5E, 0xC1)           # divsd xmm0,xmm1
+          else:
+            a.call("rt_fmod")
+        else:                                        # power
+          ok = a.new_label("fp_ok")
+          a.call("rt_fpow")
+          a.emit(0x85, 0xD2)                         # test edx,edx
+          a.jcc(4, ok)
+          a.emit(0x83, 0xFA, 0x01)                   # cmp edx,1
+          a.jcc(4, "rt_divzero")
+          a.jmp("rt_badpow")
+          a.label(ok)
+        a.emit(0x66, 0x48, 0x0F, 0x7E, 0xC0)         # movq rax,xmm0
+      elif op in CMP_SETCC and "float" in (tl, tr):    # comparison with a float: both sides as float, exactly
+        lf, le = a.new_label("fc_f"), a.new_label("fc_e")
+        self.load_xmm(0, 0, tl)
+        self.load_xmm(1, 1, tr)
+        self.fcmp_false(op, lf)
+        a.emit(0xB8, 1, 0, 0, 0)                     # mov eax,1
+        a.jmp(le)
+        a.label(lf)
+        a.emit(0x31, 0xC0)                           # xor eax,eax
+        a.label(le)
+      elif op == "+":
         a.emit(0x48, 0x01, 0xC8)                     # add rax,rcx
       elif op == "-":
         a.emit(0x48, 0x29, 0xC8)                     # sub rax,rcx
@@ -1559,14 +1847,14 @@ class CodeGen(Resolver):
           a.call("rt_print_str")
         else:
           self.expr(v)
-          a.call("rt_print_int")
+          a.call("rt_print_float" if self.tk(v) == "float" else "rt_print_int")
       a.rip([0x48, 0x8D, 0x0D], "str:0")
       a.emit(0xBA, 1, 0, 0, 0)
       a.call("rt_print_str")
     elif k == "if":
       le = a.new_label("if_end")
       self.expr(s[1])
-      a.emit(0x48, 0x85, 0xC0)
+      self.test_rax(self.tk(s[1]))
       if s[3]:
         lelse = a.new_label("if_else")
         a.jcc(4, lelse)
@@ -1582,7 +1870,7 @@ class CodeGen(Resolver):
       ls, le = a.new_label("wh_start"), a.new_label("wh_end")
       a.label(ls)
       self.expr(s[1])
-      a.emit(0x48, 0x85, 0xC0)
+      self.test_rax(self.tk(s[1]))
       a.jcc(4, le)
       self.loops.append((ls, le))
       self.stmts(s[2])
@@ -1677,8 +1965,19 @@ class CodeGen(Resolver):
     a.emit(0x4C, 0x29, 0xC2)                             # sub rdx,r8
     a.jmp("rt_print_str")
 
+    # rt_print_float: rax = bits of a double; rt_fmt_float (see FLOAT_RT) makes the text
+    a.label("rt_print_float")
+    a.emit(prologue)
+    a.emit(0x48, 0x83, 0xEC, 0x40)                       # sub rsp,0x40   (text buffer)
+    a.emit(0x48, 0x89, 0xE2)                             # mov rdx,rsp
+    a.call("rt_fmt_float")                               # rax = length
+    a.emit(0x48, 0x89, 0xC2)                             # mov rdx,rax
+    a.emit(0x48, 0x89, 0xE1)                             # mov rcx,rsp
+    a.call("rt_print_str")
+    a.emit(epilogue)
+
     # runtime errors: print message, exit code 1
-    for label, idx in (("rt_divzero", 1), ("rt_notfn", 2), ("rt_negexp", 3)):
+    for label, idx in (("rt_divzero", 1), ("rt_notfn", 2), ("rt_negexp", 3), ("rt_badpow", 4)):
       a.label(label)
       a.rip([0x48, 0x8D, 0x0D], f"str:{idx}")
       a.emit(0xBA, struct.pack("<I", len(self.strings[idx])))
@@ -1694,6 +1993,10 @@ class CodeGen(Resolver):
     a.emit(0xBA, 8, 0, 0, 0)                             # mov edx,HEAP_ZERO_MEMORY
     a.rip([0xFF, 0x15], "HeapAlloc")
     a.emit(epilogue)
+
+    for name, blob in FLOAT_RT.items():                   # rt_fmt_float, rt_fpow, rt_fmod: machine code from tools/float_rt.asm
+      a.label(name)
+      a.emit(blob)
 
 
 # ----------------------------------------------------------------------------
@@ -1808,10 +2111,11 @@ def build_pe(asm, vars_, strings):
 def compile_source(src, warnings=None):
   parser = Parser(tokenize(strip_comments(src.replace("\r\n", "\n"))))
   ast = parser.program()
-  Checker(parser.global_scope).run(ast)
+  checker = Checker(parser.global_scope)
+  checker.run(ast)
   if warnings is not None:
     warnings.extend(parser.warnings)
-  asm = CodeGen(parser.global_scope, parser.strings, parser.fn_globals).program(ast)
+  asm = CodeGen(parser.global_scope, parser.strings, parser.fn_globals, checker.types).program(ast)
   return build_pe(asm, parser.vars, parser.strings)
 
 
