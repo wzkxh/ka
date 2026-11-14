@@ -1,0 +1,2 @@
+FACT = \n: = n < 2 ? 1 ! n * FACT(n - 1)     -- a constant function may call itself
+print FACT(10)

@@ -27,6 +27,8 @@ covered by a test in `tests/`.
   Hexadecimal literals start with `#` (digits `0-9 a-f A-F`, `_` between digits too): `#ff`, `#FF_FF`.
   They may use all 64 bits: `#ffffffffffffffff` is -1, `#8000000000000000` is the smallest integer.
   (`#'...'` is reserved for hex byte strings later.)
+  **Binary literals** are written `2#0001_1011` (the digits `0` and `1`, `_` between digits; the `2` is the base,
+  other bases do not exist). They may use all 64 bits as well: 64 ones are -1.
 - **String literals:** `'...'` is a *byte string*, `"..."` is a *unicode string*. For now they
   are used the same way (see below); later they will differ. A string cannot contain a raw newline.
   - Escape character is `^`: `^n` newline, `^t` TAB, `^r` CR, `^^` caret, `^"` quote, `^'` apostrophe
@@ -46,7 +48,8 @@ covered by a test in `tests/`.
   - Currently both kinds are stored as UTF-8 bytes and printed as such. The generated program
     switches the console to UTF-8 (`SetConsoleOutputCP(65001)`) at start, so Unicode text shows
     correctly; the console keeps that code page after the program ends.
-- **Operators / punctuation:** `+ - * / % ^ & | ~ == != < <= > >= && || ! ? = ( ) { } ; , : \ @`
+- **Operators / punctuation:** `+ - * / % ^ & | ~ << >> +> <* *> == != < <= > >= && || ! ? = ( ) { } ; , : \ @`
+  and the assignment forms `= += -= *= /= %= ^= &= |= ~= &&= ||= <<= >>= +>= <*= *>=`
   (`^` is also the prefix of a global variable and `@` the prefix of an enclosing function's variable, see 7;
   `\` is a synonym of `function`; `?` and `!` make the conditional expression `c ? a ! b`, see 5.
   `!` directly followed by `=` is always `!=`.)
@@ -86,7 +89,7 @@ Truth: `0` is false, any other value is true. Comparison and logical operators y
   `i = i + 1 if i == 2: print i`.
 - A statement **continues on the next line** if
   - the line ends with a binary/unary operator, `=` or `,`:
-    `+ - * / % ^ & | ~ ! ? == != < <= > >= && || = ,`   (`x = 1 +`, `print "a",`, `ok = a &&`), or
+    `+ - * / % ^ & | ~ << >> +> <* *> ! ? == != < <= > >= && || = ,` or any `op=` form (`x +=`),   (`x = 1 +`, `print "a",`, `ok = a &&`), or
   - a `(` is still open (a newline inside parentheses is ignored).
   Inside `{ ... }` newlines count again, even if the braces are inside parentheses.
 - Blank lines and comment-only lines are ignored everywhere.
@@ -140,11 +143,12 @@ Precedence, lowest to highest (binary operators are left-associative, except `^`
 | 6 | `\|` bitwise or |
 | 7 | `~` bitwise xor |
 | 8 | `&` bitwise and |
-| 9 | `+` `-` |
-| 10 | `*` `/` `%` |
-| 11 | `^` power (right-associative: `a^b^c` is `a^(b^c)`) |
-| 12 | unary `-` `~` `!` |
-| 13 | call `f(args)`, then primary: number, variable, `(expr)`, `function` / `\` literal |
+| 9 | `<<` `>>` `+>` `<*` `*>` shifts and rotates |
+| 10 | `+` `-` |
+| 11 | `*` `/` `%` |
+| 12 | `^` power (right-associative: `a^b^c` is `a^(b^c)`) |
+| 13 | unary `-` `~` `!` |
+| 14 | call `f(args)`, then primary: number, variable, `(expr)`, `function` / `\` literal |
 
 - `&&` / `||` short-circuit and yield 0 or 1.
 - `/` truncates toward zero; `%` takes the sign of the left operand (`-7 / 2 == -3`, `-7 % 3 == -1`).
@@ -155,8 +159,16 @@ Precedence, lowest to highest (binary operators are left-associative, except `^`
   `< > <= >=`, treat integers as signed. There is no shift yet.
 - `a ^ b` is `a` to the power `b` (wraps like `*`). A negative exponent is a runtime error.
   Unary operators bind tighter than any binary one, `^` included: `-2^2` is `(-2)^2` = 4 (write `-(2^2)` for -4).
-- The bit operators sit between `+` and the comparisons, in the order of C (`&` over `~` over `|`), but unlike C
+- The bit operators and shifts sit between `+` and the comparisons, in the order of C (`&` over `~` over `|`), but unlike C
   they bind tighter than `==` and `<`: `a & 1 == 0` is `(a & 1) == 0`, and `1 | 1 + 1` is `1 | (1 + 1)`.
+- **Shifts and rotates** (left operand shifted by the right one, 64-bit):
+  `x << n` shift left (zeros come in; the same bits as an arithmetic shift left, which therefore has no operator),
+  `x >> n` logical shift right (zeros come in, the number is taken as unsigned bits: `-1 >> 60` is 15),
+  `x +> n` arithmetic shift right (the sign bit is copied in: `-16 +> 2` is -4),
+  `x <* n` and `x *> n` rotate left / right (bits that fall out on one side come in on the other).
+  For `<<`, `>>`, `+>` a count of 64 or more, or a negative count, shifts everything out: the result is 0
+  (`+>`: 0 or -1 by the sign). A rotate takes the count modulo 64 (`x <* -1` is `x *> 1`).
+  Shifts bind tighter than `&` and looser than `+`: `1 << 2 + 1` is `1 << 3`, `6 & 3 << 1` is `6 & (3 << 1)`.
 - **Conditional expression** `c ? a ! b`: `c` is evaluated first, then only `a` or only `b` (as in C, but `!`
   instead of `:`). It has the lowest precedence; `a` may be any expression, `b` is parsed as a conditional again.
   A function literal with a one-line body must be put in parentheses inside it: `c ? (\x: =x+1) ! (\x: =x-1)`.
@@ -173,6 +185,7 @@ Precedence, lowest to highest (binary operators are left-associative, except `^`
 | statement | meaning |
 |---|---|
 | `name = expr` | assign (creates the variable if needed) |
+| `name op= expr` | `name = name op expr` for `+ - * / % ^ & \| ~ && \|\| << >> +> <* *>`, e.g. `c += 1`, `x <<= 2`, `ok &&= f()` (`&&=` and `\|\|=` short-circuit). Also `^name op= expr` and `@name op= expr` |
 | `^name = expr`, `@name = expr` | assign a global / an enclosing function's variable (see 7) |
 | `print a, b, "text", ...` | print the items one after another (no separators added), then a newline. `print` alone prints an empty line. Items are int expressions or string literals |
 | `if cond block [elif cond block]... [else block]` | conditional (`else if` also works) |
@@ -255,6 +268,22 @@ print (\(a,b): =a*b)(6,7)
 - Top-level code that reads a global before assigning it is an error unless some function
   assigns to it with `^var` (then it is assumed to be set by a call).
 
+### Constants
+A name made of capital letters, digits and `_` with at least one letter (`MAX_SPEED`, `WIDTH`, `X2`, `_N`) is a
+**constant**: it gets its value where it is defined and can never be assigned again. Any name with a lowercase letter
+is an ordinary variable.
+- **Where:** a constant is defined by `NAME = expr` (or `function NAME(...)`) directly at the **top level**: not inside a
+  function, `if`, `elif`, `else`, a loop, or a `{ }` block. This is the usual rule of languages with constants (C, Go,
+  Rust, Pascal `const`): a constant is defined once, unconditionally. Parameters cannot have such names either.
+- **Once:** a second `NAME = ...`, `NAME += ...` (any assignment) anywhere is a compile error.
+- **Value:** it must be a constant expression: numbers, constants defined *above* it, operators (also `?:`), and function
+  literals (so a constant can be a function; it may call itself by its own name). Variables and calls are not allowed
+  (`WIDTH = 80`, `AREA = WIDTH * HEIGHT`, `FLAG_B = FLAG_A << 1`, `FACT = \n: =n < 2 ? 1 ! n * FACT(n-1)`).
+- **When:** all constants are created at program start, in the order written, before any other statement (as the named
+  `function` definitions are), so they can be read anywhere, also in functions that run early and above the line that
+  defines them (`print LATER` then `LATER = 7`).
+- Reading is the same as for any global: by name, or `^NAME`.
+
 ## 8. Runtime errors
 Printed to standard output, exit code 1:
 `runtime error: division by zero`,
@@ -267,7 +296,7 @@ All are `file: error: line N: message` (warnings: `file: warning: line N: messag
 are pinned by the `tests/err_*.ka` / `.error` pairs (and `.warn` for warnings). Groups:
 - *lexical:* `unexpected character '\t'` (TAB, like `$`, outside strings and comments), `string is not closed`, `bad escape ^q`, `bad unicode escape`,
   `cannot join '...' and "..." strings`, `comment '--[[' is never closed`, `bad number '1__0'`,
-  `bad hex literal`, `hex literal too large`, `integer literal too large`, `unexpected character`.
+  `bad hex literal`, `hex literal too large`, `bad binary literal`, `binary literal too large`, `integer literal too large`, `unexpected character`.
 - *layout / syntax:* `unexpected indentation`, `inconsistent indentation`, `expected an indented block after ':'`,
   `'(' is never closed`, `'{' is never closed`, `unmatched '}'`, `unmatched ')'`,
   `expected end of statement, found ...`, `unexpected end of line in expression`, `unexpected 'else'`,
@@ -278,6 +307,10 @@ are pinned by the `tests/err_*.ka` / `.error` pairs (and `.warn` for warnings). 
   `variable 'x' is local to function 'f' and used before assignment (use '^x' ...)`,
   `'x' is already local to 'f', it cannot also be used as '^x'`, `'x' is used as '^x' in 'f', so it cannot
   also be a local variable there`, `'@x' needs an enclosing function`, `'@x': no variable 'x' in an enclosing function`.
+- *constants:* `constant 'X' can only be defined directly at the top level (not inside a function, ...)`,
+  `constant 'X' is already defined (line N)`, `constant 'X' cannot be changed`,
+  `parameter 'N' looks like a constant`, `the value of constant 'X' must be a constant expression (...): it uses the variable 'a'`
+  (or `it calls a function`, `it uses 'B', which is defined later`).
 - *types:* `type mismatch <where>: expected T, found U` (where: `in assignment to 'x'`, `in argument 2 of the call`,
   `left operand of '+'`, `in the condition of 'if'`, `in 'print' (only integers can be printed)`,
   `in 'return' (all returns of a function must agree)`, ...), `wrong number of arguments: the function takes N,
@@ -285,17 +318,13 @@ are pinned by the `tests/err_*.ka` / `.error` pairs (and `.warn` for warnings). 
 - *warning:* `the value of this expression is not used`.
 
 ## 10. Not in the language (yet)
-- binary literals 2#1001;
 - function f(x):y === f=\(x):y. stackless?
 - strings (bytes and unicode) as values;
 - a garbage collector;
-- ops += -= /= etc;
 - call syntax: f a; f a,b,c; etc;
 - multi-value assignment, returns;
 - floats, many ints and floats, arrays (lists), dictionaries, sets, tuples, enums;
-- constants (BIG_IDS);
 - big integers;
-- shift ops (signed, unsigned, rot);
 - `for` loops;
 - `until cond loop`;
 - `else` on loops;
@@ -323,24 +352,24 @@ are pinned by the `tests/err_*.ka` / `.error` pairs (and `.warn` for warnings). 
 | ? | conditional `c ? a ! b` |
 | ' | byte string |
 | " | unicode string |
-| # | hex literal, binary - nothing |
-| / | unary - nothing, divide (future: float divide) |
-| % | unary - nothing, modulo |
-| & | unary - nothing, bitwise and, && - logical and |
-| \| | unary - nothing, bitwise or, \|\| - logical or |
-| ~ | bitwise not, xor |
-| * | unary - nothing (scatter?), multiply; \*= |
-| + | identity, plus; += |
+| # | hex literal `#ff`, binary literal `2#101` |
+| / | unary - nothing, divide (future: float divide); /= |
+| % | unary - nothing, modulo; %= |
+| & | unary - nothing, bitwise and, && - logical and; &= &&= |
+| \| | unary - nothing, bitwise or, \|\| - logical or; \|= \|\|= |
+| ~ | bitwise not, xor; ~= |
+| * | unary - nothing (scatter?), multiply; \*= ; `<*` `*>` rotate |
+| + | identity, plus; += ; `+>` arithmetic shift right |
 | - | negative, minus; -= |
-| < | unary - nothing, less; <= - le |
-| > | unary - nothing, greater; >= - ge |
+| < | unary - nothing, less; <= - le; `<<` shift left, `<*` rotate left |
+| > | unary - nothing, greater; >= - ge; `>>` shift right, `+>` `*>` |
 | = | return, assignment, == - equal |
 | , | separate parameters, arguments |
 | : | start block, unary - nothing |
 | ; | separate statements, unary - nothing |
 | \\ | function (synonym of `function`), binary - nothing |
 | () | expressions, parameters, arguments |
-| ^ | global variable, binary - nothing |
+| ^ | global variable (prefix), power (binary); ^= |
 | _ | can be in ids and numbers |
 | {} | block |
 | [] | - |

@@ -85,6 +85,23 @@ messages `line N: ...`; warnings (list of strings) are only collected, never fat
   statements also `("block",stmts)` and `("skip",)`.
 - Warning: expression statements that are not calls ("the value of this expression is not used").
 
+### Compound assignment, shifts, binary literals, constants
+- Lexer: `num` regex is `\d\w*(?:#\w*)?`; a `#` inside means a binary literal `2#0001_1011` (base 2 only, wrapped to signed
+  like hex, emitted as a `hex` token). Operators are matched longest first: 3-char forms (`&&= ||= <<= >>= +>= <*= *>=`), then
+  2-char (`<< >> +> <* *> += -= *= /= %= ^= &= |= ~=` plus the old ones). `COMPOUND` maps `op=` to `op`; both it and `SHIFT_OPS`
+  are in `CONT_OPS` (a line ending with them continues).
+- Parser: `assign()` takes `=` or a compound operator and desugars `x op= e` to `x = x op e` (`&&=`/`||=` become `and`/`or`
+  nodes, so they short-circuit); targets may be `name`, `^name`, `@name`. Shifts are one left-associative level (`shift()`)
+  between `band` and `add`.
+- Codegen: `<< >> +>` compare the count with 63 (unsigned `ja`) and give 0 / sign fill beyond that (this also covers negative
+  counts); `<* *>` are plain `rol/ror rax,cl` (hardware takes the count modulo 64, so negative counts rotate the other way).
+- **Constants** (name matches `[A-Z0-9_]*[A-Z][A-Z0-9_]*`, see `is_const_name`): `assign()` / `fn_def()` call `define_const()`
+  (only at top level with `self.nblock == 0`, only once - `self.consts` maps name to line), `const_problem()` checks the initializer
+  (numbers, earlier constants, operators, `?:`, function literals; no variables or calls), and the assign node gets a 6th element
+  `True`. `parse_function` rejects constant-looking parameter names. In `CodeGen.program()` all such assignments are emitted right
+  after `hoist(g)` (before the other statements) and skipped at their textual place, so constants can be read anywhere, even above
+  their definition. `nblock` is incremented in `block()` and `brace_block()` (any `if`/`while`/`{}`/function body).
+
 ### Name resolution (`Resolver.lookup`)
 Shared by Checker and CodeGen. `lookup(name, scope, line, mode)` -> `("g",name)` | `("l",scope,name)` |
 `("f",owner,name)`. `mode` `^` -> global; `@` -> nearest enclosing function that owns the name; plain names

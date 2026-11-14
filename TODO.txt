@@ -31,3 +31,9 @@ l) done. `c ? a ! b`, lowest precedence, right-associative, only the chosen bran
    A one-line function literal inside it needs parentheses: c ? (\x: =x+1) ! (\x: =x-1).
 Also done: recursive function types are allowed (test 41_recursive_types), the doc says why.
 Still open: should named functions become constants (see chat)? Not changed.
+
+==== STATUS (iteration 4: four requests from the chat) ====
+- binary literals 2#0001_1011: done (base 2 only). Tests 42_*, err_binary_*.
+- op= forms for || && | ~ & + - * / % ^ and also << >> +> <* *>: done (sugar for x = x op e). Test 44.
+- shifts << >> +> <* *> : done. Arithmetic shift left == logical shift left, so there is no separate operator. Test 43.
+- constants (names in capitals): done; defined once at top level, created at program start, value = constant expression. Tests 45, 46, err_const_*.

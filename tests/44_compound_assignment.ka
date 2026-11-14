@@ -1,0 +1,35 @@
+x = 5
+x += 3; print x
+x -= 2; print x
+x *= 7; print x
+x /= 5; print x
+x %= 5; print x
+x ^= 3; print x
+x &= 25; print x
+x |= 6; print x
+x ~= 10; print x
+x <<= 2; print x
+x >>= 1; print x
+x +>= 1; print x
+x <*= 1; print x
+x *>= 1; print x
+x = 2; x *= 3 + 4; print x          -- the whole right side is used: x = x * (3 + 4)
+a = 1; a &&= 0; print a
+a ||= 5; print a
+function boom(): print "boom"; return 7
+a = 0; a &&= boom(); print a        -- short-circuit: boom is not called
+a = 1; a ||= boom(); print a
+a = 0; a ||= boom(); print a        -- called
+g = 10
+function bump(): ^g += 5
+bump(); bump(); print g
+function outer():
+  n = 1
+  function inc(): @n += 1
+  inc(); inc()
+  return n
+print outer()
+s = 1
+s +=
+  4
+print s

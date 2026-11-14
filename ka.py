@@ -83,17 +83,22 @@ TOKEN_RE = re.compile(r"""
     (?P<ws>[ \r]+)
   | (?P<nl>\n)
   | (?P<hex>\#\w*)
-  | (?P<num>\d\w*)
+  | (?P<num>\d\w*(?:\#\w*)?)
   | (?P<id>[A-Za-z_]\w*)
-  | (?P<op>==|!=|<=|>=|&&|\|\||[-+*/%<>=!(){};,:&|~^\\?@])
+  | (?P<op>&&=|\|\|=|<<=|>>=|\+>=|<\*=|\*>=|==|!=|<=|>=|&&|\|\||<<|>>|\+>|<\*|\*>|\+=|-=|\*=|/=|%=|\^=|&=|\|=|~=|[-+*/%<>=!(){};,:&|~^\\?@])
 """, re.X | re.A)
 
 SIMPLE_ESC = {"n": "\n", "t": "\t", "r": "\r", "^": "^", '"': '"', "'": "'"}
 HEX = "0123456789abcdefABCDEF"
 
+# compound assignment:  x op= e   means   x = x op e
+COMPOUND = {"+=": "+", "-=": "-", "*=": "*", "/=": "/", "%=": "%", "^=": "^", "&=": "&", "|=": "|", "~=": "~",
+            "&&=": "&&", "||=": "||", "<<=": "<<", ">>=": ">>", "+>=": "+>", "<*=": "<*", "*>=": "*>"}
+SHIFT_OPS = ("<<", ">>", "+>", "<*", "*>")
+
 # a line ending with one of these is not finished: the statement continues
 CONT_OPS = {"+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "&&", "||", "!", "=", ",",
-            "&", "|", "~", "^", "?"}
+            "&", "|", "~", "^", "?"} | set(COMPOUND) | set(SHIFT_OPS)
 
 
 def continues(tok):
@@ -195,6 +200,14 @@ def tokenize(src):
       line += 1
     elif kind == "ws":
       pass
+    elif kind == "num" and "#" in text:                  # binary literal 2#0001_1011
+      m = re.fullmatch(r"2#([01]+(?:_[01]+)*)", text)
+      if not m:
+        raise CompileError(f"line {line}: bad binary literal '{text}' (the form is 2#0001_1011, base 2 only)")
+      v = int(m.group(1).replace("_", ""), 2)
+      if v >= 2 ** 64:
+        raise CompileError(f"line {line}: binary literal too large")
+      toks.append(("hex", v - 2 ** 64 if v >= 2 ** 63 else v, line))     # (same token kind as #hex: already wrapped)
     elif kind == "num":
       if not re.fullmatch(r"\d+(_\d+)*", text):
         raise CompileError(f"line {line}: bad number '{text}' ('_' is allowed only between digits)")
@@ -247,7 +260,7 @@ def tokenize(src):
 # ----------------------------------------------------------------------------
 # Parser -> AST (tuples)
 #   statements (line is always the last element, except where noted):
-#     ("assign", name, expr, line, mode)   ("print", items, line)   ("if", cond, then, else, line)
+#     ("assign", name, expr, line, mode[, True if it defines a constant])   ("print", items, line)   ("if", cond, then, else, line)
 #     ("while", cond, body, line)  ("exit", e, line)  ("exprstmt", e, line)  ("return", e|None, line)
 #     ("fn", Scope)  ("block", stmts)  ("skip",)  ("break",)  ("continue",)
 #   expressions:
@@ -258,6 +271,11 @@ def tokenize(src):
 INT_MAX = 2 ** 63 - 1
 INT_MIN = -(2 ** 63)
 MAX_PARAMS = 20
+
+
+def is_const_name(name):
+  """names made of capitals (digits and _ allowed) with at least one letter are constants: MAX_SPEED, X2, _N"""
+  return re.fullmatch(r"[A-Z0-9_]*[A-Z][A-Z0-9_]*", name) is not None
 
 
 def describe(tok):
@@ -315,6 +333,8 @@ class Parser:
                     b"runtime error: call of an unset function\n",
                     b"runtime error: negative exponent\n"]
     self.loop_depth = 0
+    self.nblock = 0                     # how many blocks are open (0 = directly at the top level)
+    self.consts = {}                    # constant name -> line of its definition
     self.ctx = []                       # open '(' / '{' (innermost last)
     self.warnings = []
 
@@ -391,11 +411,13 @@ class Parser:
   def brace_block(self):
     self.expect("{")
     self.ctx.append("{")
+    self.nblock += 1
     stmts = []
     while True:
       self.skip_seps()
       if self.accept("}"):
         self.ctx.pop()
+        self.nblock -= 1
         return stmts
       if self.peek()[0] == "eof":
         self.err("missing '}'")
@@ -410,6 +432,13 @@ class Parser:
     return not self.at_end()
 
   def block(self, allman=True):
+    self.nblock += 1
+    try:
+      return self.block_(allman)
+    finally:
+      self.nblock -= 1
+
+  def block_(self, allman=True):
     save = self.i
     if allman:
       self.skip_nl()                  # allow '{' on the next line
@@ -475,11 +504,63 @@ class Parser:
                          f"it cannot also be used as '{mode}{name}'")
     (sc.globals_decl if mode == "^" else sc.nonlocal_decl).add(name)
 
+  def const_problem(self, e):
+    """why `e` is not a constant expression (None if it is): numbers, constants defined above, operators,
+    function literals"""
+    k = e[0]
+    if k == "var":
+      if e[3] not in (None, "^") or not is_const_name(e[1]):
+        return f"it uses the variable '{e[1]}'"
+      if e[1] not in self.consts:
+        return f"it uses '{e[1]}', which is defined later"
+      return None
+    if k == "call":
+      return "it calls a function"
+    if k in ("bin", "and", "or"):
+      parts = e[2:4] if k == "bin" else e[1:3]
+    elif k == "cmp":
+      parts = e[2]
+    elif k == "cond":
+      parts = e[1:4]
+    elif k in ("neg", "not", "bnot"):
+      parts = e[1:2]
+    else:                                   # num, fnlit
+      return None
+    for p in parts:
+      why = self.const_problem(p)
+      if why:
+        return why
+    return None
+
+  def define_const(self, name, mode, line, what="constant"):
+    if self.scope.parent is not None or self.nblock:
+      raise CompileError(f"line {line}: constant '{name}' can only be defined directly at the top level "
+                         f"(not inside a function, an 'if', a loop or another block)")
+    if name in self.consts:
+      raise CompileError(f"line {line}: constant '{name}' is already defined (line {self.consts[name]})")
+
   def assign(self, name, mode):
-    line = self.t[self.i - 1][2]
-    self.expect("=")
+    optok = self.next()                     # '=' or a compound operator like '+='
+    line, op = optok[2], optok[1]
     e = self.expr()
+    if op != "=":                           # x op= e   ->   x = x op e
+      if is_const_name(name):
+        raise CompileError(f"line {line}: constant '{name}' cannot be changed")
+      cur = ("var", name, line, mode)
+      bop = COMPOUND[op]
+      e = ("and" if bop == "&&" else "or", cur, e) if bop in ("&&", "||") else ("bin", bop, cur, e)
     self.end_stmt()
+    if is_const_name(name):
+      if mode == "@":
+        raise CompileError(f"line {line}: '@{name}': a constant cannot be an enclosing function's variable")
+      self.define_const(name, mode, line)
+      why = self.const_problem(e)
+      if why:
+        raise CompileError(f"line {line}: the value of constant '{name}' must be a constant expression "
+                           f"(numbers, constants defined above, operators, function literals): {why}")
+      self.consts[name] = line
+      self.declare(name, mode, line)
+      return ("assign", name, e, line, mode, True)
     self.declare(name, mode, line)
     return ("assign", name, e, line, mode)
 
@@ -560,7 +641,7 @@ class Parser:
       self.err(f"unexpected {v!r}")
     if k == "id":
       nk = self.t[self.i + 1]
-      if nk[0] == "op" and nk[1] == "=":
+      if nk[0] == "op" and (nk[1] == "=" or nk[1] in COMPOUND):
         self.next()
         return self.assign(v, None)
       return self.expr_stmt()
@@ -572,7 +653,7 @@ class Parser:
     if k == "op" and v in ("^", "@"):
       last = len(self.t) - 1
       t1, t2 = self.t[min(self.i + 1, last)], self.t[min(self.i + 2, last)]
-      if t1[0] == "id" and t2[0] == "op" and t2[1] == "=":
+      if t1[0] == "id" and t2[0] == "op" and (t2[1] == "=" or t2[1] in COMPOUND):
         self.i += 2
         return self.assign(t1[1], v)
       return self.expr_stmt()
@@ -639,6 +720,10 @@ class Parser:
       params.append(self.next()[1])
     else:
       self.err(f"expected '(' or a parameter name, found {describe(self.peek())}")
+    for p in params:
+      if is_const_name(p):
+        raise CompileError(f"line {line}: parameter '{p}' looks like a constant "
+                           f"(names in capitals are constants and cannot be parameters)")
     if len(params) > MAX_PARAMS:
       raise CompileError(f"line {line}: too many parameters (at most {MAX_PARAMS})")
     fn = Scope(name or "<function>", self.scope, params)
@@ -658,6 +743,9 @@ class Parser:
     _, name, _ = self.next()
     if any(f.name == name for f in self.scope.named_fns):
       raise CompileError(f"line {line}: function '{name}' is already defined in this scope")
+    if is_const_name(name):
+      self.define_const(name, None, line)
+      self.consts[name] = line
     fn = self.parse_function(name, line, literal=False)
     self.scope.named_fns.append(fn)
     self.declare(name, None, line)
@@ -720,7 +808,10 @@ class Parser:
     return self.left(("~",), self.band)
 
   def band(self):
-    return self.left(("&",), self.add)
+    return self.left(("&",), self.shift)
+
+  def shift(self):
+    return self.left(SHIFT_OPS, self.add)
 
   def add(self):
     return self.left(("+", "-"), self.mul)
@@ -1407,6 +1498,20 @@ class CodeGen(Resolver):
         a.jmp(lp)
         a.label(dn)
         a.emit(0x48, 0x89, 0xD0)                     # mov rax,rdx
+      elif op in ("<<", ">>", "+>"):                   # shifts; a count of 64 or more (or negative) shifts everything out
+        big, end = a.new_label("sh_big"), a.new_label("sh_end")
+        a.emit(0x48, 0x83, 0xF9, 0x3F)               # cmp rcx,63
+        a.jcc(7, big)                                # ja  (unsigned compare)
+        a.emit(0x48, 0xD3, {"<<": 0xE0, ">>": 0xE8, "+>": 0xF8}[op])   # shl / shr / sar rax,cl
+        a.jmp(end)
+        a.label(big)
+        if op == "+>":
+          a.emit(0x48, 0xC1, 0xF8, 0x3F)             # sar rax,63   (all sign bits)
+        else:
+          a.emit(0x31, 0xC0)                         # xor eax,eax
+        a.label(end)
+      elif op in ("<*", "*>"):                         # rotate; the count is taken modulo 64 by the hardware
+        a.emit(0x48, 0xD3, 0xC0 if op == "<*" else 0xC8)   # rol / ror rax,cl
       elif op in ("/", "%"):
         a.emit(0x48, 0x85, 0xC9)                     # test rcx,rcx
         a.jcc(4, "rt_divzero")
@@ -1428,6 +1533,8 @@ class CodeGen(Resolver):
   def stmt(self, s):
     a, k = self.a, s[0]
     if k == "assign":
+      if len(s) > 5:
+        return                                         # a constant: already set at program start
       self.expr(s[2])
       self.var_store(s[1], s[3], s[4])
     elif k == "fn":
@@ -1513,6 +1620,10 @@ class CodeGen(Resolver):
     a.rip([0xFF, 0x15], "GetProcessHeap")
     a.rip([0x48, 0x89, 0x05], "heap")
     self.hoist(self.g)
+    for s in ast:                                        # constants are created first (their values only need
+      if s[0] == "assign" and len(s) > 5:               # numbers, earlier constants and function literals)
+        self.expr(s[2])
+        self.var_store(s[1], s[3], s[4])
     self.stmts(ast)
     a.emit(0x31, 0xC9)                                   # xor ecx,ecx
     self.exit_process()
