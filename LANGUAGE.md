@@ -329,6 +329,9 @@ are pinned by the `tests/err_*.ka` / `.error` pairs (and `.warn` for warnings). 
 - `until cond loop`;
 - `else` on loops;
 - `break 2` or `break break`
+- fix: constants (MAX_LEN) inside fns, ifs, loops, etc; constant expression;
+- fix: shift ops -- negative counts;
+- radix 3..36 literals 3#122 8#377 36#zzz;
 - modules, import;
 - integer overflow detection (as **pragma**? other checks as pragmas);
 - named and optional arguments;
