@@ -1,2 +1,2 @@
 if 1:
-print 2
+print 2  -- ERROR: line 2: expected an indented block after ':'

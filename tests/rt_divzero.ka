@@ -1,4 +1,4 @@
 a = 0
-print "x"
-print 5 / a
+print "x"    -- => x
+print 5 / a  -- => runtime error: division by zero (exit code 1)
 print "unreachable"

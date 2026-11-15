@@ -1,0 +1,3 @@
+function f():
+  X = 1
+  function g(): @X = 2  -- ERROR: a constant cannot be an enclosing function's variable

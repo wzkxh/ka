@@ -2,7 +2,7 @@ x = 5
 x += 3; print x
 x -= 2; print x
 x *= 7; print x
-x /= 5; print x
+x \= 5; print x
 x %= 5; print x
 x ^= 3; print x
 x &= 25; print x
@@ -28,8 +28,34 @@ function outer():
   function inc(): @n += 1
   inc(); inc()
   return n
-print outer()
+print outer()  -- => 3
 s = 1
 s +=
   4
-print s
+print s        -- => 5
+
+-- the whole output:
+--   8
+--   6
+--   42
+--   8
+--   3
+--   27
+--   25
+--   31
+--   21
+--   84
+--   42
+--   21
+--   42
+--   21
+--   14
+--   0
+--   1
+--   0
+--   1
+--   boom
+--   1
+--   20
+--   3
+--   5

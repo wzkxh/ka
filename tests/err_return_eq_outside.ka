@@ -1,1 +1,1 @@
-= 1
+= 1  -- ERROR: 'return' outside of a function

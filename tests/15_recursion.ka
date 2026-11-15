@@ -14,11 +14,11 @@ function even(n):
 function odd(n):
   if n == 0: return 0
   return even(n - 1)
-print fact(10), " ", fib(20), " ", count(10000)
+print fact(10), " ", fib(20), " ", count(10000)  -- => 3628800 6765 10000
 s = 0
 i = 0
 while i < 100000:
   s = s + inc(i)
   i = i + 1
-print s
-print even(10), " ", odd(7), " ", odd(10)
+print s                                          -- => 5000050000
+print even(10), " ", odd(7), " ", odd(10)        -- => 1 1 0

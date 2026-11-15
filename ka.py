@@ -19,6 +19,9 @@ import struct
 import sys
 
 
+VERSION = "6"                           # see RELEASE_NOTES.md
+
+
 class CompileError(Exception):
   pass
 
@@ -86,7 +89,7 @@ TOKEN_RE = re.compile(r"""
   | (?P<flt>\d+(?:_\d+)*(?:\.\d+(?:_\d+)*(?:[eE][-+]?\d+(?:_\d+)*)?|[eE][-+]?\d+(?:_\d+)*))
   | (?P<num>\d\w*(?:\#\w*)?)
   | (?P<id>[A-Za-z_]\w*)
-  | (?P<op>&&=|\|\|=|<<=|>>=|\+>=|<\*=|\*>=|==|!=|<=|>=|&&|\|\||<<|>>|\+>|<\*|\*>|\+=|-=|\*=|/=|%=|\^=|&=|\|=|~=|[-+*/%<>=!(){};,:&|~^\\?@])
+  | (?P<op>&&=|\|\|=|<<=|>>=|\+>=|<\*=|\*>=|\\=|==|!=|<=|>=|&&|\|\||<<|>>|\+>|<\*|\*>|\+=|-=|\*=|/=|%=|\^=|&=|\|=|~=|[-+*/%<>=!(){};,:&|~^\\?@])
 """, re.X | re.A)
 
 SIMPLE_ESC = {"n": "\n", "t": "\t", "r": "\r", "^": "^", '"': '"', "'": "'"}
@@ -94,12 +97,12 @@ HEX = "0123456789abcdefABCDEF"
 
 # compound assignment:  x op= e   means   x = x op e
 COMPOUND = {"+=": "+", "-=": "-", "*=": "*", "/=": "/", "%=": "%", "^=": "^", "&=": "&", "|=": "|", "~=": "~",
-            "&&=": "&&", "||=": "||", "<<=": "<<", ">>=": ">>", "+>=": "+>", "<*=": "<*", "*>=": "*>"}
+            "&&=": "&&", "||=": "||", "<<=": "<<", ">>=": ">>", "+>=": "+>", "<*=": "<*", "*>=": "*>", "\\=": "\\"}
 SHIFT_OPS = ("<<", ">>", "+>", "<*", "*>")
 
 # a line ending with one of these is not finished: the statement continues
 CONT_OPS = {"+", "-", "*", "/", "%", "==", "!=", "<", "<=", ">", ">=", "&&", "||", "!", "=", ",",
-            "&", "|", "~", "^", "?"} | set(COMPOUND) | set(SHIFT_OPS)
+            "&", "|", "~", "^", "?", "\\"} | set(COMPOUND) | set(SHIFT_OPS)
 
 
 def continues(tok):
@@ -327,6 +330,7 @@ class Scope:
     self.boxed = set()                  # own variables captured by nested functions
     self.free = {}                      # (owner scope, name) -> index in closure
     self.queued = False
+    self.consts = {}                    # constants defined in this scope: name -> line
     self.ty, self.checked = None, False  # used by the type checker
 
 
@@ -346,8 +350,7 @@ class Parser:
                     b"runtime error: negative exponent\n",
                     b"runtime error: power of a negative number with a fractional exponent\n"]
     self.loop_depth = 0
-    self.nblock = 0                     # how many blocks are open (0 = directly at the top level)
-    self.consts = {}                    # constant name -> line of its definition
+    self.nblock = 0                     # how many blocks are open in the current scope (a function body is one block)
     self.ctx = []                       # open '(' / '{' (innermost last)
     self.warnings = []
 
@@ -405,7 +408,7 @@ class Parser:
       self.closed_at = self.i
     elif k in ("eof", "dedent"):
       pass
-    elif k == "op" and (v in ("}", "{", "\\") or (v in (")", ",") and self.ctx and self.ctx[-1] == "(")):
+    elif k == "op" and (v in ("}", "{") or (v in (")", ",") and self.ctx and self.ctx[-1] == "(")):
       pass
     elif k == "kw" and (v in STMT_KW or v in ("else", "elif", "function")):
       pass
@@ -524,7 +527,10 @@ class Parser:
     if k == "var":
       if e[3] not in (None, "^") or not is_const_name(e[1]):
         return f"it uses the variable '{e[1]}'"
-      if e[1] not in self.consts:
+      sc = self.global_scope if e[3] == "^" else self.scope
+      while sc is not None and e[1] not in sc.consts:        # constants of this function, of the functions around it, global ones
+        sc = None if e[3] == "^" else sc.parent
+      if sc is None:
         return f"it uses '{e[1]}', which is defined later"
       return None
     if k == "call":
@@ -545,12 +551,16 @@ class Parser:
         return why
     return None
 
-  def define_const(self, name, mode, line, what="constant"):
-    if self.scope.parent is not None or self.nblock:
-      raise CompileError(f"line {line}: constant '{name}' can only be defined directly at the top level "
-                         f"(not inside a function, an 'if', a loop or another block)")
-    if name in self.consts:
-      raise CompileError(f"line {line}: constant '{name}' is already defined (line {self.consts[name]})")
+  def define_const(self, name, mode, line):
+    sc = self.scope
+    if mode is not None and sc.parent is not None:
+      raise CompileError(f"line {line}: constant '{name}' cannot be written as {mode}{name} "
+                         f"(a constant belongs to the scope where it is defined)")
+    if self.nblock != (0 if sc.parent is None else 1):
+      raise CompileError(f"line {line}: constant '{name}' can only be defined directly at the top level of the program "
+                         f"or of a function (not inside an 'if', a loop or another block)")
+    if name in sc.consts:
+      raise CompileError(f"line {line}: constant '{name}' is already defined (line {sc.consts[name]})")
 
   def assign(self, name, mode):
     optok = self.next()                     # '=' or a compound operator like '+='
@@ -571,7 +581,7 @@ class Parser:
       if why:
         raise CompileError(f"line {line}: the value of constant '{name}' must be a constant expression "
                            f"(numbers, constants defined above, operators, function literals): {why}")
-      self.consts[name] = line
+      self.scope.consts[name] = line
       self.declare(name, mode, line)
       return ("assign", name, e, line, mode, True)
     self.declare(name, mode, line)
@@ -743,12 +753,12 @@ class Parser:
     fn.line = line
     self.nfuncs += 1
     fn.label = f"fn{self.nfuncs}_{name or 'anon'}"
-    saved = (self.scope, self.loop_depth)
-    self.scope, self.loop_depth = fn, 0
+    saved = (self.scope, self.loop_depth, self.nblock)
+    self.scope, self.loop_depth, self.nblock = fn, 0, 0
     if not (self.is_("{") or self.is_(":") or (not literal and self.peek()[0] == "nl")):
       self.err(f"expected '{{' or ':' after the parameters, found {describe(self.peek())}")
     fn.body = self.block(allman=not literal)
-    self.scope, self.loop_depth = saved
+    self.scope, self.loop_depth, self.nblock = saved
     return fn
 
   def fn_def(self):
@@ -758,7 +768,7 @@ class Parser:
       raise CompileError(f"line {line}: function '{name}' is already defined in this scope")
     if is_const_name(name):
       self.define_const(name, None, line)
-      self.consts[name] = line
+      self.scope.consts[name] = line
     fn = self.parse_function(name, line, literal=False)
     self.scope.named_fns.append(fn)
     self.declare(name, None, line)
@@ -830,7 +840,7 @@ class Parser:
     return self.left(("+", "-"), self.mul)
 
   def mul(self):
-    return self.left(("*", "/", "%"), self.power)
+    return self.left(("*", "/", "%", "\\"), self.power)
 
   def power(self):                                    # a^b^c = a^(b^c); unary operators bind tighter: -2^2 = (-2)^2
     e = self.unary()
@@ -967,7 +977,7 @@ class Ty:
 
 INT = Ty("int")
 FLOAT = Ty("float")
-ARITH_OPS = ("+", "-", "*", "/", "%", "^")
+ARITH_OPS = ("+", "-", "*", "%", "^")      # float if either side is float (`/` is always float, `\\` always int)
 
 
 def prune(t):
@@ -1232,6 +1242,10 @@ class Checker(Resolver):
       return r
     if k == "bin":
       op = e[1]
+      if op in ("/", "\\"):                 # float division / integer division: numbers in, float / int out
+        self.need_num(self.expr(e[2], sc, line), line, f"in left operand of '{op}'")
+        self.need_num(self.expr(e[3], sc, line), line, f"in right operand of '{op}'")
+        return FLOAT if op == "/" else INT
       if op in ARITH_OPS:
         ta, tb = self.expr(e[2], sc, line), self.expr(e[3], sc, line)
         res = Ty("var")
@@ -1565,6 +1579,10 @@ class CodeGen(Resolver):
           a.emit(0x48, 0x89, 0x10)                           # mov [rax],rdx
         a.emit(0x48, 0x89, 0x85, struct.pack("<i", off))       # mov [rbp+off],rax
     self.hoist(f)
+    for s in f.body:                                     # the constants of this function are created first
+      if s[0] == "assign" and len(s) > 5:
+        self.expr(s[2])
+        self.var_store(s[1], s[3], s[4])
     self.stmts(f.body)
     a.emit(0x31, 0xC0)                                   # xor eax,eax  (default result 0)
     self.epilogue()
@@ -1722,7 +1740,7 @@ class CodeGen(Resolver):
       a.emit(0x48, 0x89, 0xC1)                         # mov rcx,rax
       a.emit(0x58)                                     # pop rax
       tl, tr = self.tk(e[2]), self.tk(e[3])
-      if op in ARITH_OPS and self.tk(e) == "float":    # float arithmetic; an int operand is converted
+      if (op in ARITH_OPS or op == "/") and self.tk(e) == "float":   # float arithmetic; an int operand is converted
         self.load_xmm(0, 0, tl)                      # left  (rax) -> xmm0
         self.load_xmm(1, 1, tr)                      # right (rcx) -> xmm1
         if op in ("+", "-", "*"):
@@ -1747,6 +1765,19 @@ class CodeGen(Resolver):
           a.jmp("rt_badpow")
           a.label(ok)
         a.emit(0x66, 0x48, 0x0F, 0x7E, 0xC0)         # movq rax,xmm0
+      elif op == "\\" and "float" in (tl, tr):         # integer division of floats: trunc((a - fmod(a, b)) / b)
+        self.load_xmm(0, 0, tl)
+        self.load_xmm(1, 1, tr)
+        if tr == "float":
+          a.emit(0x48, 0x89, 0xCA, 0x48, 0xD1, 0xE2)     # mov rdx,rcx; shl rdx,1   (+0.0 and -0.0)
+        else:
+          a.emit(0x48, 0x85, 0xC9)                     # test rcx,rcx
+        a.jcc(4, "rt_divzero")
+        a.emit(0x66, 0x0F, 0x28, 0xD0)                 # movapd xmm2,xmm0
+        a.call("rt_fmod")                              # xmm0 = fmod(a, b); xmm1 and xmm2 are kept
+        a.emit(0xF2, 0x0F, 0x5C, 0xD0)                 # subsd xmm2,xmm0
+        a.emit(0xF2, 0x0F, 0x5E, 0xD1)                 # divsd xmm2,xmm1
+        a.emit(0xF2, 0x48, 0x0F, 0x2C, 0xC2)           # cvttsd2si rax,xmm2
       elif op in CMP_SETCC and "float" in (tl, tr):    # comparison with a float: both sides as float, exactly
         lf, le = a.new_label("fc_f"), a.new_label("fc_e")
         self.load_xmm(0, 0, tl)
@@ -1786,10 +1817,12 @@ class CodeGen(Resolver):
         a.jmp(lp)
         a.label(dn)
         a.emit(0x48, 0x89, 0xD0)                     # mov rax,rdx
-      elif op in ("<<", ">>", "+>"):                   # shifts; a count of 64 or more (or negative) shifts everything out
-        big, end = a.new_label("sh_big"), a.new_label("sh_end")
+      elif op in ("<<", ">>", "+>"):                   # shifts; a negative count shifts the other way
+        big, neg, nbig, end = (a.new_label(n) for n in ("sh_big", "sh_neg", "sh_nbig", "sh_end"))
+        a.emit(0x48, 0x85, 0xC9)                     # test rcx,rcx
+        a.jcc(8, neg)                                # js
         a.emit(0x48, 0x83, 0xF9, 0x3F)               # cmp rcx,63
-        a.jcc(7, big)                                # ja  (unsigned compare)
+        a.jcc(7, big)                                # ja  (unsigned compare: 64 or more shifts everything out)
         a.emit(0x48, 0xD3, {"<<": 0xE0, ">>": 0xE8, "+>": 0xF8}[op])   # shl / shr / sar rax,cl
         a.jmp(end)
         a.label(big)
@@ -1797,10 +1830,19 @@ class CodeGen(Resolver):
           a.emit(0x48, 0xC1, 0xF8, 0x3F)             # sar rax,63   (all sign bits)
         else:
           a.emit(0x31, 0xC0)                         # xor eax,eax
+        a.jmp(end)
+        a.label(neg)
+        a.emit(0x48, 0xF7, 0xD9)                     # neg rcx      (|count|; the smallest int stays huge)
+        a.emit(0x48, 0x83, 0xF9, 0x3F)               # cmp rcx,63
+        a.jcc(7, nbig)
+        a.emit(0x48, 0xD3, {"<<": 0xE8, ">>": 0xE0, "+>": 0xE0}[op])   # the opposite shift: shr / shl / shl rax,cl
+        a.jmp(end)
+        a.label(nbig)
+        a.emit(0x31, 0xC0)                           # xor eax,eax
         a.label(end)
       elif op in ("<*", "*>"):                         # rotate; the count is taken modulo 64 by the hardware
         a.emit(0x48, 0xD3, 0xC0 if op == "<*" else 0xC8)   # rol / ror rax,cl
-      elif op in ("/", "%"):
+      elif op in ("\\", "%"):
         a.emit(0x48, 0x85, 0xC9)                     # test rcx,rcx
         a.jcc(4, "rt_divzero")
         a.emit(0x48, 0x99, 0x48, 0xF7, 0xF9)         # cqo; idiv rcx
@@ -2121,6 +2163,7 @@ def compile_source(src, warnings=None):
 
 def main():
   ap = argparse.ArgumentParser(description="Compile a Ka program to a Windows x64 .exe")
+  ap.add_argument("--version", action="version", version=f"ka {VERSION}")
   ap.add_argument("source")
   ap.add_argument("-o", "--output")
   args = ap.parse_args()

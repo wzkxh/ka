@@ -1,10 +1,10 @@
-print 12 & 10, " ", 12 | 10, " ", 12 ~ 10, " ", ~0, " ", ~5, " ", ~#f0 & #ff
-print #ffffffffffffffff, " ", #8000000000000000
-print -1 & #ff
-print 1 | 1 + 1     -- '+' binds tighter than '|': 1|(1+1)
-print 6 & 1 + 1     -- '+' binds tighter than '&': 6&(1+1)
-print 1 | 2 ~ 3     -- '~' (xor) binds tighter than '|': 1|(2~3)
-print 6 ~ 3 & 1     -- '&' binds tighter than '~': 6~(3&1)
-print 1 | 2 == 3    -- comparisons are below the bit operators: (1|2)==3
-print 6 & 3 == 2
-print #ff_ff, " ", 1_000_000, " ", #FF, " ", #ff
+print 12 & 10, " ", 12 | 10, " ", 12 ~ 10, " ", ~0, " ", ~5, " ", ~#f0 & #ff  -- => 8 14 6 -1 -6 15
+print #ffffffffffffffff, " ", #8000000000000000   -- => -1 -9223372036854775808
+print -1 & #ff                                    -- => 255
+print 1 | 1 + 1                                   -- => 3  ('+' binds tighter than '|': 1|(1+1))
+print 6 & 1 + 1                                   -- => 2  ('+' binds tighter than '&': 6&(1+1))
+print 1 | 2 ~ 3     -- => 1  ('~' (xor) binds tighter than '|': 1|(2~3))
+print 6 ~ 3 & 1                                   -- => 7  ('&' binds tighter than '~': 6~(3&1))
+print 1 | 2 == 3    -- => 1  (comparisons are below the bit operators: (1|2)==3)
+print 6 & 3 == 2                                  -- => 1
+print #ff_ff, " ", 1_000_000, " ", #FF, " ", #ff  -- => 65535 1000000 255 255

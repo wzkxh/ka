@@ -1,1 +1,1 @@
-n = input()
+n = input()  -- ERROR: undefined variable 'input'

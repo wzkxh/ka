@@ -2,6 +2,7 @@
 
 ```
 python ka.py program.ka                 # -> program.exe   (pure Python 3, runs on any OS)
+python ka.py --version                  # the version of the compiler
 python run_tests.py                     # on Windows: compiles and RUNS every test
 python run_tests.py -k closure -v       # subset, verbose
 python run_tests.py --emu               # Linux/macOS: run tests in an emulator (pip install unicorn pefile)
@@ -10,18 +11,22 @@ python run_tests.py --emu               # Linux/macOS: run tests in an emulator 
 | file | purpose |
 |---|---|
 | `ka.py` | the compiler (comment stripper, lexer, parser, type checker, x86-64 codegen, PE writer) |
-| `LANGUAGE.md` | language reference (for humans and Claude) |
-| `NOTES.md` | architecture, conventions, decisions, TODO (mainly for Claude) |
+| `LANGUAGE.md` | the language definition (short and exact) |
+| `IMPLEMENTATION.txt` | decisions, reasons, alternatives, known issues |
+| `NOTES.md` | how the code works, rules for the files (mainly for Claude) |
+| `RELEASE_NOTES.md` | versions, newest first, current state |
+| `TODO.txt` | what to do next (the owner's list) |
 | `tests/` | `.ka` programs + `.expected` output (+ `.exit`, `.warn`); `err_*.ka` + `.error` = must not compile |
 | `run_tests.py` | test runner |
 | `tools/emu.py` | Unicorn-based `.exe` emulator used for checking without Windows |
 | `tools/float_rt.asm`, `tools/build_float_rt.py` | source of the float runtime machine code embedded in `ka.py` (dev only, needs `keystone-engine`) |
 | `tools/fuzz_float.py` | fuzz test of the float runtime routines in Unicorn against Python (dev only) |
+| `tools/annotate_tests.py` | adds `-- =>` result comments to the tests from the real behaviour (dev only) |
 
 ## Resuming work in a new Claude chat
 Upload this folder (or the zip) and write, for example:
 
-> We continue the Ka compiler. Read NOTES.md and LANGUAGE.md first, run the tests
+> We continue the Ka compiler. Read NOTES.md, TODO.txt, RELEASE_NOTES.md and LANGUAGE.md first, run the tests
 > (`python run_tests.py --emu`), then let's work on: <what you want>.
 > At the end update the docs and tests and give me a new zip.
 

@@ -8,29 +8,29 @@ make_counter = function() {
 c1 = make_counter()
 c2 = make_counter()
 c1(); c1()
-print c1(), " ", c2(), " ", c1()
+print c1(), " ", c2(), " ", c1()                  -- => 3 1 4
 adder = function(n): =function(x): =x + n
 add5 = adder(5)
 add10 = adder(10)
-print add5(1), " ", add10(1), " ", adder(100)(1)
+print add5(1), " ", add10(1), " ", adder(100)(1)  -- => 6 11 101
 sq = function(x): =x * x
 compose = function(f, g): =function(x): =f(g(x))
 inc_then_sq = compose(sq, function(x): =x + 1)
-print inc_then_sq(4)
+print inc_then_sq(4)                              -- => 25
 fact = function(n):
   if n <= 1: return 1
   return n * fact(n - 1)
-print fact(10)
+print fact(10)                                    -- => 3628800
 function wrap(n):
   local_fact = function(k):
     if k <= 1: return 1
     return k * local_fact(k - 1)
   return local_fact(n)
-print wrap(6)
+print wrap(6)                                     -- => 720
 i = 0
 total = 0
 while i < 5:
   h = adder(i)
   total = total + h(100)
   i = i + 1
-print total
+print total                                       -- => 510

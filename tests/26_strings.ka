@@ -1,10 +1,10 @@
-print 'single', " ", "double"
+print 'single', " ", "double"    -- => single double
 print 'a' 'b' 'c'
 print "x" "y",
-   "z"
+  "z"
 print ("one"
     "two")
 print 'tab[^t] caret ^^ dq ^" sq ^''
-print "q: ^" and ^' and ^^"
-print 'AB^43^44'
-print "caf^e9: ^u00e9 ^U00263a"
+print "q: ^" and ^' and ^^"      -- => q: " and ' and ^
+print 'AB^43^44'                 -- => ABCD
+print "caf^e9: ^u00e9 ^U00263a"  -- => café: é ☺

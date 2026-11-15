@@ -1,2 +1,2 @@
 f = function(): return 1
-print f == 1
+print f == 1  -- ERROR: both sides must have the same type

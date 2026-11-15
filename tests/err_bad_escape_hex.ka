@@ -1,1 +1,1 @@
-print 'a^e'
+print 'a^e'  -- ERROR: bad escape ^e

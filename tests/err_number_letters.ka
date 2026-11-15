@@ -1,1 +1,1 @@
-x = 12ab
+x = 12ab  -- ERROR: bad number

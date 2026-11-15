@@ -1,3 +1,3 @@
-print "before"
-exit 7
+print "before"  -- => before
+exit 7          -- => exit code 7
 print "after"

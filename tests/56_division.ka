@@ -1,0 +1,16 @@
+print 7 / 2, " ", 6 / 3, " ", 1 / 4, " ", -7 / 2                -- => 3.5 2.0 0.25 -3.5  (`/` is float division, also for ints)
+print 7 \ 2, " ", -7 \ 2, " ", 7 \ -2, " ", 100 \ 10 \ 5        -- => 3 -3 -3 2  (`\` is integer division (toward zero))
+print 7.5 \ 2, " ", -7.5 \ 2, " ", 7 \ 2.5, " ", 7.5 \ 2.5, " ", 0.3 \ 0.1, " ", -0.5 \ 2   -- => 3 -3 2 3 2 0  (an int also for floats)
+print 1e10 \ 3.0, " ", 9007199254740993 \ 2, " ", 2 \ 0.5         -- 3333333333 4503599627370496 4
+x = 17; x \= 5; print x                                         -- 3
+g = 7.0; g /= 2; print g                                         -- 3.5
+print 2 * 3 \ 4, " ", 10 \ 3 * 3                                 -- => 1 9  (same level as `*`, left to right)
+print 7 \ 2 + 0.5                                               -- => 3.5
+total = 10
+total \=
+  4
+print total                                                      -- => 2  (a line may end with `\=` or `\`)
+q = 7 \
+  2
+print q                                                         -- => 3
+print 1e30 \ 1.0                                                -- => -9223372036854775808 (out of the int range: the smallest int)

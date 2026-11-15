@@ -1,1 +1,2 @@
+-- ERROR: bad escape ^u12   (^u needs 4 hex digits, ^U needs 6)
 print "^u12"

@@ -1,2 +1,2 @@
 f = \(): =1
-print f == 1.5
+print f == 1.5  -- ERROR: both sides must have the same type

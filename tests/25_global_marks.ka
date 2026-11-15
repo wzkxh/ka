@@ -3,15 +3,15 @@ function inc(): ^a = a + 1
 function show(): print ^a, " ", a
 inc(); inc()
 show()
-print a
+print a                     -- => 3
 function newg(): ^created = 42
 newg()
-print created
+print created               -- => 42
 function mixed(x):
   r = x * 2
   ^total = r + 1     -- total is global, r is local
   return r
-print mixed(5), " ", total
+print mixed(5), " ", total  -- => 10 11
 function outer():
   v = 1
   function inner():
@@ -19,4 +19,11 @@ function outer():
     return v       -- after ^v the plain name is the global too
   r = inner()
   return r * 1000 + v
-print outer(), " ", v
+print outer(), " ", v       -- => 100001 100
+
+-- the whole output:
+--   3 3
+--   3
+--   42
+--   10 11
+--   100001 100

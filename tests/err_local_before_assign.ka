@@ -1,4 +1,4 @@
 g = 1
 function f():
-  print g
+  print g  -- ERROR: line 3: variable 'g' is local to function 'f' and used before assignment (use '^g'
   g = 2

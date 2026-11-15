@@ -1,2 +1,2 @@
-print "x"
-print 0.0 ^ -1
+print "x"       -- => x
+print 0.0 ^ -1  -- => runtime error: division by zero (exit code 1)

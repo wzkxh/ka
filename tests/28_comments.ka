@@ -6,4 +6,11 @@ print "hidden"
 print "visible --[[ not a comment ]]--"
 --[[ one-line multi --]] print "ignored too"
 print 7 -- --[[ a plain line comment
-print 8
+print 8  -- => 8
+
+-- the whole output:
+--   3
+--   4
+--   visible --[[ not a comment ]]--
+--   7
+--   8

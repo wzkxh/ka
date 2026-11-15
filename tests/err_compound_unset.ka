@@ -1,1 +1,1 @@
-x += 1
+x += 1  -- ERROR: variable 'x' used before assignment

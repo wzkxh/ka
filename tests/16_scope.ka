@@ -10,12 +10,12 @@ function newglobal():
 setg()
 setg()
 newglobal()
-print g, " ", readg(), " ", ng, " ", shadow()
+print g, " ", readg(), " ", ng, " ", shadow()  -- => 12 24 77 5
 function blocks():
   i = 0
   while i < 3 { inner = i; i = i + 1 }
   return inner -- blocks do not create scopes
-print blocks()
+print blocks()                                 -- => 2
 x = 1
 function f(): x = 2; return x
-print f(), " ", x
+print f(), " ", x                              -- => 2 1

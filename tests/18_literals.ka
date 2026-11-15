@@ -3,7 +3,7 @@ bar = function(): =10 -- '=' is a short 'return'
 baz = function(a,b): return a+b
 xyz = function(n): m=2*n; return m
 abc = function(n) {m=2*n; =m}
-print foo(), " ", bar(), " ", baz(3, 4), " ", xyz(5), " ", abc(6)
+print foo(), " ", bar(), " ", baz(3, 4), " ", xyz(5), " ", abc(6)  -- => 10 10 7 10 12
 sq = function(x) {
   y = x * x
   =y
@@ -11,17 +11,27 @@ sq = function(x) {
 cube = function(x):
   y = x * x * x
   return y
-print sq(9), " ", cube(3)
+print sq(9), " ", cube(3)                               -- => 81 27
 apply = function(f, v): =f(v)
 print apply(function(x): =x + 1, 41), " ", apply(sq, 12)
 print apply(function(x) {
   t = x * 10
   =t + 5
 }, 7)
-print (function(a, b): =a * b)(6, 7)
+print (function(a, b): =a * b)(6, 7)                    -- => 42
 function twice(f, x): =f(f(x))
-print twice(sq, 3), " ", twice(function(x): =x * 2, 5)
+print twice(sq, 3), " ", twice(function(x): =x * 2, 5)  -- => 81 20
 g = twice
-print g(abc, 1)
+print g(abc, 1)                                         -- => 4
 function sqf(x): =x * x
-print sqf(7)
+print sqf(7)                                            -- => 49
+
+-- the whole output:
+--   10 10 7 10 12
+--   81 27
+--   42 144
+--   75
+--   42
+--   81 20
+--   4
+--   49

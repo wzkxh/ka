@@ -1,2 +1,2 @@
 x = 1
-x = function(): return 1
+x = function(): return 1  -- ERROR: type mismatch in assignment to 'x': expected int, found fn()

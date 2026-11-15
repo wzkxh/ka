@@ -1,1 +1,1 @@
-x = #_f
+x = #_f  -- ERROR: bad hex literal

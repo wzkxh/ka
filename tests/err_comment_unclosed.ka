@@ -1,2 +1,3 @@
+-- ERROR: comment '--[[' is never closed   (this very comment is not the problem, the next one is)
 --[[ never closed
 print 1

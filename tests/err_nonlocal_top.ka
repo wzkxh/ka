@@ -1,2 +1,2 @@
 function f():
-  @q = 1
+  @q = 1  -- ERROR: needs an enclosing function

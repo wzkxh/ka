@@ -1,1 +1,1 @@
-print "abc
+print "abc  -- ERROR: string is not closed

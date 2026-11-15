@@ -1,0 +1,2 @@
+function f(a):
+  X = a  -- ERROR: it uses the variable 'a'

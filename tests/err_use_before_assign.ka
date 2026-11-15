@@ -1,2 +1,2 @@
-print y
+print y  -- ERROR: line 1: variable 'y' used before assignment
 y = 1

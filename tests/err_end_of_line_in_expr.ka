@@ -1,1 +1,1 @@
-x = 5 +
+x = 5 +  -- ERROR: unexpected end of line in expression (the line ends with an operator, so the expression goes on, but the file ends)

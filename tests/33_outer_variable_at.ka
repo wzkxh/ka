@@ -4,7 +4,7 @@ function counter():
   function get(): =n
   bump(); bump(); bump()
   return get()
-print counter()
+print counter()  -- => 3
 function outer():
   a = 1
   function mid():
@@ -15,4 +15,4 @@ function outer():
     inner()
     return b
   return mid() * 1000 + a
-print outer()
+print outer()    -- => 11101

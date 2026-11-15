@@ -1,2 +1,2 @@
-print '^e9^ff^00A', "|", "^00"
-print 'café', "|", 'caf^e9', "|", "caf^e9", "|", '^u20ac', "|", "^U01F600"
+print '^e9^ff^00A', "|", "^00"   -- => the bytes E9 FF 00 41, then |, then the byte 00 (a ^XX escape is a raw byte in '...' and the character U+00XX in "...")
+print 'café', "|", 'caf^e9', "|", "caf^e9", "|", '^u20ac', "|", "^U01F600"   -- => café | caf + the single byte E9 | café | € | 😀   (all written as UTF-8 except the byte E9)

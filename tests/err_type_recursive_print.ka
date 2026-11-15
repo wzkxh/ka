@@ -1,4 +1,4 @@
 function q(x): return x
 function f(a): return a(a)
 d = f(q)
-print d
+print d  -- ERROR: only numbers can be printed

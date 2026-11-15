@@ -2,4 +2,4 @@ function f(x):=x*2
 function g(x) {=x+1}
 function h(x): if x > 0: =1 else: =-1
 function z(): return
-print f(4), " ", g(4), " ", h(5), " ", h(-5), " ", z()
+print f(4), " ", g(4), " ", h(5), " ", h(-5), " ", z()  -- => 8 5 1 -1 0

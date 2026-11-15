@@ -1,0 +1,25 @@
+assert expr [, str]
+
+maybe add pragmas and options to the compiler?
+comp.tolerance, output.precision, int.overflow, assert.check
+
+! | not              ?!
+? | rnd?             ?!
+\ | function         int div
+/ |                  float div
+% |                  modulo
+& |                  bitwise and  && logical and
+| | abs, len?        bitwise or   || logical or
+~ | bitwise not      bitwise xor
+* | scatter?         multiply
++ | identity upper?  plus
+- | negate   lower?  minus
+< |                  less         << shift left   <* rotate left
+> |                  greater      >> shift right  *> +>
+= | return           assignment   == equal
+: |                  block
+; |                  statements
+^ | global var       power
+@ | upper-level var
+
+remove --version - const inside is enough

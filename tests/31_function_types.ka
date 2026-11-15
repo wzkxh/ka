@@ -1,12 +1,12 @@
 function apply(f, x): =f(x)
 function inc(a): =a + 1
 function dbl(a): =a * 2
-print apply(inc, 5), " ", apply(dbl, 5)
-print inc == inc, " ", inc == dbl, " ", inc != dbl
+print apply(inc, 5), " ", apply(dbl, 5)             -- => 6 10
+print inc == inc, " ", inc == dbl, " ", inc != dbl  -- => 1 0 1
 op = inc
 x = 1
 if x: op = dbl
-print op(10)
+print op(10)                                        -- => 20
 function twice(f, v): =f(f(v))
-print twice(inc, 1), " ", twice(dbl, 3)
-print -9223372036854775808
+print twice(inc, 1), " ", twice(dbl, 3)             -- => 3 12
+print -9223372036854775808                          -- => -9223372036854775808

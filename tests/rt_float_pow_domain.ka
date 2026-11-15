@@ -1,2 +1,2 @@
-print "x"
-print (-8.0) ^ (1 / 3.0)
+print "x"                 -- => x
+print (-8.0) ^ (1 / 3.0)  -- => runtime error: power of a negative number with a fractional exponent (exit code 1)

@@ -1,1 +1,1 @@
-print 1.5 & 1
+print 1.5 & 1  -- ERROR: left operand of '&': expected int, found float

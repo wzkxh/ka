@@ -1,1 +1,1 @@
-return 1
+return 1  -- ERROR: line 1: 'return' outside of a function

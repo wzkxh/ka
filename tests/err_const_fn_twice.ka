@@ -1,2 +1,2 @@
 function F(): return 1
-F = 2
+F = 2  -- ERROR: constant 'F' is already defined

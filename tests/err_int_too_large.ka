@@ -1,1 +1,1 @@
-print 9223372036854775808
+print 9223372036854775808  -- ERROR: integer literal too large

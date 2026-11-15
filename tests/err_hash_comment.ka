@@ -1,1 +1,1 @@
-a = 1 # old style comment
+a = 1 # old style comment  -- ERROR: bad hex literal

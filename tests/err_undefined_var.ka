@@ -1,1 +1,1 @@
-print y
+print y  -- ERROR: line 1: undefined variable 'y'

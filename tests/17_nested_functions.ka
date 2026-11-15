@@ -21,4 +21,9 @@ function rec_nested(n):
     if k == 0: return 0
     return k + go(k - 1) + n * 0
   return go(n)
-print rec_nested(100)
+print rec_nested(100)  -- => 5050
+
+-- the whole output:
+--   total=51
+--   5105
+--   5050

@@ -1,1 +1,1 @@
-{ X = 1 }
+{ X = 1 }  -- ERROR: can only be defined directly at the top level

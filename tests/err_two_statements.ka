@@ -1,1 +1,1 @@
-print 1 2
+print 1 2  -- ERROR: line 1: expected end of statement, found 2

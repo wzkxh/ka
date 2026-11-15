@@ -1,1 +1,1 @@
-function f(): ^X = 1
+function f(): ^X = 1  -- ERROR: cannot be written as ^X

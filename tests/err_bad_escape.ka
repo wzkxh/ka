@@ -1,1 +1,1 @@
-print "a^q"
+print "a^q"  -- ERROR: bad escape ^q

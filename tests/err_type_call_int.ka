@@ -1,2 +1,2 @@
 x = 5
-x()
+x()  -- ERROR: an int is not a function

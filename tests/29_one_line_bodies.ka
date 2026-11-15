@@ -13,3 +13,21 @@ while i < 3: i = i + 1 if i == 2: print "two again"
 if a: {print "p1"; print "p2"} else: print "no"
 if 1 {print "b1"}else:print "b2";print "b3"
 if 0 {print "c1"}else:print "c2";print "c3"
+
+-- the whole output:
+--   a
+--   other 1
+--   end
+--   two
+--   other 3
+--   end
+--   inner else
+--   next
+--   outer else
+--   mid
+--   two again
+--   p1
+--   p2
+--   b1
+--   c2
+--   c3

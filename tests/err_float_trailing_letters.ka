@@ -1,1 +1,1 @@
-x = 1.5abc
+x = 1.5abc  -- ERROR: bad number

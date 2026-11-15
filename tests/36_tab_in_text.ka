@@ -1,4 +1,4 @@
-print "a	b" -- comment	with	tabs
+print "a	b" -- => a<TAB>b  (a TAB inside a string and inside a comment is just text); comment	with	tabs
 --[[ block	
 comment --]]
-print 'x	y'
+print 'x	y'   -- => x<TAB>y

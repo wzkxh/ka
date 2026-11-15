@@ -1,1 +1,1 @@
-x = 1._5
+x = 1._5  -- ERROR: digits after the dot

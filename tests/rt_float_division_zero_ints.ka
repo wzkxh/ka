@@ -1,0 +1,2 @@
+print "x"    -- => x
+print 1 / 0  -- => runtime error: division by zero (exit code 1)

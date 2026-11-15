@@ -20,3 +20,10 @@ if k == 3
 {
   print "allman"
 }
+
+-- the whole output:
+--   eq 0
+--   eq 1
+--   done
+--   k=3
+--   allman

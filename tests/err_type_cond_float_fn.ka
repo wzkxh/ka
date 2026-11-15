@@ -1,1 +1,1 @@
-x = 1 ? 1.5 ! (\(): =3)
+x = 1 ? 1.5 ! (\(): =3)  -- ERROR: both branches must have the same type

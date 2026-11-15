@@ -1,5 +1,5 @@
 -- full line comment
-print 1 -- trailing comment
-print "a -- not a comment"
+print 1                     -- => 1  (trailing comment)
+print "a -- not a comment"  -- => a -- not a comment
 x = 5 - -3 -- minus minus
-print x
+print x                     -- => 8

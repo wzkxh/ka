@@ -2,3 +2,7 @@ a = 0
 if a: g = \(): =1
 print "x"
 g()
+
+-- the whole output:
+--   x
+--   runtime error: call of an unset function

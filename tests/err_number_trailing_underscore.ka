@@ -1,1 +1,1 @@
-x = 1_
+x = 1_  -- ERROR: bad number

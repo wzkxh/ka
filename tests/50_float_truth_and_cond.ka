@@ -1,7 +1,15 @@
 if 0.5: print "half is true"
 if 0.0: print "never"
 if -0.0: print "never either"
-print !0.5, " ", !0.0, " ", 1.5 && 2, " ", 0.0 || 0, " ", 0.0 || 0.25
+print !0.5, " ", !0.0, " ", 1.5 && 2, " ", 0.0 || 0, " ", 0.0 || 0.25  -- => 0 1 1 0 1
 print 1 ? 2 ! 3.5, " ", 0 ? 2 ! 3.5, " ", 0.5 ? 1.5 ! 2.5
 i = 3.0
 while i: i -= 1; print i
+
+-- the whole output:
+--   half is true
+--   0 1 1 0 1
+--   2.0 3.5 1.5
+--   2.0
+--   1.0
+--   0.0

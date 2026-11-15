@@ -1,1 +1,1 @@
-exit 1.5
+exit 1.5  -- ERROR: in 'exit'

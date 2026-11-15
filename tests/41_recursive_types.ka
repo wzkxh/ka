@@ -1,4 +1,4 @@
 function q(x): return x
 function f(a): return a(a)
 d = f(q)
-print d == q, " ", d(q) == q, " ", f(q)(q) == q
+print d == q, " ", d(q) == q, " ", f(q)(q) == q  -- => 1 1 1

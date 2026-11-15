@@ -1,1 +1,1 @@
-x = 1e999
+x = 1e999  -- ERROR: float literal too large

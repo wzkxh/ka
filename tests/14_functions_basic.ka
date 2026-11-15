@@ -8,9 +8,16 @@ function sq(x): return x * x
 function noret(): x = 1
 function bare(): return
 foo(1, 2)
-print bar(21), " ", baz(), " ", sq(9), " ", noret(), " ", bare()
-print later(5) -- used before its definition
+print bar(21), " ", baz(), " ", sq(9), " ", noret(), " ", bare()  -- => 42 5 81 0 0
+print later(5)         -- => 1005  (used before its definition)
 function later(x): return x + 1000
 function sub3(a, b, c): return a - b * c
-print sub3(100, 6, 7)
-print 1 + bar(2) * 3
+print sub3(100, 6, 7)  -- => 58
+print 1 + bar(2) * 3   -- => 13
+
+-- the whole output:
+--   foo 1 2
+--   42 5 81 0 0
+--   1005
+--   58
+--   13

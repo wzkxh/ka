@@ -1,1 +1,1 @@
-function f(N): return N
+function f(N): return N  -- ERROR: parameter 'N' looks like a constant

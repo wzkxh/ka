@@ -1,1 +1,1 @@
-function f(x) x * 2
+function f(x) x * 2  -- ERROR: expected '{' or ':' after the parameters

@@ -1,2 +1,2 @@
 f = function(a): return a
-print f(1, 2)
+print f(1, 2)  -- ERROR: wrong number of arguments

@@ -1,0 +1,3 @@
+function f():
+  X = 1
+  X = 2  -- ERROR: constant 'X' is already defined (line 2)

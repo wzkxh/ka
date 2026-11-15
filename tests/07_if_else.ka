@@ -19,3 +19,13 @@ else
 {
   print "no"
 }
+
+-- the whole output:
+--   -1 0 1
+--   big
+--   medium
+--   yes
+--   yes2
+--   else1
+--   else2
+--   allman

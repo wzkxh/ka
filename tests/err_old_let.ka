@@ -1,1 +1,1 @@
-let x = 1
+let x = 1  -- ERROR: expected end of statement, found 'x'

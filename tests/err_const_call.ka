@@ -1,2 +1,2 @@
 function f(): return 1
-X = f()
+X = f()  -- ERROR: it calls a function

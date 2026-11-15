@@ -1,9 +1,9 @@
 a = 5
 b = a * 2
 a = a + b
-print a, " ", b
+print a, " ", b  -- => 15 10
 c = a
 c = c - 1
-print a, " ", c
+print a, " ", c  -- => 15 14
 my_var2 = 3
-print my_var2
+print my_var2    -- => 3

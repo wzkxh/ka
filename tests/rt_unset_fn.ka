@@ -1,3 +1,7 @@
 function setup(): ^cb = function(): print "called"
 print "x"
 cb()
+
+-- the whole output:
+--   x
+--   runtime error: call of an unset function
