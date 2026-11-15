@@ -377,7 +377,7 @@ are pinned by the `tests/err_*.ka` / `.error` pairs (and `.warn` for warnings). 
 - standard library:
   - file system, i/o;
   - strings;
-  - math;
+  - math; random;
   - time, etc;
 - checking that every path of a function returns a value of the declared kind;
 - optimization.
