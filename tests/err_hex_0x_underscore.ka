@@ -1,0 +1,1 @@
+x = 0x_FF  -- ERROR: bad hex literal

@@ -20,13 +20,18 @@ RELEASE_NOTES.md = what changed in which version.  TODO.txt = what to do next.  
 
 2. Lexical decisions
 --------------------
-Comments: `--`, `--[[ ... ]]--` (inside one line), `--[[ ... --]]` (several lines; the rest of the closing line is ignored).
+Comments: `--`, `--[[ ... ]]--` (inside one line), `--[[ ... --]]` (several lines; the rest of the closing line is ignored), and (version 6.1, user) `# text`.
+  The user: hash followed by a space cannot occur anywhere else, so `#` can be overloaded; it makes Python-style comments usable. I also accept `#` at the end of a line (an empty comment line,
+  editors strip trailing spaces) but never a `#` directly after a digit: `2#` is the start of a binary literal and `x = 2#` must stay an error instead of silently becoming `x = 2`.
+  `1# comment` (glued to a number) is therefore an error. Hex literals `#ff` do not clash: the character after the hash is not a space.
   The user asked for the inside-line form to stay on one line and said the rules were a minor issue. strip_comments() blanks comments before
   the lexer so that line numbers and columns stay right.
 TAB: no special treatment (user decision, version 3). It is a character like ESC or `$`: text inside strings/comments, `unexpected character`
   elsewhere. Earlier (version 2) any TAB was an error; the simpler rule needs no code at all.
 Identifiers: ASCII only. `and or not let global nonlocal input fn` are ordinary names (the words were removed from the language).
-Numbers: `_` only between digits (user: no `__`, not at the start or end). Hex `#ff` and binary `2#1011` take all 64 bits and wrap to signed.
+Numbers: `_` only between digits (user: no `__`, not at the start or end). Hex `#ff` (and, version 6.1, `0xff` / `0XFF`, so that constants copied from Python files work) and binary `2#1011` take all 64 bits
+  and wrap to signed. A number that does not fit any form gives `bad number '...'`; the hint about `_` is shown only when there is a `_` in it, `0b101` gets the hint `2#101`
+  (the first version of the message blamed `_` for every ill-formed token, e.g. `0xFFFF...`, which was wrong). Python's `0b` and `0o` are not accepted (Ka has `2#`, no octal).
   Only base 2 exists; radix 3..36 (`3#122`, `36#zzz`) is on the wish list. `#'...'` is reserved for hex byte strings.
 Floats: `digits.digits`, `digits.digits e sign digits`, `digits e sign digits` (user's list); no `.5`, no `1.`, no INF/NAN literals.
   `5e3` is a float. Specific error messages for the near-misses (`1.`, `.5`, `1e`, `1.5abc`, `1.5.2`).

@@ -1,0 +1,29 @@
+# Financial Modeling (Compound Investment & Tiered Tax Calculation)
+
+# A business/financial calculation tracking long-term portfolio growth over# multiple
+# decades, applying compound interest and conditional tiered tax brackets at each step.
+
+def calculate_portfolio( principal, rate, years ):
+  balance = principal
+  year = 0
+  while year < years:
+    interest = balance * rate
+    tax = 0.0
+    if interest > 1000.0:
+      tax = (interest - 1000.0) * 0.2 + 100.0
+    else:
+      tax = interest * 0.1
+    balance = balance + interest - tax
+    year = year + 1
+  return balance
+
+def main():
+  i = 0
+  n = 2_000_000
+  final_sum = 0.0
+  while i < n:
+    final_sum = final_sum + calculate_portfolio( 5000.0, 0.07, 30 )
+    i = i + 1
+  print(final_sum/n) # 30524.034255971583 4.975
+
+main()

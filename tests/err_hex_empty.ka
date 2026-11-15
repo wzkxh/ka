@@ -1,1 +1,1 @@
-x = #  -- ERROR: bad hex literal
+x = #g  -- ERROR: bad hex literal

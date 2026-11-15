@@ -1,12 +1,19 @@
 # Ka - release notes (newest first)
 
-## Current state (version 6)
+## Current state (version 6.1)
 Ka compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3, no dependencies). Run `python ka.py --version`.
 - **Language:** 64-bit ints and floats, first-class functions and closures (shared by reference, never freed), static type inference, constants, byte/unicode string literals for `print`.
   Details: LANGUAGE.md. Reasons: IMPLEMENTATION.txt.
-- **Tests:** 181 programs in `tests/` (all pass under the emulator on Linux; the user runs them on real Windows). Every test has `-- =>` result comments.
-- **Checked on real Windows by the user:** all tests of versions 3, 4, 5 passed (169 tests). Version 6 has been run in the emulator only so far.
+- **Tests:** 190 programs in `tests/` (all pass under the emulator on Linux; the user runs them on real Windows). Every test has `-- =>` result comments.
+- **Checked on real Windows by the user:** all tests of versions 3, 4, 5 passed (169 tests) and version 6 (181 tests). Version 6.1 has been run in the emulator only so far.
 - **Known limits:** see IMPLEMENTATION.txt section 9 (float printing last digit, fractional float powers checked only in an emulator, no strings as values, no input, no GC).
+
+## Version 6.1
+- **Hex literals `0xFF`** (also `0XFF`, `0xFF_FF`) in addition to `#FF`; 64 bits, wrap to signed (`0xFFFFFFFFFFFFFFFF` is -1).
+- **Comments `# text`** (a hash followed by a space or by the end of the line, not directly after a digit) in addition to `--`. `err_hash_comment` is valid syntax now.
+- **Error message for ill-formed numbers:** `bad number '12ab'` no longer claims that `_` is the problem; the `_` hint appears only when there is a `_`; `0b101` gets a hint (`2#101`);
+  bad `0x` forms give `bad hex literal`.
+- 10 new tests and 1 removed (190 total): 0x literals, hash comments, and the number error messages. (The first draft of the `#` rule made `x = 2#` a valid statement; a test caught it, see IMPLEMENTATION.txt.)
 
 ## Version 6
 - **Division:** `/` is now always float division (`7 / 2` is `3.5`); the new `\` is integer division, always an int, also for floats (`7.5 \ 2` is 3); `\=` added. `/=` on an int variable is therefore

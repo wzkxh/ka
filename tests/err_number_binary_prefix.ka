@@ -1,0 +1,1 @@
+x = 0b101  -- ERROR: binary literals are written 2#101

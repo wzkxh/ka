@@ -1,0 +1,16 @@
+-- py 3.760 ka 0.230 (16.3x)
+
+\fib(n):
+  if n < 2:
+    return n
+  return fib(n-1) + fib(n-2)
+
+\main():
+  i = 0
+  res = 0
+  while i < 36:
+    res = fib(i)
+    i = i + 1
+  print(res)
+
+main()

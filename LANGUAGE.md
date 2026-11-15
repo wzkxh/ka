@@ -1,15 +1,16 @@
 # Ka - language reference
 
 Ka is a small imperative language with 64-bit integers and floats, first-class functions and closures, checked by static types.
-`ka.py` compiles a `.ka` source file into a Windows x64 console `.exe` (`ka.py --version` prints the version).
+`ka.py` compiles a `.ka` source file into a Windows x64 console `.exe`.
 This file defines the language; the reasons behind the decisions are in IMPLEMENTATION.txt, the history in RELEASE_NOTES.md.
 
 ## 1. Lexical structure
 - Source is UTF-8 text. Line endings `\n` or `\r\n`.
-- TAB is an ordinary character without a meaning: text inside strings and comments, `unexpected character` anywhere else
+- TAB is like any other control character (e.g. BEL, ESC, HT): text inside strings and comments, `unexpected character` anywhere else
   (like `$` or ESC). Indentation consists of spaces only.
 - **Comments:**
   - `--` to the end of the line.
+  - `# ` to the end of the line: a hash followed by a space or by the end of the line, but not directly after a digit (`2#` starts a binary literal).
   - `--[[ ... ]]--` inside one line; code continues after it: `print 1 --[[ one ]]-- + 2`.
   - `--[[ ... --]]` over several lines; the rest of the line that holds the closing `--]]` is ignored.
     If `]]--` follows `--[[` on the same line, it is the inside-line form.
@@ -19,10 +20,10 @@ This file defines the language; the reasons behind the decisions are in IMPLEMEN
   an operand or statement is expected.
 - **Integer literals:** decimal digits, -9223372036854775808 .. 9223372036854775807. `_` may separate digits (`1_000_000`), not at the
   start or the end and not doubled.
-  Hexadecimal `#ff`, `#FF_FF` (digits `0-9 a-f A-F`, `_` between digits) and binary `2#0001_1011` (base 2 only) may use all 64 bits:
-  `#ffffffffffffffff` and 64 binary ones are -1. `#'...'` is reserved.
-- **Float literals** (64-bit): `digits.digits`, `digits.digits e sign digits`, `digits e sign digits`; digits are 0-9 with `_` between
-  digits, `e` is `e` or `E`, the sign is `+`, `-` or absent: `1.5`, `1_000.25`, `6.02e23`, `1E-9`, `5e3` (the float 5000.0).
+  Hexadecimal `#ff`, `#FF_FF` or `0xff`, `0XFF_FF` (digits `0-9 a-f A-F`, `_` between digits) and binary `2#0001_1011` (base 2 only) may use all 64 bits:
+  `#ffffffffffffffff`, `0xFFFFFFFFFFFFFFFF` and 64 binary ones are -1.
+- **Float literals** (64-bit): `digits.digits`, `digits[.digits]e|E[sign]digits`; digits are 0-9 with optional `_` between digits:
+  `1.5`, `1_000.25`, `6.02e23`, `1E-9`, `5e3` (the float 5000.0).
   No `.5`, no `1.`, no infinity or NaN literal (yet). Too large for a double is an error, too small gives 0.0 or a denormal.
 - **String literals:** `'...'` is a byte string, `"..."` a unicode string; for now they are used alike. A string cannot contain a raw newline.
   - Escape character `^`: `^n` newline, `^t` TAB, `^r` CR, `^^` caret, `^"` quote, `^'` apostrophe (both quotes in both kinds).
@@ -36,7 +37,6 @@ This file defines the language; the reasons behind the decisions are in IMPLEMEN
   - Output is written as UTF-8 bytes; the program sets the console code page to UTF-8 at start.
 - **Operators / punctuation:** `+ - * / \ % ^ & | ~ << >> +> <* *> == != < <= > >= && || ! ? = ( ) { } ; , : @`
   and the assignment forms `= += -= *= /= \= %= ^= &= |= ~= &&= ||= <<= >>= +>= <*= *>=`.
-  `!` directly followed by `=` is `!=`.
 
 ## 2. Values and types
 Three types:
@@ -90,24 +90,24 @@ A block follows `if cond`, `elif cond`, `else`, `while cond`, `function name(...
 also across lines. Blocks do not create scopes.
 
 ## 5. Expressions
-Precedence, lowest to highest; binary operators are left-associative except `^`:
+Precedence, highest to lowest; binary operators are left-associative except `^`:
 
 | level | operators |
 |---|---|
-| 1 | `c ? a ! b` conditional (right-associative) |
-| 2 | `\|\|` |
-| 3 | `&&` |
-| 4 | `==` `!=` (chained) |
-| 5 | `<` `<=` `>` `>=` (chained) |
-| 6 | `\|` bitwise or |
-| 7 | `~` bitwise xor |
-| 8 | `&` bitwise and |
-| 9 | `<<` `>>` `+>` `<*` `*>` shifts and rotates |
-| 10 | `+` `-` |
-| 11 | `*` `/` `\` `%` |
-| 12 | `^` power (right-associative) |
+| 14 | call `f(args)`; primary: number, variable, `(expr)`, function literal |
 | 13 | unary `-` `~` `!` |
-| 14 | call `f(args)`; primary: number, variable, `(expr)`, `function` / `\` literal |
+| 12 | `^` power (right-associative) |
+| 11 | `*` `/` `\` `%` |
+| 10 | `+` `-` |
+| 9 | `<<` `>>` `+>` `<*` `*>` shifts and rotates |
+| 8 | `&` bitwise and |
+| 7 | `~` bitwise xor |
+| 6 | `\|` bitwise or |
+| 5 | `<` `<=` `>` `>=` (chained) |
+| 4 | `==` `!=` (chained) |
+| 3 | `&&` logical and |
+| 2 | `\|\|` logical or |
+| 1 | `c ? a ! b` conditional (right-associative) |
 
 - `&&` and `||` short-circuit and give 0 or 1.
 - **Division:** `a / b` is float division, always a float (ints are converted). `a \ b` is integer division, always an int: for ints it truncates
@@ -121,7 +121,6 @@ Precedence, lowest to highest; binary operators are left-associative except `^`:
   with an integer-valued exponent any base is allowed (`10.0 ^ -2`, `(-2.0) ^ 3`); with a fractional exponent the base must be positive
   (otherwise a runtime error). `0.0 ^ negative` is division by zero; `x ^ 0` is 1.
   Unary operators bind tighter than `^`: `-2^2` is `(-2)^2` = 4.
-  `^` after an operand is the power operator; `^name` where an operand is expected is a global variable: `print a ^b` is a power, `print a, ^b` is not.
 - **Bit operators** `& | ~` (xor) and unary `~` (not) work on the 64 bits as unsigned bits (`~0` is -1, `-1 & #ff` is 255). Comparisons treat ints as signed.
   They bind tighter than comparisons: `a & 1 == 0` is `(a & 1) == 0`; `1 | 1 + 1` is `1 | (1 + 1)`.
 - **Shifts and rotates:** `x << n` left, `x >> n` logical right, `x +> n` arithmetic right (sign bit copied), `x <* n` rotate left, `x *> n` rotate right.
@@ -129,7 +128,7 @@ Precedence, lowest to highest; binary operators are left-associative except `^`:
   A negative count shifts the other way: `x >> -n` is `x << n`, `x << -n` is `x >> n`, `x +> -n` is `x << n`.
   A rotate takes the count modulo 64: `x <* -n` is `x *> n`, `x *> -n` is `x <* n`.
 - **Conditional** `c ? a ! b`: `c` is evaluated, then only `a` or only `b`. A function literal with a one-line body inside it needs parentheses:
-  `c ? (\x: =x+1) ! (\x: =x-1)`. A line may end with `?` or `!`.
+  `c ? (\x:=x+1) ! (\x:=x-1)`. A line may end with `?` or `!` (expression continues on the next line).
 - **Chained comparisons:** `a < b <= c` is `a < b && b <= c` with `b` evaluated once; evaluation stops at the first false link.
   Chains form within `== !=` or within `< <= > >=`; `a < b == c` is `(a < b) == c`.
 
@@ -137,8 +136,8 @@ Precedence, lowest to highest; binary operators are left-associative except `^`:
 | statement | meaning |
 |---|---|
 | `name = expr` | assign (creates the variable) |
-| `name op= expr` | `name = name op expr` for `+ - * / \ % ^ & \| ~ && \|\| << >> +> <* *>`; `&&=` and `\|\|=` short-circuit; also `^name op= expr`, `@name op= expr` |
 | `^name = expr`, `@name = expr` | assign a global / an enclosing function's variable (see 7) |
+| `name op= expr` | `name = name op expr` for `+ - * / \ % ^ & \| ~ && \|\| << >> +> <* *>`; `&&=` and `\|\|=` short-circuit; also `^name op= expr`, `@name op= expr` |
 | `print a, b, "text", ...` | print the items one after another, then a newline; `print` alone prints an empty line. Items are numbers or string literals |
 | `if cond block [elif cond block]... [else block]` | conditional (`else if` also works) |
 | `while cond block` | loop |
@@ -148,7 +147,7 @@ Precedence, lowest to highest; binary operators are left-associative except `^`:
 | `function name(params) body`, `\name(params) body` | named function definition; one parameter needs no parentheses: `function name p body` |
 | `skip` | the empty statement |
 | `{ ... }` | a block as a statement (see 4) |
-| `expr` | an expression as a statement; the value is discarded |
+| `expr` | an expression as a statement; the value is discarded; usually a call |
 
 ### Printing floats
 At most 15 significant digits, trailing zeros removed, `.0` if the number would look like an int: `1.5`, `100.0`, `0.1`, `0.3` (for `0.1 + 0.2`).
@@ -157,21 +156,21 @@ Special values: `0.0`, `-0.0`, `inf`, `-inf`, `nan`.
 
 ## 7. Functions and scope
 ```
-function f1(a, b) { print a, b }
+function f1(a,b) { print a, b }
 function f2(x) { return 2*x }
 function f3(x) { = 2*x }            -- the same as f2
 function f4(x): return 2*x          -- the same as f2
 function f5(x):=2*x                 -- the same as f4
 function f6 x: return 2*x           -- one parameter: no parentheses
-\f7 x: =2*x                         -- '\' is a short 'function'
-\f8(a, b) {=a+b}
+\f7 x:=2*x                          -- '\' is a short 'function'
+\f8(a,b){=a+b}
 foo = function(){ =10 }             -- function literals have the same body forms
-bar = \(): =10
+bar = \():=10
 xyz = \n: m = 2*n; return m         -- one-line block, one parameter without ()
-print (\(a,b): =a*b)(6,7)
+print (\(a,b):=a*b)(6,7)
 ```
 - A function returns only through `return` / `=`; there are no expression bodies and no implicit result. `return` or the end of the body gives 0.
-- Any expression can be called: `f(x)`, `f(x)(y)`, `(\a: =a)(1)`. Arguments are evaluated left to right, then the callee. At most 20 parameters or arguments.
+- Any expression can be called: `f(x)`, `f(x)(y)`, `(\a:=a)(1)`. Arguments are evaluated left to right, then the callee. At most 20 parameters or arguments.
 - `function name` definitions of a scope are created when the scope is entered, so they can be used before the definition. A definition inside an
   `if` or loop still belongs to the enclosing scope and is not conditional. A named function is a variable holding a function value (reassignable
   to a function of the same signature). Defining a name twice with `function` in one scope is an error. `function ^name` does not exist.
@@ -180,11 +179,11 @@ print (\(a,b): =a*b)(6,7)
 ### Scope
 - Outside functions variables are global. Inside a function, parameters and every name assigned by a plain `name = ...` are local for the whole body.
 - A function reads globals and variables of the functions around it by plain name. Using a local name before its first assignment is an error.
-- `^name` is the global variable `name`: `^name = e` assigns it (creating it), `^name` reads it; at the top level it equals `name`.
+- `^name` is the global variable `name`, mainly for assignment: `^name = e` assigns it (creating it), `^name` reads it; at the top level it equals `name`.
   Once `^name` is used in a function, the plain `name` there is the global too. A name cannot be both local (or parameter) and `^name` in one function.
-- `@name` (draft) is the variable `name` of the nearest enclosing function that has it as local or parameter: `@name = e` assigns, `@name` reads; the plain
+- `@name` (draft, like `nonlocal` in Python) is the variable `name` of the nearest enclosing function that has it as local or parameter: `@name = e` assigns, `@name` reads; the plain
   name then means the same. A name cannot be both local and `@name` in one function; without such a variable it is an error.
-- Every variable starts as 0. A variable assigned only on a path not taken stays 0. A function variable that is 0 is unset; calling it is a runtime error.
+- Every variable starts as 0 (yet to decide). A variable assigned only on a path not taken stays 0. A function variable that is 0 is unset; calling it is a runtime error.
 - A function value shares the variables it uses with its creator and other closures, also after the creator has returned. Captured variables and closures are never freed.
 - Top-level code that reads a global before assigning it is an error unless some function assigns it with `^var`.
 
@@ -194,7 +193,7 @@ A name of capital letters, digits and `_` with at least one letter (`MAX_SPEED`,
   `else`, a loop or a `{ }` block. Its scope is the program or that function (also the functions nested in it). A function may define a constant of the
   same name as a global one. A constant cannot be written as `^NAME` or `@NAME` inside a function. Parameters cannot have such names.
 - It is defined once: any second assignment (`NAME = ...`, `NAME += ...`) is an error.
-- The value must be a constant expression: numbers, constants defined above (in this scope or around it), operators (also `?:`), function literals.
+- The value must be a constant expression: numbers, constants defined above (in this scope or around it), operators (also `?!`), function literals.
   Variables and calls are not allowed (`WIDTH = 80`, `AREA = WIDTH * HEIGHT`, `FLAG_B = FLAG_A << 1`, `FACT = \n: =n < 2 ? 1 ! n * FACT(n-1)`).
 - The constants of a scope are created first, in the order written, when the scope is entered (program start, function entry); they can be read
   anywhere in the scope, also above the definition.
@@ -210,7 +209,7 @@ Very deep recursion overflows the 1 MB stack and crashes.
 ## 9. Compile errors and warnings
 `file: error: line N: message`, `file: warning: line N: message`. The texts are fixed by `tests/err_*.ka` and their `.error` files (`.warn` for warnings).
 - *lexical:* `unexpected character '\t'`, `string is not closed`, `bad escape ^q`, `bad unicode escape`, `cannot join '...' and "..." strings`,
-  `comment '--[[' is never closed`, `bad number '1__0'`, `bad hex literal`, `hex literal too large`, `bad binary literal`, `binary literal too large`,
+  `comment '--[[' is never closed`, `bad number '12ab'` (with a hint for `1__0` and `0b101`), `bad hex literal` (`#` and `0x` forms), `hex literal too large`, `bad binary literal`, `binary literal too large`,
   `bad number '1.5abc...'`, `a float needs digits after the dot` / `before the dot`, `float literal too large`, `integer literal too large`.
 - *layout / syntax:* `unexpected indentation`, `inconsistent indentation`, `expected an indented block after ':'`, `'(' is never closed`, `'{' is never closed`,
   `unmatched '}'`, `unmatched ')'`, `expected end of statement, found ...`, `unexpected end of line in expression`, `unexpected 'else'`,
@@ -230,39 +229,6 @@ Very deep recursion overflows the 1 MB stack and crashes.
   `expected a number, found fn()`, `in '?!' (both branches must have the same type, or both be numbers)`, `in the condition of '?'`.
 - *warning:* `the value of this expression is not used`.
 
-## 10. Not in the language (yet)
-- function f(x):y === f=\(x):y. stackless?
-- strings (bytes and unicode) as values;
-- a garbage collector;
-- call syntax: f a; f a,b,c; etc;
-- multi-value assignment, returns;
-- floats: **yet to do:** more float literals (pi-based), `INF` and `NAN` (literals, tests, and `0.0/0.0`-like
-  results are only reachable through overflow now), comparison with tolerance (comparisons are exact for now),
-  (**pragma** tolerance?), output formatting (**pragma** precision? proper formatting: precision, width, layout;
-  the 15-digit format is provisional), explicit conversion int <-> float (`int(x)`, `float(i)`, rounding,
-  floor/ceil), implicit conversion on assignment (strict now), math functions (sqrt, sin, ...);
-- many ints and floats (other sizes), arrays (lists), dictionaries, sets, tuples, enums;
-- big integers;
-- `for` loops;
-- `until cond loop`;
-- `else` on loops;
-- `break 2` or `break break`
-- radix 3..36 literals 3#122 8#377 36#zzz;
-- modules, import;
-- integer overflow detection (as **pragma** intoverflow? other checks as pragmas);
-- named and optional arguments;
-- input (no way to read a value yet);
-- operations on strings (+ etc), numbers (?);
-- standard library:
-  - file system, i/o;
-  - strings;
-  - math;
-  - time, etc;
-- checking that every path of a function returns a value of the declared kind;
-- optimization.
-- if it's not too much work (≈10%), make an option to print out AST. This is rather optional.
-- if it's not too much work (≈10%), make an option to print out Assembler listing. This is VERY optional.
-- like in PL/I, dump vars with their types. Very optional too.
 
 ## 11. Characters (JFYI)
 | char | usage |
@@ -271,7 +237,7 @@ Very deep recursion overflows the 1 MB stack and crashes.
 | ? | conditional `c ? a ! b` |
 | ' | byte string |
 | " | unicode string |
-| # | hex literal `#ff`, binary literal `2#101` |
+| # | hex literal `#ff`, binary literal `2#101`; `# ` comment |
 | / | unary - nothing, float division; /= |
 | % | unary - nothing, modulo; %= |
 | & | unary - nothing, bitwise and, && - logical and; &= &&= |

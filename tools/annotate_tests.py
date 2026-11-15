@@ -32,6 +32,8 @@ def split_comment(line):
       q = c
     elif line.startswith("--", i):
       return i, line[i + 2:].strip()
+    elif line[i] == "#" and line[i + 1:i + 2] in (" ", "") and not (i > 0 and line[i - 1].isdigit()):
+      return i, line[i + 1:].strip()                      # a `# comment`
     i += 1
   return -1, ""
 

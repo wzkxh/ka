@@ -27,9 +27,10 @@ Reasons behind decisions: IMPLEMENTATION.txt. History and state: RELEASE_NOTES.m
 ### Source preparation and lexer
 - No TAB check: the lexer simply has no rule for it (error outside strings/comments).
 - `strip_comments` replaces comments by spaces (newlines kept; line numbers and columns survive). It is string-aware. `--[[ ... ]]--` if the closer is on the same line
-  (and before any `--]]`), else `--[[ ... --]]` blanked to the end of the closing line. Unclosed -> error.
+  (and before any `--]]`), else `--[[ ... --]]` blanked to the end of the closing line. Unclosed -> error. `# ` (hash + space, or hash at the end of a line, not right after a digit) comments to the end of the line;
+  the scan loop for plain text stops at `#` as well as at quotes and `-`.
 - Token = `(kind, value, line)`; kinds `num hex flt id kw str op nl indent dedent eof`. `hex` tokens (also binary literals) carry the value wrapped to signed 64 bit; `flt` carries a
-  Python float; `str` carries `(bytes, 'b'|'u')`. Strings are scanned by hand (`lex_string`). Numbers: `flt` regex first (`digits[.digits][e..]`), else `\d\w*(?:#\w*)?` is taken whole and validated.
+  Python float; `str` carries `(bytes, 'b'|'u')`. Strings are scanned by hand (`lex_string`). Numbers: `flt` regex first (`digits[.digits][e..]`), else `\d\w*(?:#\w*)?` is taken whole and validated: binary `2#...`, hex `0x...` (same `hex` token as `#ff`), decimal; the error message depends on the shape.
 - `nl` is emitted only when the line is finished: not while paren depth > 0, not after a continuation operator (`CONT_OPS`: operators, `op=` forms, `\`, `,`, `?`, `!`).
 - Indentation: spaces only; one indent stack per open `{`; INDENT only if the previous line ended with `:`; a line starting with `}` skips indentation processing.
 - Operators are matched longest first (3-char forms, then 2-char, then single). `^ \ @ ?` are plain `op` tokens; the parser decides (`^`: power vs. global prefix; `\`: function

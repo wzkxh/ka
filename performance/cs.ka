@@ -1,0 +1,23 @@
+-- py 4.979 ka 1.041 (4.8x)
+
+function collatz_steps(n):
+  steps = 0
+  while n > 1:
+    if n % 2 == 0:
+      n = n / 2
+    else:
+      n = 3 * n + 1
+    steps = steps + 1
+  return steps
+
+function main():
+  i = 1
+  max_steps = 0
+  while i < 500000:
+    s = collatz_steps(i)
+    if s > max_steps:
+      max_steps = s
+    i = i + 1
+  print(max_steps) -- 448
+
+main()

@@ -1,0 +1,12 @@
+# a comment line
+x = 1  # a comment after code
+print x            # => 1
+#
+# the line above is an empty comment
+print "# not a comment inside a string"   # => # not a comment inside a string
+print #ff, " ", #FF_FF  # hex literals still work: 255 65535
+y = 2 --[[ both kinds ]]-- # and a hash comment after a block comment
+print x + y        # => 3
+z = 7 -- the two kinds can be mixed  # in one line
+print z            # => 7
+print 2#101        # => 5 (a binary literal: no comment right after a digit)

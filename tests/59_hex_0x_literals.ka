@@ -1,0 +1,6 @@
+print 0xFF, " ", 0XFF, " ", 0xff_ff, " ", 0x0                  -- => 255 255 65535 0
+print 0xFFFFFFFFFFFFFFFF, " ", 0x8000000000000000              -- => -1 -9223372036854775808
+MASK = 0xFFFFFFFFFFFFFFFF                                      # a constant, as in a Python program
+print MASK, " ", 0x7FFFFFFFFFFFFFFF                            -- => -1 9223372036854775807
+print 0xFF & 0x0F, " ", 0xF0 | 0x0F, " ", 0xFF ~ 0x0F          -- => 15 255 240
+print 0x10 + #10 + 2#10                                        -- => 34 (16 + 16 + 2: three spellings of a number)

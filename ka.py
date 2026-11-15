@@ -19,7 +19,7 @@ import struct
 import sys
 
 
-VERSION = "6"                           # see RELEASE_NOTES.md
+VERSION = "6.1"                         # see RELEASE_NOTES.md
 
 
 class CompileError(Exception):
@@ -31,8 +31,9 @@ class CompileError(Exception):
 # ----------------------------------------------------------------------------
 def strip_comments(src):
   """Replace every comment by spaces (newlines are kept, so line numbers stay right).
-    Comments:  -- to end of line;   --[[ ... ]]-- inside one line;
-               --[[ ... --]]  over several lines (the rest of the closing line is ignored)."""
+    Comments:  -- to end of line;   # to end of line (a hash followed by a space or the end of the line, but not right after a
+               digit: `2#` starts a binary literal; #ff is a hex literal);
+               --[[ ... ]]-- inside one line;   --[[ ... --]]  over several lines (the rest of the closing line is ignored)."""
   out, i, n = [], 0, len(src)
 
   def blank(text):
@@ -65,9 +66,14 @@ def strip_comments(src):
           raise CompileError(f"line {line}: comment '--[[' is never closed")
       out.append(blank(src[i:end]))
       i = end
+    elif c == "#" and src[i + 1:i + 2] in (" ", "\n", "") and not (i > 0 and src[i - 1] in "0123456789"):   # `# comment`
+      nl = src.find("\n", i)
+      end = n if nl == -1 else nl
+      out.append(blank(src[i:end]))
+      i = end
     else:
       j = i
-      while j < n and src[j] not in "\"'-":
+      while j < n and src[j] not in "\"'-#":
         j += 1
       if j == i:
         j = i + 1
@@ -221,9 +227,21 @@ def tokenize(src):
       if v >= 2 ** 64:
         raise CompileError(f"line {line}: binary literal too large")
       toks.append(("hex", v - 2 ** 64 if v >= 2 ** 63 else v, line))     # (same token kind as #hex: already wrapped)
+    elif kind == "num" and text[:2] in ("0x", "0X"):    # hexadecimal literal 0xFF (the same as #FF)
+      if not re.fullmatch(r"0[xX][0-9a-fA-F]+(_[0-9a-fA-F]+)*", text):
+        raise CompileError(f"line {line}: bad hex literal '{text}' (the form is 0xFF or 0xFF_FF)")
+      v = int(text[2:].replace("_", ""), 16)
+      if v >= 2 ** 64:
+        raise CompileError(f"line {line}: hex literal too large")
+      toks.append(("hex", v - 2 ** 64 if v >= 2 ** 63 else v, line))
     elif kind == "num":
       if not re.fullmatch(r"\d+(_\d+)*", text):
-        raise CompileError(f"line {line}: bad number '{text}' ('_' is allowed only between digits)")
+        hint = ""
+        if "_" in text:
+          hint = " ('_' is allowed only between digits)"
+        elif re.fullmatch(r"0[bB][01]+", text):
+          hint = f" (binary literals are written 2#{text[2:]})"
+        raise CompileError(f"line {line}: bad number '{text}'{hint}")
       if pos < n and src[pos] == ".":
         raise CompileError(f"line {line}: bad number '{text}.' (a float needs digits after the dot: {text}.0)")
       toks.append(("num", int(text.replace("_", "")), line))

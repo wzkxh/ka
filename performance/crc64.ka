@@ -1,0 +1,30 @@
+MASK = #FFFFFFFFFFFFFFFF
+POLY = #42F0E1EBA9EA3693          -- CRC-64 (ECMA)
+
+\ crc64_update(crc,value):
+  -- Feed one 64-bit value into the CRC (bit by bit).
+  crc = (crc~value) & MASK
+  i = 0
+  while i < 64:
+    if (crc & #8000000000000000) != 0:
+      crc = ((crc << 1) ~ POLY) & MASK
+    else:
+      crc = (crc << 1) & MASK
+    i = i + 1
+  return crc
+
+\ checksum(n):
+  -- CRC-64 of the integers 0 .. n-1.
+  crc = 0
+  i = 0
+  while i < n:
+    crc = crc64_update(crc,i)
+    i = i + 1
+  return crc
+
+\ main():
+  n = 500_000     -- raise this for longer benchmarks
+  h = checksum(n)
+  print h>>1      -- 6380114920827571293 5.235 0.325 (16.1x)
+
+main()

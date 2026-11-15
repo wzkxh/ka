@@ -1,0 +1,31 @@
+function mandelbrot_point(cr,ci):
+  zr = 0.0
+  zi = 0.0
+  n = 0
+  while n < 1000:
+    zr2 = zr * zr
+    zi2 = zi * zi
+    if zr2 + zi2 > 4.0:
+      return n
+    zi = 2.0 * zr * zi + ci
+    zr = zr2 - zi2 + cr
+    n = n + 1
+  return n
+
+
+function main():
+  total_score = 0
+  width = 400
+  height = 400
+  y = 0
+  while y < height:
+    ci = -1.0 + y * (2.0 / height)
+    x = 0
+    while x < width:
+      cr = -2.0 + x * (3.0 / width)
+      total_score = total_score + mandelbrot_point(cr,ci)
+      x = x + 1
+    y = y + 1
+  print(total_score) -- 41300170 4.687 0.427 (11x)
+
+main()
