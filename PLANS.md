@@ -41,8 +41,9 @@
 - if it's not too much work (≈10%), make an option to print out Assembler listing. This is VERY optional;
 - like in PL/I, dump vars with their types. Very optional too;
 - ops:
+
 | ch | unary | binary | others |
-|---|---|---|
+|---|---|---|---|
 | !  | not              | ?!          |                                 |
 | ?  | random?          | ?!          |                                 |
 | \\ | function         | int div     |                                 |
