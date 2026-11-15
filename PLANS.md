@@ -62,4 +62,7 @@
 | ;  |                  | statements  |                                 |
 | ^  | global var       | power       |                                 |
 | @  | upper-level var  |             |                                 |
+| \` |                  |             |                                 |
+| $  |                  |             |                                 |
+| .  |                  | floats      |                                 |
 
