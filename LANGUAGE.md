@@ -6,8 +6,8 @@ This file defines the language; the reasons behind the decisions are in IMPLEMEN
 
 ## 1. Lexical structure
 - Source is UTF-8 text. Line endings `\n` or `\r\n`.
-- TAB is like any other control character (e.g. BEL, ESC, HT): text inside strings and comments, `unexpected character` anywhere else
-  (like `$` or ESC). Indentation consists of spaces only.
+- TAB is like any other control (e.g. BEL, ESC, HT) or unexpected (`$`,`½`,`∞`) character: text inside strings and comments,
+  `unexpected character` anywhere else. Indentation consists of spaces only.
 - **Comments:**
   - `--` to the end of the line.
   - `# ` to the end of the line: a hash followed by a space or by the end of the line, but not directly after a digit (`2#` starts a binary literal).
@@ -230,7 +230,7 @@ Very deep recursion overflows the 1 MB stack and crashes.
 - *warning:* `the value of this expression is not used`.
 
 
-## 11. Characters (JFYI)
+## 10. Characters (JFYI)
 | char | usage |
 |---|---|
 | ! | unary not, conditional ops, != - not equal |
