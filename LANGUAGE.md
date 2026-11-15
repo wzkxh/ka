@@ -37,6 +37,7 @@ This file defines the language; the reasons behind the decisions are in IMPLEMEN
   - Output is written as UTF-8 bytes; the program sets the console code page to UTF-8 at start.
 - **Operators / punctuation:** `+ - * / \ % ^ & | ~ << >> +> <* *> == != < <= > >= && || ! ? = ( ) { } ; , : @`
   and the assignment forms `= += -= *= /= \= %= ^= &= |= ~= &&= ||= <<= >>= +>= <*= *>=`.
+- *Note*: # comments and 0x literals are used only for better migration from other languages and are discouraged.
 
 ## 2. Values and types
 Three types:
@@ -74,8 +75,8 @@ Types are checked at compile time, never written, and inferred:
 
 ## 4. Blocks
 A block follows `if cond`, `elif cond`, `else`, `while cond`, `function name(...)`, `function(...)`. Three forms:
-1. **Braces** `{ ... }`; layout is free; the `{` may be on the next line.
-2. **Indented:** `:` at the end of the line and more-indented lines. The block ends when the indentation returns. Extra indentation
+1. **Braces** `{ ... }`; layout is free; the `{` may be on the next line. These blocks are mainly for usage in one line.
+2. **Indented:** (like Python) `:` at the end of the line and more-indented lines. The block ends when the indentation returns. Extra indentation
    after a line not ending in `:` and a dedent to an unknown column are errors.
 3. **One-line:** `:` followed by statements on the same line, up to the end of the line or to a closing `)`, `}` or `,` of an enclosing construct.
    `if a: b; c` is `if a {b; c}`. `else` and `elif` may follow on the same line. One-line bodies nest:
