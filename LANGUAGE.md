@@ -1,7 +1,7 @@
 # Ka - language reference
 
 Ka is a small imperative language with 64-bit integers and floats, first-class functions and closures, checked by static types.
-`ka.py` compiles a `.ka` source file into a Windows x64 console `.exe`.
+`ka.py` compiles a `.ka` source file into a Windows x64 console `.exe` (the version is the `VERSION` constant at the top of `ka.py`).
 This file defines the language; the reasons behind the decisions are in IMPLEMENTATION.txt, the history in RELEASE_NOTES.md.
 
 ## 1. Lexical structure
@@ -35,9 +35,10 @@ This file defines the language; the reasons behind the decisions are in IMPLEMEN
     (`print ("one" NEWLINE "two")`) or with a line ending in `,`. `'...'` and `"..."` cannot be joined.
   - Strings exist only as items of `print`.
   - Output is written as UTF-8 bytes; the program sets the console code page to UTF-8 at start.
+- **Compatibility forms:** `# ` comments and `0x` hex literals exist only to ease the migration of existing sources and programs from other languages, and for the
+  ease of copying code and constants between them. They are not Ka style and are discouraged in new programs: write `--` comments and `#ff` / `2#...` literals.
 - **Operators / punctuation:** `+ - * / \ % ^ & | ~ << >> +> <* *> == != < <= > >= && || ! ? = ( ) { } ; , : @`
   and the assignment forms `= += -= *= /= \= %= ^= &= |= ~= &&= ||= <<= >>= +>= <*= *>=`.
-- *Note*: # comments and 0x literals are used only for better migration from other languages and are discouraged.
 
 ## 2. Values and types
 Three types:
@@ -111,11 +112,11 @@ Precedence, highest to lowest; binary operators are left-associative except `^`:
 | 1 | `c ? a ! b` conditional (right-associative) |
 
 - `&&` and `||` short-circuit and give 0 or 1.
-- **Division:** `a / b` is float division, always a float (ints are converted). `a \ b` is integer division, always an int: for ints it truncates
-  toward zero; if an operand is a float the result is `trunc((a - fmod(a, b)) / b)` converted to int (`7.5 \ 2` is 3, `-7.5 \ 2` is -3);
-  a result outside the int range is the smallest int. `%`: int `%` has the sign of the left operand (`-7 % 3` is -1);
-  float `%` is C `fmod` (exact, sign of the left operand). Division or modulo by zero (also `0.0`, `-0.0`) is a runtime error for ints and floats.
-  `-9223372036854775808 \ -1` raises a hardware exception.
+- **Division and modulo are mathematical (floored).** `a / b` is float division, always a float (ints are converted). `a \ b` is integer division:
+  `a \ b` is floor(a / b), it rounds toward minus infinity and is always an int. `a % b` has the sign of `b` (it is 0 if `b` divides `a`) and `|a % b| < |b|`.
+  For ints always `a \ b * b + a % b == a`.
+  Floats follow the same definitions (the identity holds for floats up to rounding: `(-7 \ 3.2) * 3.2 + -7 % 3.2` is `-7.000000000000001`.
+  Division or modulo by zero (also `0.0`, `-0.0`) is a runtime error for ints and floats. `-9223372036854775808 \ -1` raises a hardware exception.
 - **Float arithmetic** is IEEE 754 double arithmetic; too large results become `inf`/`-inf`, `inf - inf` is `nan`. Float comparisons are exact;
   a comparison with NaN is false except `!=`.
 - **Power** `a ^ b`: int ^ int is an int (wraps); a negative exponent is a runtime error. If an operand is a float the result is a float:
@@ -136,8 +137,7 @@ Precedence, highest to lowest; binary operators are left-associative except `^`:
 ## 6. Statements
 | statement | meaning |
 |---|---|
-| `name = expr` | assign (creates the variable) |
-| `^name = expr`, `@name = expr` | assign a global / an enclosing function's variable (see 7) |
+| `name = expr`, `^name = expr`, `@name = expr` | assign, creates a variable / a global / an enclosing function's variable (see 7) |
 | `name op= expr` | `name = name op expr` for `+ - * / \ % ^ & \| ~ && \|\| << >> +> <* *>`; `&&=` and `\|\|=` short-circuit; also `^name op= expr`, `@name op= expr` |
 | `print a, b, "text", ...` | print the items one after another, then a newline; `print` alone prints an empty line. Items are numbers or string literals |
 | `if cond block [elif cond block]... [else block]` | conditional (`else if` also works) |
@@ -240,7 +240,7 @@ Very deep recursion overflows the 1 MB stack and crashes.
 | " | unicode string |
 | # | hex literal `#ff`, binary literal `2#101`; `# ` comment |
 | / | unary - nothing, float division; /= |
-| % | unary - nothing, modulo; %= |
+| % | unary - nothing, modulo (floored); %= |
 | & | unary - nothing, bitwise and, && - logical and; &= &&= |
 | \| | unary - nothing, bitwise or, \|\| - logical or; \|= \|\|= |
 | ~ | bitwise not, xor; ~= |

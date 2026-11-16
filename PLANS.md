@@ -1,7 +1,7 @@
 ## Not in the language (yet)
 - `f(1)` and `f(1.5)` cannot both be called in this order, but the reverse is ok: convert int to float.
 - function f(x):y === f=\(x):y. stackless?
-- strings (bytes and unicode) as values; then with ops (|x x+y x*n n*x etc)
+- strings (bytes and unicode) as values; then with ops (|x x+y x*n n*x etc); short strings 0-7 chars kept in 64-bit words;
 - a garbage collector;
 - call syntax: f a; f a,b,c; etc;
 - multi-value assignment, returns;
@@ -46,23 +46,23 @@
 |---|---|---|---|
 | !  | not              | ?!          |                                 |
 | ?  | random?          | ?!          |                                 |
-| \\ | function         | int div     |                                 |
-| /  |                  | float div   |                                 |
-| %  |                  | modulo      |                                 |
-| &  |                  | bitwise and | && logical and                  |
-| \| | abs, len?        | bitwise or  | \|\| logical or                 |
-| ~  | bitwise not      | bitwise xor |                                 |
-| *  | scatter?         | multiply    |                                 |
-| +  | identity, upper? | plus        |                                 |
+| \\ | function         | int div, drop?      |                         |
+| /  | strip?           | float div, take?    |                         |
+| %  |                  | modulo, split?      |                         |
+| \| | abs, len?        | bitwise or, cut?       | \|\| logical or      |
+| &  |                  | bitwise and, contains? | && logical and       |
+| ~  | bitwise not      | bitwise xor, match? |                         |
+| *  | scatter?         | multiply, repeat    |                         |
+| +  | identity, upper? | plus, concat        |                         |
 | -  | negate,   lower? | minus       |                                 |
 | <  |                  | less        | << shift left   <\* rotate left |
 | >  |                  | greater     | >> shift right  \*> +> ...      |
 | =  | return           | assignment  | == equal                        |
 | :  |                  | block       |                                 |
 | ;  |                  | statements  |                                 |
-| ^  | global var       | power       |                                 |
-| @  | upper-level var  |             |                                 |
+| ^  | global var       | power       |   ..starts with                 |
+| @  | upper-level var  | char-at     |                                 |
 | \` |                  |             |                                 |
-| $  |                  |             |                                 |
+| $  |                  |             |   ..ends with                   |
 | .  |                  | floats      |                                 |
 

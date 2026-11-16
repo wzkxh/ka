@@ -12,7 +12,7 @@ Reasons behind decisions: IMPLEMENTATION.txt. History and state: RELEASE_NOTES.m
 - **Document split:** LANGUAGE.md = short exact definition, no "why". IMPLEMENTATION.txt = decisions, reasons, alternatives, issues. NOTES.md = this file, how the
   code works. RELEASE_NOTES.md = versions, newest first, with the current state. TODO.txt = the user's list of what to do next (clear it when done).
   README.md = what the files are and how to run.
-- **Version:** `VERSION` in `ka.py` (`ka.py --version`). Bump it for every delivery to the user and add an entry on top of RELEASE_NOTES.md.
+- **Version:** the `VERSION` constant in `ka.py` (no command line option for it, the user asked for none). Bump it for every delivery to the user and add an entry on top of RELEASE_NOTES.md.
 - **Style:** 2 spaces per indentation level in `.py` and `.ka` files (also continuation lines). Tests carry `-- =>` comments with the result of a statement
   (`python tools/annotate_tests.py [names] [--whole-output]` adds them from the real behaviour; read the result critically) and `-- ERROR: ...` at the failing line of `err_*` tests.
 - Expected outputs are derived by hand or by an independent reference (Python), not copied from the compiler: a wrong expectation was found several times.
@@ -74,7 +74,10 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
   scratch (xmm0-xmm2 for floats); runtime routines may clobber rcx, rdx, r8-r11, rsi, rdi, rbx, r12-r15, rax, xmm0-xmm3 and preserve rbp/rsp. No value stays in a register across a call.
 - `CodeGen.tk(e)` gives the type of a node (`int`/`float`/`fn`; unknown = int). Float arithmetic: `load_xmm` (movq for floats, cvtsi2sd for ints), `addsd` ... ; `/` and `%` and `\` check the divisor bits
   (`shl 1` ignores the sign) and jump to `rt_divzero`. `fcmp_false(op, label)` compares with `ucomisd` (nan-correct); `test_rax(kind)` is the truth test (floats: `shl rcx,1`).
-  Float `\`: `movapd xmm2,xmm0; call rt_fmod; subsd xmm2,xmm0; divsd xmm2,xmm1; cvttsd2si rax,xmm2`. Int `\` and `%`: `cqo; idiv`.
+  Int `\` and `%` are floored: `cqo; idiv`, then if the remainder is not 0 and its sign differs from the divisor's (`xor` of the two, `jns`), `dec rax` (for `\`) or `add rdx,rcx` (for `%`).
+  Float `%`: `call rt_fmodfloor` (in `runtime()`: calls `rt_fmod`, then adds `y` if the remainder is not 0 and its sign differs from `y`'s; a zero becomes +0.0; returns the plain fmod in xmm4 and a 0/1
+  flag in edx). Float `\`: `movapd xmm2,xmm0; call rt_fmodfloor; subsd xmm2,xmm4; divsd xmm2,xmm1; cvtsd2si rax,xmm2; sub rax,rdx`. The division result is only nearly an integer (`a - fmod` can be rounded:
+  13276.999999999998), so it is rounded to nearest (`cvtsd2si`), not truncated.
 - Shifts: count `< 0` -> negate and use the opposite shift; `> 63` (unsigned compare) -> 0 (`+>`: sign fill; negative: 0); rotates: `rol/ror rax,cl` (count modulo 64 by the hardware).
 - Chained comparison: the previous operand lives at `[rsp]`; each link jumps to a fail label (`FAIL_CC`, or `fcmp_false` for floats). Int power: square-and-multiply loop inline.
 - Runtime routines (`rt_print_str`, `rt_print_int`, `rt_print_float`, `rt_alloc`, `rt_divzero`, `rt_notfn`, `rt_negexp`, `rt_badpow`) set up their own aligned frame; `exit_process` aligns too.

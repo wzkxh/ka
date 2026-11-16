@@ -19,7 +19,7 @@ import struct
 import sys
 
 
-VERSION = "6.1"                         # see RELEASE_NOTES.md
+VERSION = "6.2"                         # see RELEASE_NOTES.md
 
 
 class CompileError(Exception):
@@ -1772,7 +1772,7 @@ class CodeGen(Resolver):
           if op == "/":
             a.emit(0xF2, 0x0F, 0x5E, 0xC1)           # divsd xmm0,xmm1
           else:
-            a.call("rt_fmod")
+            a.call("rt_fmodfloor")                   # the remainder has the sign of the divisor
         else:                                        # power
           ok = a.new_label("fp_ok")
           a.call("rt_fpow")
@@ -1783,7 +1783,7 @@ class CodeGen(Resolver):
           a.jmp("rt_badpow")
           a.label(ok)
         a.emit(0x66, 0x48, 0x0F, 0x7E, 0xC0)         # movq rax,xmm0
-      elif op == "\\" and "float" in (tl, tr):         # integer division of floats: trunc((a - fmod(a, b)) / b)
+      elif op == "\\" and "float" in (tl, tr):         # integer division of floats: floor(a / b) = (a - fmod(a, b)) / b, one less if the remainder was floored
         self.load_xmm(0, 0, tl)
         self.load_xmm(1, 1, tr)
         if tr == "float":
@@ -1791,11 +1791,12 @@ class CodeGen(Resolver):
         else:
           a.emit(0x48, 0x85, 0xC9)                     # test rcx,rcx
         a.jcc(4, "rt_divzero")
-        a.emit(0x66, 0x0F, 0x28, 0xD0)                 # movapd xmm2,xmm0
-        a.call("rt_fmod")                              # xmm0 = fmod(a, b); xmm1 and xmm2 are kept
-        a.emit(0xF2, 0x0F, 0x5C, 0xD0)                 # subsd xmm2,xmm0
-        a.emit(0xF2, 0x0F, 0x5E, 0xD1)                 # divsd xmm2,xmm1
-        a.emit(0xF2, 0x48, 0x0F, 0x2C, 0xC2)           # cvttsd2si rax,xmm2
+        a.emit(0x66, 0x0F, 0x28, 0xD0)                 # movapd xmm2,xmm0   (a)
+        a.call("rt_fmodfloor")                         # xmm4 = fmod(a, b), edx = 1 if the floored remainder differs; xmm1, xmm2 are kept
+        a.emit(0xF2, 0x0F, 0x5C, 0xD4)                 # subsd xmm2,xmm4
+        a.emit(0xF2, 0x0F, 0x5E, 0xD1)                 # divsd xmm2,xmm1    (the quotient toward zero; a - fmod may be rounded, so it can be 13276.999999999998)
+        a.emit(0xF2, 0x48, 0x0F, 0x2D, 0xC2)           # cvtsd2si rax,xmm2  (round to the nearest integer, not toward zero)
+        a.emit(0x48, 0x29, 0xD0)                       # sub rax,rdx        (floor)
       elif op in CMP_SETCC and "float" in (tl, tr):    # comparison with a float: both sides as float, exactly
         lf, le = a.new_label("fc_f"), a.new_label("fc_e")
         self.load_xmm(0, 0, tl)
@@ -1863,7 +1864,18 @@ class CodeGen(Resolver):
       elif op in ("\\", "%"):
         a.emit(0x48, 0x85, 0xC9)                     # test rcx,rcx
         a.jcc(4, "rt_divzero")
-        a.emit(0x48, 0x99, 0x48, 0xF7, 0xF9)         # cqo; idiv rcx
+        a.emit(0x48, 0x99, 0x48, 0xF7, 0xF9)         # cqo; idiv rcx   (rax = quotient toward zero, rdx = remainder with the sign of the dividend)
+        lf = a.new_label("fl_ok")                    # floor: if the remainder is not 0 and has the other sign than the divisor,
+        a.emit(0x48, 0x85, 0xD2)                     # the quotient is one less and the remainder is bigger by the divisor
+        a.jcc(4, lf)                                 # test rdx,rdx; jz
+        a.emit(0x49, 0x89, 0xD0)                     # mov r8,rdx
+        a.emit(0x49, 0x31, 0xC8)                     # xor r8,rcx   (the sign bit tells whether the signs differ)
+        a.jcc(9, lf)                                 # jns
+        if op == "\\":
+          a.emit(0x48, 0xFF, 0xC8)                   # dec rax
+        else:
+          a.emit(0x48, 0x01, 0xCA)                   # add rdx,rcx
+        a.label(lf)
         if op == "%":
           a.emit(0x48, 0x89, 0xD0)                 # mov rax,rdx
       else:
@@ -2058,6 +2070,29 @@ class CodeGen(Resolver):
       a.label(name)
       a.emit(blob)
 
+    # rt_fmodfloor: xmm0 = x, xmm1 = y (not 0)  ->  xmm0 = x mod y with the sign of y (floored; a zero result is +0.0),
+    # xmm4 = fmod(x, y) (sign of x), edx = 1 if the floored remainder differs from fmod. Keeps xmm1, xmm2; clobbers xmm3, rax, rcx.
+    a.label("rt_fmodfloor")
+    done, zero = a.new_label("fm_done"), a.new_label("fm_zero")
+    a.call("rt_fmod")
+    a.emit(0x66, 0x0F, 0x28, 0xE0)                       # movapd xmm4,xmm0
+    a.emit(0x31, 0xD2)                                   # xor edx,edx
+    a.emit(0x66, 0x0F, 0x57, 0xDB)                       # xorpd xmm3,xmm3
+    a.emit(0x66, 0x0F, 0x2E, 0xC3)                       # ucomisd xmm0,xmm3
+    a.jcc(0xA, done)                                     # jp   (nan)
+    a.jcc(4, zero)                                       # je   (remainder 0)
+    a.emit(0x66, 0x48, 0x0F, 0x7E, 0xC0)                 # movq rax,xmm0
+    a.emit(0x66, 0x48, 0x0F, 0x7E, 0xC9)                 # movq rcx,xmm1
+    a.emit(0x48, 0x31, 0xC8)                             # xor rax,rcx   (do the signs differ?)
+    a.jcc(9, done)                                       # jns
+    a.emit(0xF2, 0x0F, 0x58, 0xC1)                       # addsd xmm0,xmm1
+    a.emit(0xBA, 1, 0, 0, 0)                             # mov edx,1
+    a.jmp(done)
+    a.label(zero)
+    a.emit(0x66, 0x0F, 0x57, 0xC0)                       # xorpd xmm0,xmm0   (+0.0)
+    a.label(done)
+    a.emit(0xC3)                                         # ret
+
 
 # ----------------------------------------------------------------------------
 # PE32+ writer
@@ -2181,7 +2216,6 @@ def compile_source(src, warnings=None):
 
 def main():
   ap = argparse.ArgumentParser(description="Compile a Ka program to a Windows x64 .exe")
-  ap.add_argument("--version", action="version", version=f"ka {VERSION}")
   ap.add_argument("source")
   ap.add_argument("-o", "--output")
   args = ap.parse_args()

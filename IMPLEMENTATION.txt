@@ -24,6 +24,8 @@ Comments: `--`, `--[[ ... ]]--` (inside one line), `--[[ ... --]]` (several line
   The user: hash followed by a space cannot occur anywhere else, so `#` can be overloaded; it makes Python-style comments usable. I also accept `#` at the end of a line (an empty comment line,
   editors strip trailing spaces) but never a `#` directly after a digit: `2#` is the start of a binary literal and `x = 2#` must stay an error instead of silently becoming `x = 2`.
   `1# comment` (glued to a number) is therefore an error. Hex literals `#ff` do not clash: the character after the hash is not a space.
+  Wording (user, version 6.2): `# ` comments and `0x` literals are compatibility forms. They exist to ease the migration of existing programs and for copying code and constants
+  between Ka and other languages (Python files above all); they are discouraged in new Ka programs, which should use `--` and `#ff` / `2#...`. The reference says so.
   The user asked for the inside-line form to stay on one line and said the rules were a minor issue. strip_comments() blanks comments before
   the lexer so that line numbers and columns stay right.
 TAB: no special treatment (user decision, version 3). It is a character like ESC or `$`: text inside strings/comments, `unexpected character`
@@ -86,10 +88,17 @@ Shifts (user's spelling and rules):
 Compound assignment `x op= e` is sugar for `x = x op e` done in the parser (`&&=`/`||=` become and/or nodes, so they short-circuit). Targets `name`, `^name`, `@name`.
   A consequence of the type rules: `x /= 2` on an int variable is an error since `/` gives a float; use `\=`.
 Division (version 6, user): `/` is always float division, `\` always integer division. Before version 6 `/` truncated for ints and gave a float for floats,
-  so the result type depended on the operand types; two operators make the type of each operation fixed. Int `\` truncates toward zero (as the old `/`).
-  A float `\` is computed as trunc((a - fmod(a, b)) / b): a - fmod(a, b) is exactly a multiple of b, so the division is exact and there is no rounding
-  trouble at integer boundaries. A quotient outside the int range gives the smallest int (what the hardware conversion returns); making that an error
-  would need a new message and a check, and explicit conversions are on the wish list anyway.
+  so the result type depended on the operand types; two operators make the type of each operation fixed.
+Floored division and modulo (version 6.2, user: "let's do it mathematically"): `a \ b` = floor(a / b) (rounds toward minus infinity), `a % b` has the sign of `b`,
+  and `a \ b * b + a % b == a` always holds for ints (for floats up to rounding, as in J and Python: (-7 \ 3.2) * 3.2 + -7 % 3.2 is -7.000000000000001); `7 % 3 == 1` and `-7 % 3 == 2` because 7 - 1 and -7 - 2 are divisible by 3. Versions 6 and 6.1 truncated toward zero (C and the
+  machine instruction idiv): then `-7 % 3 == -1`, and a remainder can be negative for a positive divisor, which is rarely what a modulo is used for (indexes, wrapping, ranges).
+  This is also what Python does, so numbers agree with it. Implementation: the machine division truncates; the result is corrected when the remainder is not 0 and its sign differs from
+  the divisor's: the quotient becomes one less, the remainder bigger by the divisor. For floats the same correction is applied to the exact C-style fmod remainder
+  (rt_fmodfloor); a zero remainder is returned as +0.0 (the sign of a zero would only be noise). Float `\` = (a - fmod(a, b)) / b minus one when the remainder was corrected,
+  rounded to the nearest integer: a - fmod(a, b) is mathematically a multiple of b, but the subtraction itself can round, so the quotient may come out as 13276.999999999998;
+  truncating it (versions 6 and 6.1 did) gave 13276 instead of 13277 in rare cases. A quotient outside the int range gives the smallest int (what the hardware conversion returns);
+  making that an error would need a new message and a check, and explicit conversions are on the wish list anyway. Above 2^53 the float quotient is not exact.
+  The tests check the identity for all pairs of small ranges, and a randomised comparison with Python's // and % (3000 cases, ints and floats) found no difference.
 
 
 5. Types and the checker
@@ -120,7 +129,7 @@ Division (version 6, user): `/` is always float division, `\` always integer div
 - Zero divisor: float `/`, `%`, `\` by zero (also -0.0) is a runtime error, like ints. IEEE would give inf/nan; there are no INF/NAN literals yet,
   so the error keeps them out of normal programs. Overflow still produces inf, `inf - inf` is nan; they print as `inf`, `-inf`, `nan`.
   Comparisons are exact (user: "let it be precise for now"); with NaN everything is false except `!=`. Tolerance is on the wish list.
-- `%` on floats is C fmod (sign of the left operand, like int `%`). It is implemented as an exact integer shift-and-subtract algorithm (the musl algorithm)
+- `%` on floats is floored (sign of the divisor, see section 4); its core is C fmod, implemented as an exact integer shift-and-subtract algorithm (the musl algorithm)
   instead of x87 `fprem`, because the emulator (QEMU) emulates fprem approximately and the tests would then depend on emulator quality.
 - `^` on floats: integer-valued exponent: x87 square-and-multiply in extended precision, rounded once (any base, negative exponents give 1/x^n).
   Fractional exponent: x87 fyl2x / f2xm1 / fscale, base must be positive (a negative base is a runtime error with its own message). 0^negative is division by zero.

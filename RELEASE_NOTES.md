@@ -1,12 +1,20 @@
 # Ka - release notes (newest first)
 
-## Current state (version 6.1)
-Ka compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3, no dependencies). Run `python ka.py --version`.
+## Current state (version 6.2)
+Ka compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3, no dependencies). The version is the `VERSION` constant in `ka.py`.
 - **Language:** 64-bit ints and floats, first-class functions and closures (shared by reference, never freed), static type inference, constants, byte/unicode string literals for `print`.
   Details: LANGUAGE.md. Reasons: IMPLEMENTATION.txt.
-- **Tests:** 190 programs in `tests/` (all pass under the emulator on Linux; the user runs them on real Windows). Every test has `-- =>` result comments.
-- **Checked on real Windows by the user:** all tests of versions 3, 4, 5 passed (169 tests) and version 6 (181 tests). Version 6.1 has been run in the emulator only so far.
+- **Tests:** 191 programs in `tests/` (all pass under the emulator on Linux; the user runs them on real Windows). Every test has `-- =>` result comments.
+- **Checked on real Windows by the user:** all tests of version 6.2 (191 tests) passed.
 - **Known limits:** see IMPLEMENTATION.txt section 9 (float printing last digit, fractional float powers checked only in an emulator, no strings as values, no input, no GC).
+
+## Version 6.2
+- **Floored division and modulo (incompatible for negative operands):** `a \ b` is floor(a / b) (toward minus infinity) and `a % b` has the sign of `b`, for ints and floats, so `-7 \ 3` is -3,
+  `-7 % 3` is 2, `7 % -3` is -2, and `a \ b * b + a % b == a` holds for ints (for floats up to rounding). Before, both truncated toward zero (`-7 % 3` was -1). A zero float remainder is `+0.0`.
+- **Fixed: float `\` was off by one in rare cases** (the intermediate quotient was truncated instead of rounded; versions 6 and 6.1: `6049232.4789095735 \ 455.61461813570327` gave 13276, the right answer is 13277).
+- `# ` comments and `0x` literals are documented as compatibility forms (for migrating and copying from other languages), discouraged in new programs.
+- `ka.py --version` removed (the `VERSION` constant is enough).
+- 1 new test (191 total); the expectations of 3 tests with negative operands changed (02, 48, 56).
 
 ## Version 6.1
 - **Hex literals `0xFF`** (also `0XFF`, `0xFF_FF`) in addition to `#FF`; 64 bits, wrap to signed (`0xFFFFFFFFFFFFFFFF` is -1).
