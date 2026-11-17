@@ -1,7 +1,7 @@
 # NOTES for Claude (working notes on the Ka compiler)
 
 Read this first in every new session, then LANGUAGE.md (the language), then skim `ka.py`.
-Reasons behind decisions: IMPLEMENTATION.txt. History and state: RELEASE_NOTES.md. What to do now: TODO.txt.
+Reasons behind decisions: IMPLEMENTATION.txt. History and state: RELEASE_NOTES.md. Plans of the owner: PLANS.md; the next tasks are given in the chat.
 (The language was called "Tiny" with extension `.tiny` until version 2, when it became Ka / `.ka`.)
 
 ## 0. Working agreement and rules for the files
@@ -10,11 +10,11 @@ Reasons behind decisions: IMPLEMENTATION.txt. History and state: RELEASE_NOTES.m
 - The compiler stays a single file, pure Python 3, no dependencies, emitting the PE itself.
 - Every language change = `ka.py` + `LANGUAGE.md` + tests, and a line in `RELEASE_NOTES.md`; decisions and their reasons go to `IMPLEMENTATION.txt`.
 - **Document split:** LANGUAGE.md = short exact definition, no "why". IMPLEMENTATION.txt = decisions, reasons, alternatives, issues. NOTES.md = this file, how the
-  code works. RELEASE_NOTES.md = versions, newest first, with the current state. TODO.txt = the user's list of what to do next (clear it when done).
+  code works. RELEASE_NOTES.md = versions, newest first, with the current state. PLANS.md = the owner's list of plans and ideas (the user maintains it; the next tasks come in the chat).
   README.md = what the files are and how to run.
 - **Version:** the `VERSION` constant in `ka.py` (no command line option for it, the user asked for none). Bump it for every delivery to the user and add an entry on top of RELEASE_NOTES.md.
 - **Style:** 2 spaces per indentation level in `.py` and `.ka` files (also continuation lines). Tests carry `-- =>` comments with the result of a statement
-  (`python tools/annotate_tests.py [names] [--whole-output]` adds them from the real behaviour; read the result critically) and `-- ERROR: ...` at the failing line of `err_*` tests.
+  (`python tools/annotate_tests.py [names] [--whole-output]` adds them from the real behaviour, `--check` verifies that the existing ones still tell the truth: run it after a change of behaviour; read the result critically) and `-- ERROR: ...` at the failing line of `err_*` tests.
 - Expected outputs are derived by hand or by an independent reference (Python), not copied from the compiler: a wrong expectation was found several times.
 - The user thinks in small steps, wants "as simple as you can", accepts pragmatic limits and says what may be skipped. Ask before big redesigns; do the whole job of a
   requested feature (parser, checker, codegen, docs, tests). Keep answers short: what changed, notable behaviour/limits, open questions, how it was verified.
@@ -100,12 +100,12 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
   inside strings is fine). Strings 0..4 are reserved for the runtime (newline, division by zero, unset function, negative exponent, bad power).
 
 ## 2. Testing and tools
-- `python run_tests.py [-k name] [-v] [--emu] [--keep]`; file conventions in the header of run_tests.py (`NAME.ka/.expected/.exit/.warn`, `err_NAME.ka/.error`). Output is compared as raw bytes.
+- `python run_tests.py [-k name] [-v] [--emu] [--keep]`; the programs are `tests/NAME.ka`, what they must give is in `tests/results/` (`NAME.expected/.exit/.warn`, `err_NAME.error`); see the header of run_tests.py. Output is compared as raw bytes.
 - The emulator fakes kernel32 and asserts 16-byte stack alignment at every API call. It starts with a 64-bit x87 precision (real Windows: 53); QEMU's x87 transcendental functions are only ~4e-15 accurate.
 - When adding a feature add tests for normal use, interaction with blocks/continuation lines, error messages, and a regression for every bug found. Write `-- =>` comments (or run tools/annotate_tests.py).
 - `tools/fuzz_float.py [count]` checks the float routines; `tools/annotate_tests.py` adds result comments; `tools/build_float_rt.py` rebuilds the float runtime.
 
 ## 3. Session checklist
-1. The user uploads the zip/folder. Unzip; read NOTES.md, TODO.txt, RELEASE_NOTES.md, LANGUAGE.md; `pip install unicorn pefile keystone-engine`; run `python run_tests.py --emu`.
+1. The user uploads the zip/folder. Unzip; read NOTES.md, RELEASE_NOTES.md, LANGUAGE.md, PLANS.md; `pip install unicorn pefile keystone-engine`; run `python run_tests.py --emu`.
 2. Implement the requested changes; run all tests; add/adjust tests (with comments) and docs (see 0); bump `VERSION`.
 3. Re-zip (`ka.zip`), present it, summarise what to check on Windows and any open question.

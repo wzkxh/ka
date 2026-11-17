@@ -1,7 +1,7 @@
 ## Not in the language (yet)
 - `f(1)` and `f(1.5)` cannot both be called in this order, but the reverse is ok: convert int to float.
-- function f(x):y === f=\(x):y. stackless?
-- strings (bytes and unicode) as values; then with ops (|x x+y x*n n*x etc); short strings 0-7 chars kept in 64-bit words;
+- `function f(x):y` === `f=\(x):y`? stackless?
+- strings (bytes and unicode) as values; then with ops (`|x` `x+y` `x*n` `n*x` etc); short strings 0-7 chars kept in 64-bit words;
 - a garbage collector;
 - call syntax: f a; f a,b,c; etc;
 - multi-value assignment, returns;

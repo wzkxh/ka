@@ -1,12 +1,20 @@
 # Ka - release notes (newest first)
 
-## Current state (version 6.2)
+## Current state (version 6.2.1)
 Ka compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3, no dependencies). The version is the `VERSION` constant in `ka.py`.
 - **Language:** 64-bit ints and floats, first-class functions and closures (shared by reference, never freed), static type inference, constants, byte/unicode string literals for `print`.
   Details: LANGUAGE.md. Reasons: IMPLEMENTATION.txt.
-- **Tests:** 191 programs in `tests/` (all pass under the emulator on Linux; the user runs them on real Windows). Every test has `-- =>` result comments.
-- **Checked on real Windows by the user:** all tests of version 6.2 (191 tests) passed.
+- **Tests:** 191 programs in `tests/` with their expected results in `tests/results/` (all pass under the emulator on Linux; the user runs them on real Windows). Every test has `-- =>` result comments.
+- **Checked on real Windows by the user:** all tests of version 6.2 (191 tests) passed. Version 6.2.1 changes no compiler code.
 - **Known limits:** see IMPLEMENTATION.txt section 9 (float printing last digit, fractional float powers checked only in an emulator, no strings as values, no input, no GC).
+
+## Version 6.2.1 (no change to the compiler)
+- **Tests:** `tests/` holds only the `.ka` programs now; the expected output, exit codes, warnings and expected errors are in `tests/results/` (`run_tests.py` and `tools/annotate_tests.py` updated).
+- `tools/annotate_tests.py --check`: verifies that every `-- =>` comment tells what the program really prints (the annotator used to skip lines that already had a comment, so a comment could become stale
+  after a change of behaviour: test 48 had one after 6.2, fixed by the user). All comments agree now.
+- **`performance/cs.ka` fixed:** `n = n / 2` is a float division since version 6 (the program no longer compiled); it is `n \ 2` now, as `//` in the Python version. All eight benchmarks were compared with their
+  Python versions at reduced sizes: same results. The timings in `performance/benchmarks.txt` are older; `%` and `\` on ints cost a few instructions more since 6.2 (floor correction), so `cs` and `prime` may be a little slower.
+- Docs: `PLANS.md` replaces `TODO.txt` (README, NOTES, IMPLEMENTATION updated; README said `PLANS.txt`); a missing parenthesis in LANGUAGE.md.
 
 ## Version 6.2
 - **Floored division and modulo (incompatible for negative operands):** `a \ b` is floor(a / b) (toward minus infinity) and `a % b` has the sign of `b`, for ints and floats, so `-7 \ 3` is -3,

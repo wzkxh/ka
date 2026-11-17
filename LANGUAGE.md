@@ -115,7 +115,7 @@ Precedence, highest to lowest; binary operators are left-associative except `^`:
 - **Division and modulo are mathematical (floored).** `a / b` is float division, always a float (ints are converted). `a \ b` is integer division:
   `a \ b` is floor(a / b), it rounds toward minus infinity and is always an int. `a % b` has the sign of `b` (it is 0 if `b` divides `a`) and `|a % b| < |b|`.
   For ints always `a \ b * b + a % b == a`.
-  Floats follow the same definitions (the identity holds for floats up to rounding: `(-7 \ 3.2) * 3.2 + -7 % 3.2` is `-7.000000000000001`.
+  Floats follow the same definitions (the identity holds for floats up to rounding: `(-7 \ 3.2) * 3.2 + -7 % 3.2` is `-7.000000000000001`).
   Division or modulo by zero (also `0.0`, `-0.0`) is a runtime error for ints and floats. `-9223372036854775808 \ -1` raises a hardware exception.
 - **Float arithmetic** is IEEE 754 double arithmetic; too large results become `inf`/`-inf`, `inf - inf` is `nan`. Float comparisons are exact;
   a comparison with NaN is false except `!=`.
@@ -208,7 +208,7 @@ Written to standard output, exit code 1:
 Very deep recursion overflows the 1 MB stack and crashes.
 
 ## 9. Compile errors and warnings
-`file: error: line N: message`, `file: warning: line N: message`. The texts are fixed by `tests/err_*.ka` and their `.error` files (`.warn` for warnings).
+`file: error: line N: message`, `file: warning: line N: message`. The texts are fixed by `tests/err_*.ka` and their `tests/results/err_*.error` files (`.warn` for warnings).
 - *lexical:* `unexpected character '\t'`, `string is not closed`, `bad escape ^q`, `bad unicode escape`, `cannot join '...' and "..." strings`,
   `comment '--[[' is never closed`, `bad number '12ab'` (with a hint for `1__0` and `0b101`), `bad hex literal` (`#` and `0x` forms), `hex literal too large`, `bad binary literal`, `binary literal too large`,
   `bad number '1.5abc...'`, `a float needs digits after the dot` / `before the dot`, `float literal too large`, `integer literal too large`.

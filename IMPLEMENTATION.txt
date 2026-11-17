@@ -1,7 +1,7 @@
 IMPLEMENTATION - decisions of the Ka language and compiler: what was chosen, why, what else was possible, what is open
 =========================================================================================================================
 Where things are:  LANGUAGE.md = what the language is (short, exact).  NOTES.md = how the code is organised (for Claude).
-RELEASE_NOTES.md = what changed in which version.  TODO.txt = what to do next.  This file = the reasons.
+RELEASE_NOTES.md = what changed in which version.  PLANS.md = the owner's plans.  This file = the reasons.
 "User" below means the language designer (the owner of the project), "I" is Claude.
 
 

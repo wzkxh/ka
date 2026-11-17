@@ -14,14 +14,15 @@ python run_tests.py --emu          # Linux/macOS: run tests in an emulator (pip 
 | `IMPLEMENTATION.txt` | decisions, reasons, alternatives, known issues |
 | `NOTES.md` | how the code works, rules for the files (mainly for Claude) |
 | `RELEASE_NOTES.md` | versions, newest first, current state |
-| `PLANS.txt` | the development path (the owner's list) |
-| `tests/` | `.ka` programs + `.expected` output (+ `.exit`, `.warn`); `err_*.ka` + `.error` = must not compile |
+| `PLANS.md` | the development path (the owner's list) |
+| `tests/` | the test programs, only `.ka` files; `err_*.ka` must not compile |
+| `tests/results/` | what a test must give: `NAME.expected` (stdout), `NAME.exit`, `NAME.warn`, `err_NAME.error` (text of the error) |
 | `run_tests.py` | test runner |
 | `performance/` | some benchmarks vs Python 3.3; 5x to 16x faster |
 | `tools/emu.py` | Unicorn-based `.exe` emulator used for checking without Windows |
 | `tools/float_rt.asm`, `tools/build_float_rt.py` | source of the float runtime machine code embedded in `ka.py` (dev only, needs `keystone-engine`) |
 | `tools/fuzz_float.py` | fuzz test of the float runtime routines in Unicorn against Python (dev only) |
-| `tools/annotate_tests.py` | adds `-- =>` result comments to the tests from the real behaviour (dev only) |
+| `tools/annotate_tests.py` | adds `-- =>` result comments to the tests from the real behaviour; `--check` verifies the existing ones (dev only) |
 
 ## Resuming work in a new Claude chat
 Upload this folder (or the zip) and write, for example:

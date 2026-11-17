@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Dev tool: add result comments to the test programs (tests/*.ka), taken from what the compiled program really does.
   python tools/annotate_tests.py [name ...] [--whole-output]
+  python tools/annotate_tests.py --check [name ...]      only check that every `-- =>` comment tells what the program really prints
 - a `print ...` statement at the start of a line gets `-- => <its output>` (when it prints exactly one line);
 - a `err_*.ka` test gets `-- ERROR: <expected message>` on the line where the compiler reports the error;
 - an `exit N` line of a test with an .exit file gets `-- => exit code N`;
@@ -14,6 +15,7 @@ sys.path.insert(0, HERE)
 import ka, emu
 
 TESTS = os.path.join(HERE, "..", "tests") + os.sep
+RESULTS = TESTS + "results" + os.sep                   # .expected / .exit / .error files
 CONT = tuple(",(+-*/%^&|~!?=<>\\")
 
 
@@ -76,7 +78,7 @@ def print_lines(lines, stripped):
     yield i, code
 
 
-def annotate_runtime_test(name, whole_output):
+def annotate_runtime_test(name, whole_output, wrong=None):
   path = TESTS + name + ".ka"
   lines = open(path, newline="").read().split("\n")
   stripped = ka.strip_comments("\n".join(lines)).split("\n")
@@ -92,7 +94,7 @@ def annotate_runtime_test(name, whole_output):
     n = int(parts[k])
     counts[n] = counts.get(n, 0) + 1
     segs[n] = parts[k + 1]
-  exit_path = TESTS + name + ".exit"
+  exit_path = RESULTS + name + ".exit"
   exit_code = int(open(exit_path).read()) if os.path.exists(exit_path) else 0
   new, explained = list(lines), 0
   for n, (i, code) in enumerate(cands):
@@ -108,6 +110,13 @@ def annotate_runtime_test(name, whole_output):
     text = text or "(empty line)"
     explained += 1
     idx, old = split_comment(lines[i])
+    if wrong is not None:                                  # --check: compare the comment with the real output
+      if idx >= 0 and "=>" in old:
+        said = re.split(r"\s+\((?!exit code)", old.split("=>", 1)[1].strip(), 1)[0].strip()   # the value, without a parenthesised explanation
+        shown = text + (f" (exit code {exit_code})" if text.startswith("runtime error") and exit_code else "")
+        if said != shown:
+          wrong.append(f"{name}.ka:{i + 1}: the comment says `{said}`, the program prints `{shown}`")
+      continue
     if idx >= 0 and ("=>" in old or text in old):          # already said (by a person or an earlier run)
       continue
     if text.startswith("runtime error") and exit_code:
@@ -121,7 +130,7 @@ def annotate_runtime_test(name, whole_output):
       idx, old = split_comment(line)
       new[i] = (line.rstrip() if idx < 0 else line[:idx].rstrip()) + f"  -- => exit code {exit_code}" + (f"  ({old})" if old else "")
   if whole_output and "-- the whole output:" not in "\n".join(new):
-    exp = open(TESTS + name + ".expected", "rb").read().decode("utf-8", "replace").split("\n")
+    exp = open(RESULTS + name + ".expected", "rb").read().decode("utf-8", "replace").split("\n")
     exp = exp[:-1] if exp and exp[-1] == "" else exp
     if len(exp) > explained and len(exp) <= 24 and all(l.isprintable() for l in exp):
       while new and new[-1] == "":
@@ -135,7 +144,7 @@ def annotate_error_test(name):
   src = open(path, newline="").read()
   if "ERROR:" in src:
     return None
-  want = open(TESTS + name + ".error").read().strip()
+  want = open(RESULTS + name + ".error").read().strip()
   try:
     ka.compile_source(src)
     return None
@@ -164,6 +173,13 @@ def annotate_error_test(name):
 def main():
   args = [a for a in sys.argv[1:] if not a.startswith("--")]
   names = args or sorted(os.path.basename(p)[:-3] for p in glob.glob(TESTS + "*.ka"))
+  if "--check" in sys.argv:
+    wrong = []
+    for name in names:
+      if not name.startswith("err_"):
+        annotate_runtime_test(name, False, wrong)
+    print("\n".join(wrong) if wrong else "all `-- =>` comments agree with the output")
+    sys.exit(1 if wrong else 0)
   changed = 0
   for name in names:
     res = annotate_error_test(name) if name.startswith("err_") else annotate_runtime_test(name, "--whole-output" in sys.argv)

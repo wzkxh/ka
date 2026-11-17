@@ -19,7 +19,7 @@ import struct
 import sys
 
 
-VERSION = "6.2"                         # see RELEASE_NOTES.md
+VERSION = "6.2.1"                       # see RELEASE_NOTES.md
 
 
 class CompileError(Exception):

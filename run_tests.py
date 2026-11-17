@@ -9,13 +9,13 @@ run_tests.py - compile every tests/*.ka, run the program, compare with expectati
                                      `pip install unicorn pefile`)
     python run_tests.py --keep       keep the generated .exe files in ./build
 
-Test files (all in tests/, same base name):
-    NAME.ka        program
-    NAME.expected  expected stdout            (runtime tests)
-    NAME.in        stdin to feed              (optional)
-    NAME.exit      expected exit code         (optional, default 0)
-    NAME.warn      text that must appear in a compiler warning (optional)
-    err_NAME.ka + err_NAME.error : the compiler must FAIL, and its message must
+Test files (same base name; the programs are in tests/, everything else in tests/results/):
+    tests/NAME.ka                program
+    tests/results/NAME.expected  expected stdout            (runtime tests)
+    tests/results/NAME.in        stdin to feed              (optional)
+    tests/results/NAME.exit      expected exit code         (optional, default 0)
+    tests/results/NAME.warn      text that must appear in a compiler warning (optional)
+    tests/err_NAME.ka + tests/results/err_NAME.error : the compiler must FAIL, and its message must
                                      contain the text in the .error file (first line)
 """
 import argparse
@@ -58,8 +58,8 @@ def run_exe(exe, stdin, emu):
 
 
 def run_one(path, outdir, emu):
-  base = path[:-len(".ka")]
-  name = os.path.basename(base)
+  name = os.path.basename(path)[:-len(".ka")]
+  base = os.path.join(os.path.dirname(path), "results", name)      # expectations: tests/results/NAME.*
   src = read(path)
   warnings = []
   try:
