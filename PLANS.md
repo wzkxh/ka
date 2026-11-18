@@ -41,6 +41,7 @@
 - if it's not too much work (≈10%), make an option to print out Assembler listing. This is VERY optional;
 - like in PL/I, dump vars with their types. Very optional too;
 - pragmas
+```
 Checks: OVF, ASSERT, BOUNDS, NULL, INIT, ZERODIV (hardware), FP (produce INF, NAN, UFL)
 %-O %+O -- --overflow
 %-I %+I -- --initialization
@@ -52,6 +53,7 @@ comp.tolerance, output.precision -- not worth, don't do
 %CT=n -- digits
 %CT=0.0|1e-14 -- tolerance
 -- abs(a-b) < CT\*max(abs(a),abs(b))
+```
 I think at file level it must be this way: when a piece of code is compiled that needs such flag (i.e. int a = b + c;),
 a global file flag is set "flag is used" (if it was set as compiler option, fine). naturally, initially it's
 "flag not used". then when we see construction #pragma check(ovf,on), we check this flag - if it's not yet used, great,
@@ -60,6 +62,7 @@ That "latch" or "seal" mechanism (flag_used state tracking) is a classic, rock-s
 the moment any code actually consumes it.
 OVF.is_locked = true
 - is prime fn
+```
 bool is_prime(int64_t n)
 {
   if(n<4) return n>1; // check!
@@ -70,6 +73,7 @@ bool is_prime(int64_t n)
   }
   return true;
 }
+```
 - ops:
 
 | ch | unary | binary | others |
