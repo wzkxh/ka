@@ -1,25 +1,25 @@
 function area(r):
-  PI = 3.14159                       -- a constant of this function
+  PI = 3.14159                   -- a constant of this function
   return PI * r * r
-print area(2.0)                      -- => 12.56636
+print area(2.0)                  -- => 12.56636
 function f():
   K = 10
-  M = K * 2 + 1                      -- constants defined above can be used
-  function inner(): return K + M     -- visible in nested functions
+  M = K * 2 + 1                  -- constants defined above can be used
+  function inner(): return K + M -- visible in nested functions
   return inner()
-print f()                            -- => 31
-print SIZE_G                         -- => 5  (a global constant exists from the start)
+print f()                        -- => 31
+print SIZE_G                     -- => 5  (a global constant exists from the start)
 SIZE_G = 5
 function g():
-  SIZE_G = 7                         -- a constant of g, the global one is not touched
+  SIZE_G = 7                     -- a constant of g, the global one is not touched
   return SIZE_G
-print g(), " ", SIZE_G               -- 7 5
+print g(), " ", SIZE_G           -- 7 5
 function h():
-  print LATE                         -- constants of a function exist from its start: 8
+  print LATE                     -- constants of a function exist from its start: 8
   LATE = 8
 h()
-function BIG(): return 1000          -- a constant function inside a function
+function BIG(): return 1000      -- a constant function inside a function
 function k():
   function SMALL(): return 1
   return SMALL() + BIG()
-print k()                            -- => 1001
+print k()                        -- => 1001

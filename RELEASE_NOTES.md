@@ -1,12 +1,17 @@
 # Ka - release notes (newest first)
 
-## Current state (version 6.2.1)
+## Current state (version 6.3)
 Ka compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3, no dependencies). The version is the `VERSION` constant in `ka.py`.
 - **Language:** 64-bit ints and floats, first-class functions and closures (shared by reference, never freed), static type inference, constants, byte/unicode string literals for `print`.
   Details: LANGUAGE.md. Reasons: IMPLEMENTATION.txt.
-- **Tests:** 191 programs in `tests/` with their expected results in `tests/results/` (all pass under the emulator on Linux; the user runs them on real Windows). Every test has `-- =>` result comments.
-- **Checked on real Windows by the user:** all tests of version 6.2 (191 tests) passed. Version 6.2.1 changes no compiler code.
+- **Tests:** 194 programs in `tests/` with their expected results in `tests/results/` (all pass under the emulator on Linux; the user runs them on real Windows). Every test has `-- =>` result comments.
+- **Checked on real Windows by the user:** all 194 tests of version 6.3 passed.
 - **Known limits:** see IMPLEMENTATION.txt section 9 (float printing last digit, fractional float powers checked only in an emulator, no strings as values, no input, no GC).
+
+## Version 6.3
+- **Random numbers: the unary operator `?x`.** `?n`, `?x`.
+- `PLANS.md` updated by the user.
+- 3 new tests: `62_random`, `err_const_random`, `err_type_random_function`.
 
 ## Version 6.2.1 (no change to the compiler)
 - **Tests:** `tests/` holds only the `.ka` programs now; the expected output, exit codes, warnings and expected errors are in `tests/results/` (`run_tests.py` and `tools/annotate_tests.py` updated).

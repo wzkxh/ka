@@ -19,7 +19,7 @@ import struct
 import sys
 
 
-VERSION = "6.2.1"                       # see RELEASE_NOTES.md
+VERSION = "6.3"                         # see RELEASE_NOTES.md
 
 
 class CompileError(Exception):
@@ -561,6 +561,8 @@ class Parser:
       parts = e[1:4]
     elif k in ("neg", "not", "bnot"):
       parts = e[1:2]
+    elif k == "rand":
+      return "it uses '?' (a random number)"
     else:                                   # num, fnlit
       return None
     for p in parts:
@@ -609,7 +611,7 @@ class Parser:
     line = self.peek()[2]
     e = self.expr()
     self.end_stmt()
-    if e[0] != "call":
+    if e[0] not in ("call", "rand"):                # ?x as a statement (it sets the seed) is fine
       self.warnings.append(f"line {line}: the value of this expression is not used")
     return ("exprstmt", e, line)
 
@@ -698,7 +700,7 @@ class Parser:
         self.i += 2
         return self.assign(t1[1], v)
       return self.expr_stmt()
-    if k in ("num", "hex", "flt") or (k == "op" and v in ("(", "-", "!", "~")):
+    if k in ("num", "hex", "flt") or (k == "op" and v in ("(", "-", "!", "~", "?")):
       return self.expr_stmt()
     self.err(f"unexpected {describe(self.peek())}")
 
@@ -881,6 +883,8 @@ class Parser:
       return ("not", self.unary())
     if self.accept("~"):
       return ("bnot", self.unary())
+    if self.accept("?"):                            # a random number; after an operand `?` is the conditional
+      return ("rand", self.unary())
     return self.postfix()
 
   def postfix(self):                                  # calls:  f(x)  f(x)(y)  (\\a: =a)(1)
@@ -1013,9 +1017,9 @@ def show(t, seen=()):
   if id(t) in seen:
     return "..."                        # a function type that contains itself
   seen = seen + (id(t),)
-  s = "fn(" + ", ".join(show(p, seen) for p in t.params) + ")"
+  s = "fn(" + ",".join(show(p, seen) for p in t.params) + ")"
   r = prune(t.ret)
-  return s if r.kind == "var" else s + " -> " + show(r, seen)
+  return s if r.kind == "var" else s + "->" + show(r, seen)
 
 
 class Mismatch(Exception):
@@ -1304,6 +1308,10 @@ class Checker(Resolver):
       t = self.expr(e[1], sc, line)
       self.need_num(t, line, "in operand of '-'")
       return t
+    if k == "rand":                     # ?x has the type of x: int -> int, float -> float
+      t = self.expr(e[1], sc, line)
+      self.need_num(t, line, "in operand of '?'")
+      return t
     if k == "not":
       self.need_num(self.expr(e[1], sc, line), line, "in operand of '!'")
       return INT
@@ -1482,7 +1490,7 @@ class CodeGen(Resolver):
     elif k == "cond":
       for x in e[1:]:
         self.a_expr(x, sc)
-    elif k in ("neg", "not", "bnot"):
+    elif k in ("neg", "not", "bnot", "rand"):
       self.a_expr(e[1], sc)
     elif k == "fnlit":
       self.analyze(e[1].body, e[1])
@@ -1682,6 +1690,9 @@ class CodeGen(Resolver):
     elif k == "bnot":
       self.expr(e[1])
       a.emit(0x48, 0xF7, 0xD0)                         # not rax
+    elif k == "rand":                                    # ?x
+      self.expr(e[1])
+      a.call("rt_rand_float" if self.tk(e[1]) == "float" else "rt_rand_int")
     elif k == "cmp":                                     # chained comparison: a < b <= c
       ops, xs = e[1], e[2]
       tys = [self.tk(x) for x in xs]
@@ -2037,6 +2048,70 @@ class CodeGen(Resolver):
     a.emit(0x4C, 0x29, 0xC2)                             # sub rdx,r8
     a.jmp("rt_print_str")
 
+    # random numbers: SplitMix64, the state is the 8 bytes at "state" in .data (the initial value is written by build_pe)
+    # rt_next_u64: rax = the next 64-bit number (clobbers rcx)
+    a.label("rt_next_u64")
+    a.rip([0x48,0x8B,0x05],"state")                      # mov rax,[state]
+    a.emit(0x48,0xB9,struct.pack("<Q",0x9E3779B97F4A7C15))   # mov rcx,0x9E3779B97F4A7C15
+    a.emit(0x48,0x01,0xC8)                               # add rax,rcx
+    a.rip([0x48,0x89,0x05],"state")                      # mov [state],rax      z = (state += 0x9E37...)
+    for shift,mult in ((30,0xBF58476D1CE4E5B9),(27,0x94D049BB133111EB)):
+      a.emit(0x48,0x89,0xC1)                             # mov rcx,rax
+      a.emit(0x48,0xC1,0xE9,shift)                       # shr rcx,shift
+      a.emit(0x48,0x31,0xC8)                             # xor rax,rcx          z ^= z >> shift
+      a.emit(0x48,0xB9,struct.pack("<Q",mult))           # mov rcx,mult
+      a.emit(0x48,0x0F,0xAF,0xC1)                        # imul rax,rcx         z *= mult
+    a.emit(0x48,0x89,0xC1)                               # mov rcx,rax
+    a.emit(0x48,0xC1,0xE9,31)                            # shr rcx,31
+    a.emit(0x48,0x31,0xC8)                               # xor rax,rcx          return z ^ (z >> 31)
+    a.emit(0xC3)                                         # ret
+    # rt_rand_int: rax = n  ->  n > 0: next % n;  n = 0: the next 64 bits;  n < 0: state = -n, result 0
+    a.label("rt_rand_int")
+    raw,seed = a.new_label("rnd_raw"),a.new_label("rnd_seed")
+    a.emit(0x48,0x85,0xC0)                               # test rax,rax
+    a.jcc(4,raw)                                         # jz
+    a.jcc(8,seed)                                        # js
+    a.emit(0x49,0x89,0xC0)                               # mov r8,rax           n
+    a.call("rt_next_u64")
+    a.emit(0x31,0xD2)                                    # xor edx,edx
+    a.emit(0x49,0xF7,0xF0)                               # div r8               unsigned: rdx = next % n
+    a.emit(0x48,0x89,0xD0)                               # mov rax,rdx
+    a.emit(0xC3)
+    a.label(raw)
+    a.call("rt_next_u64")
+    a.emit(0xC3)
+    a.label(seed)
+    a.emit(0x48,0xF7,0xD8)                               # neg rax
+    a.rip([0x48,0x89,0x05],"state")                      # mov [state],rax
+    a.emit(0x31,0xC0)                                    # xor eax,eax
+    a.emit(0xC3)
+    # rt_rand_float: rax = bits of x  ->  bits of a double in [0, x), x > 0.0 (like the C function rand_float64)
+    a.label("rt_rand_float")
+    ok,zero = a.new_label("rf_ok"),a.new_label("rf_zero")
+    a.emit(0x49,0x89,0xC0)                               # mov r8,rax           x
+    a.call("rt_next_u64")
+    a.emit(0x48,0xC1,0xE8,11)                            # shr rax,11           53 random bits
+    a.emit(0xF2,0x48,0x0F,0x2A,0xC8)                     # cvtsi2sd xmm1,rax    (exact)
+    a.emit(0x48,0xB9,struct.pack("<Q",0x3CA0000000000000))   # mov rcx,2^-53
+    a.emit(0x66,0x48,0x0F,0x6E,0xD1)                     # movq xmm2,rcx
+    a.emit(0xF2,0x0F,0x59,0xCA)                          # mulsd xmm1,xmm2      unit in [0,1)
+    a.emit(0x66,0x49,0x0F,0x6E,0xC0)                     # movq xmm0,r8         x
+    a.emit(0xF2,0x0F,0x59,0xC8)                          # mulsd xmm1,xmm0      result = unit * x
+    a.emit(0x66,0x0F,0x2E,0xC8)                          # ucomisd xmm1,xmm0
+    a.jcc(0xA,ok)                                        # jp   (x is nan)
+    a.jcc(2,ok)                                          # jb   (result < x: fine)
+    a.emit(0x4C,0x89,0xC1)                               # mov rcx,r8           result >= x (rounding): result = nextafter(x,0.0)
+    a.emit(0x48,0xD1,0xE1)                               # shl rcx,1
+    a.jcc(4,zero)                                        # jz   (x is 0.0: the result is 0.0)
+    a.emit(0x49,0xFF,0xC8)                               # dec r8               the next smaller number toward 0
+    a.emit(0x66,0x49,0x0F,0x6E,0xC8)                     # movq xmm1,r8
+    a.jmp(ok)
+    a.label(zero)
+    a.emit(0x66,0x0F,0x57,0xC9)                          # xorpd xmm1,xmm1
+    a.label(ok)
+    a.emit(0x66,0x48,0x0F,0x7E,0xC8)                     # movq rax,xmm1
+    a.emit(0xC3)
+
     # rt_print_float: rax = bits of a double; rt_fmt_float (see FLOAT_RT) makes the text
     a.label("rt_print_float")
     a.emit(prologue)
@@ -2109,7 +2184,7 @@ def align(x, a):
 
 def build_pe(asm, vars_, strings):
   # ---- .data layout: fixed runtime area, then variables, then strings
-  sym = {"stdout": 0, "stdin": 8, "written": 0x10, "heap": 0x18, "numbuf_end": 0x40}
+  sym = {"stdout": 0, "stdin": 8, "written": 0x10, "heap": 0x18, "numbuf_end": 0x40, "state": 0x40}
   off = 0x80
   for name, idx in vars_.items():
     sym["var:" + name] = off + idx * 8
@@ -2118,6 +2193,7 @@ def build_pe(asm, vars_, strings):
     sym[name] = off
     off += 16
   data = bytearray(off)
+  data[0x40:0x48] = struct.pack("<Q",0x123456789ABCDEF0)       # the state of the random generator at the start of every program
   for i, s in enumerate(strings):
     sym[f"str:{i}"] = len(data)
     data += s + b"\0"

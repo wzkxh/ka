@@ -1,11 +1,11 @@
 a = 0
 if a: v = 1
-print v                                   -- => 0  (never assigned)
+print v                    -- => 0  (never assigned)
 function f(c):
   if c: x = 5
   return x
 print f(0), " ", f(1)      -- => 0 5
 function h(c):
   if c: z = 9
-  return \(): =z                          -- a captured variable is 0 too
+  return \():=z            -- a captured variable is 0 too
 print h(0)(), " ", h(1)()  -- => 0 9

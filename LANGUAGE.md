@@ -44,7 +44,7 @@ This file defines the language; the reasons behind the decisions are in IMPLEMEN
 Three types:
 - **int** - 64-bit signed integer (two's complement, arithmetic wraps);
 - **float** - 64-bit IEEE 754 number;
-- **function** - a closure; written `fn(T1, T2) -> R` in compiler messages.
+- **function** - a closure; written `fn(T1,T2)->R` in compiler messages.
 
 Types are checked at compile time, never written, and inferred:
 - A variable has the type of the first value assigned to it; later values must have the same type.
@@ -54,7 +54,7 @@ Types are checked at compile time, never written, and inferred:
   `return` without a value and falling off the end give the int 0 (not checked).
 - Calls check the number and types of the arguments. Calling a number is an error.
 - Function types may refer to themselves (`function f(a): return a(a)` with `d = f(q)`, `function q(x): return x`).
-- **Numbers** (int, float) are accepted by `+ - * / \ % ^`, unary `-`, `< <= > >= == !=`, `&& || !`, conditions of `if`, `while`, `?:`, and `print`.
+- **Numbers** (int, float) are accepted by `+ - * / \ % ^`, unary `-` `?`, `< <= > >= == !=`, `&& || !`, conditions of `if`, `while`, `?!`, and `print`.
   **Ints only** are accepted by `& | ~ << >> +> <* *>`, unary `~` and `exit`.
   Functions are accepted by `==` and `!=` (equal if they are the same function; same signature).
 - **Int and float mix inside operators:** `+ - * % ^` give a float if either side is a float (the other side is converted), else an int.
@@ -97,7 +97,7 @@ Precedence, highest to lowest; binary operators are left-associative except `^`:
 | level | operators |
 |---|---|
 | 14 | call `f(args)`; primary: number, variable, `(expr)`, function literal |
-| 13 | unary `-` `~` `!` |
+| 13 | unary `-` `~` `!` `?` |
 | 12 | `^` power (right-associative) |
 | 11 | `*` `/` `\` `%` |
 | 10 | `+` `-` |
@@ -129,6 +129,9 @@ Precedence, highest to lowest; binary operators are left-associative except `^`:
   For `<< >> +>` a count of 64 or more shifts everything out (result 0; `+>` gives 0 or -1 by the sign).
   A negative count shifts the other way: `x >> -n` is `x << n`, `x << -n` is `x >> n`, `x +> -n` is `x << n`.
   A rotate takes the count modulo 64: `x <* -n` is `x *> n`, `x *> -n` is `x <* n`.
+- **Random numbers**, unary `?x`: for an int `n > 0`, `?n` is an int in `0 .. n-1`; `?0` is the next raw 64 bits as an int;
+  for an int `m < 0`, `?m` sets the state of the generator to `-m` (for the smallest int: to itself) and gives 0;
+  for a float `x > 0.0`, `?x` is a float in `[0, x)` (for other floats the result is not defined). `?x` has the type of `x`.
 - **Conditional** `c ? a ! b`: `c` is evaluated, then only `a` or only `b`. A function literal with a one-line body inside it needs parentheses:
   `c ? (\x:=x+1) ! (\x:=x-1)`. A line may end with `?` or `!` (expression continues on the next line).
 - **Chained comparisons:** `a < b <= c` is `a < b && b <= c` with `b` evaluated once; evaluation stops at the first false link.
@@ -234,16 +237,16 @@ Very deep recursion overflows the 1 MB stack and crashes.
 ## 10. Characters (JFYI)
 | char | usage |
 |---|---|
-| ! | unary not, conditional ops, != - not equal |
-| ? | conditional `c ? a ! b` |
 | ' | byte string |
 | " | unicode string |
 | # | hex literal `#ff`, binary literal `2#101`; `# ` comment |
+| ! | unary not, conditional `c ? a ! b`, != - not equal |
+| ? | unary random, conditional `c ? a ! b` |
 | / | unary - nothing, float division; /= |
 | % | unary - nothing, modulo (floored); %= |
 | & | unary - nothing, bitwise and, && - logical and; &= &&= |
 | \| | unary - nothing, bitwise or, \|\| - logical or; \|= \|\|= |
-| ~ | bitwise not, xor; ~= |
+| ~ | unary bitwise not, xor; ~= |
 | * | unary - nothing (scatter?), multiply; \*= ; `<*` `*>` rotate |
 | + | identity, plus; += ; `+>` arithmetic shift right |
 | - | negative, minus; -= |

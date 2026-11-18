@@ -5,7 +5,7 @@ x = 0
 function bump(): ^x = x + 1; return x
 print 1 ? bump() ! bump(), " ", x        -- => 1 1  (only the chosen branch is evaluated)
 print 0 ? bump() ! 7, " ", x             -- => 7 1
-f = a > 3 ? (\x: =x + 1) ! (\x: =x - 1)  -- functions work too (same type in both branches)
+f = a > 3 ? (\x:=x+1) ! (\x:=x-1)        -- functions work too (same type in both branches)
 print f(10)                              -- => 11
 print (a ? 1 ! 2) + 10                   -- => 11
 print 1 ? 2 ? 3 ! 4 ! 5                  -- => 3

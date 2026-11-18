@@ -1,0 +1,2 @@
+f = \(): =1
+x = ?f  -- ERROR: in operand of '?'

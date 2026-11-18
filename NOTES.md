@@ -14,6 +14,8 @@ Reasons behind decisions: IMPLEMENTATION.txt. History and state: RELEASE_NOTES.m
   README.md = what the files are and how to run.
 - **Version:** the `VERSION` constant in `ka.py` (no command line option for it, the user asked for none). Bump it for every delivery to the user and add an entry on top of RELEASE_NOTES.md.
 - **Style:** 2 spaces per indentation level in `.py` and `.ka` files (also continuation lines). Tests carry `-- =>` comments with the result of a statement
+- **Brackets (user, 6.3):** blanks between arguments -> blanks also after `(` and before `)`: `f( first, second )`; short cases (a few arguments, short names) -> no blanks: `f(a,b)`, `fn(T1,T2)->R`.
+  Same for `[]`. Use it in new code and docs; fix old code only when it is free.
   (`python tools/annotate_tests.py [names] [--whole-output]` adds them from the real behaviour, `--check` verifies that the existing ones still tell the truth: run it after a change of behaviour; read the result critically) and `-- ERROR: ...` at the failing line of `err_*` tests.
 - Expected outputs are derived by hand or by an independent reference (Python), not copied from the compiler: a wrong expectation was found several times.
 - The user thinks in small steps, wants "as simple as you can", accepts pragmatic limits and says what may be skipped. Ask before big redesigns; do the whole job of a
@@ -88,6 +90,7 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
   Locals/params captured by nested functions live in 8-byte heap boxes (`analyze` finds them); free variables are reached through the closure.
 - **Scope entry:** `hoist(scope)` creates the closures of all `named_fns`; then the constants of the scope (assign nodes with the 6th element) are evaluated and stored, and skipped at their place. This is done in `program()`
   for the global scope and in the function prologue for functions. Use-before-assignment is checked textually (`scope.defined`).
+- Random numbers: `("rand", e)` -> `rt_rand_int` / `rt_rand_float` (operand in rax; `rt_next_u64` is SplitMix64 on the 8 bytes at `state`); written in `runtime()` with the compact bracket style.
 - Program start: GetStdHandle(stdout), `SetConsoleOutputCP(65001)`, GetProcessHeap.
 - **Float runtime** (`FLOAT_RT` between the BEGIN/END markers in ka.py): machine code generated from `tools/float_rt.asm` by `tools/build_float_rt.py` (Keystone assembles single instructions; the script does labels
   and rel32 jumps). `rt_fmt_float` (rax = bits, rdx = buffer -> rax = length), `rt_fpow` (xmm0, xmm1 -> xmm0, edx = error code), `rt_fmod` (exact integer algorithm). They set the x87 control word themselves.
@@ -96,7 +99,7 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
 ### PE writer (`build_pe`)
 - Sections `.text` (RX) at 0x1000, `.idata` (RW), `.data` (RW). ImageBase 0x140000000, no relocs, console subsystem, 1 MB stack. kernel32 imports (`IMPORTS`): GetStdHandle, WriteFile, SetConsoleOutputCP,
   ExitProcess, GetProcessHeap, HeapAlloc.
-- `.data`: 0 stdout handle, 8 unused, 0x10 `written`, 0x18 heap handle, 0x20..0x40 number buffer, 0x40..0x80 unused, then globals (8 bytes each), static closures (16 each), then strings (lengths are explicit; NUL
+- `.data`: 0 stdout handle, 8 unused, 0x10 `written`, 0x18 heap handle, 0x20..0x40 number buffer, 0x40 random generator state (the initial value is written by `build_pe`), 0x48..0x80 unused, then globals (8 bytes each), static closures (16 each), then strings (lengths are explicit; NUL
   inside strings is fine). Strings 0..4 are reserved for the runtime (newline, division by zero, unset function, negative exponent, bad power).
 
 ## 2. Testing and tools

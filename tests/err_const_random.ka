@@ -1,0 +1,1 @@
+X = ?10  -- ERROR: it uses '?' (a random number)

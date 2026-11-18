@@ -1,13 +1,13 @@
 function g(a, b): return a * b
-print g(2, 3.5)                                         -- => 7.0  (the parameter types come from the call: a is int, b is float)
+print g(2, 3.5)                          -- => 7.0  (the parameter types come from the call: a is int, b is float)
 function h(x): return x < 2 ? x ! 2.5    -- an int branch becomes float when the other one is float
-print h(1), " ", h(3)                                   -- => 1.0 2.5
+print h(1), " ", h(3)                    -- => 1.0 2.5
 function twice(x): return x + x
-print twice(1.25)                                       -- => 2.5
+print twice(1.25)                        -- => 2.5
 function unused(x): return x * 2.5       -- never called: x is int
 function pow2(x, n): return n == 0 ? 1.0 ! x * pow2(x, n - 1)
-print pow2(1.5, 3)                                      -- => 3.375
+print pow2(1.5, 3)                       -- => 3.375
 function make(a): return \b: =a * b
-print make(1.5)(2)                                      -- => 3.0
+print make(1.5)(2)                       -- => 3.0
 function fact(n): return n < 2 ? 1 ! n * fact(n - 1)
 print fact(10), " ", fact(10) / 4.0, " ", fact(10) \ 4  -- => 3628800 907200.0 907200

@@ -1,4 +1,5 @@
 big = 1e308 * 10
 print big, " ", -1e308 * 10, " ", big - big  -- => inf -inf nan
 print -0.0, " ", 0.0 * -1, " ", 0.0          -- => -0.0 -0.0 0.0
-print big == big, " ", big > 1e308, " ", big - big == big - big, " ", big - big != big - big, " ", big - big < 1  -- => 1 1 0 1 0
+print big == big, " ", big > 1e308, " ", big - big == big - big, " ", big - big != big - big, " ",
+  big - big < 1  -- => 1 1 0 1 0

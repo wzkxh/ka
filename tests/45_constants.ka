@@ -4,14 +4,14 @@ HEIGHT = 24
 AREA = WIDTH * HEIGHT
 FLAG_A = 2#0001
 FLAG_B = FLAG_A << 1
-TWICE = \x: =2 * x                        -- a constant can be a function
+TWICE = \x:=2*x                          -- a constant can be a function
 function limit(v): return v > MAX_SPEED ? MAX_SPEED ! v
 function SQUARE(x): return x * x          -- a function with a capital name is a constant too
-print MAX_SPEED, " ", AREA, " ", FLAG_B, " ", TWICE(21), " ", limit(500), " ", limit(5), " ", SQUARE(9)  -- => 120 1920 2 42 120 5 81
-print LATER, " ", LATER + 1                -- => 7 8  (constants exist from the start, also above their definition)
+print MAX_SPEED, " ", AREA, " ", FLAG_B, " ", TWICE(21), " ", limit(500), " ", limit(5), " ", SQUARE(9) -- => 120 1920 2 42 120 5 81
+print LATER, " ", LATER + 1               -- => 7 8  (constants exist from the start, also above their definition)
 LATER = 7
-mixed_Case = 1; mixed_Case = 2; Mixed = 3; Mixed = 4     -- only names in capitals are constants
+mixed_Case = 1; mixed_Case = 2; Mixed = 3; Mixed = 4 -- only names in capitals are constants
 print mixed_Case, " ", Mixed               -- => 2 4
 X1 = -5
 _Q = 2#11
-print X1, " ", _Q, " ", MAX_SPEED ? 1 ! 0  -- => -5 3 1
+print X1, " ", _Q, " ", MAX_SPEED ? 1 ! 0 -- => -5 3 1
