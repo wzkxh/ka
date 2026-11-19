@@ -1,18 +1,18 @@
 ## Not in the language (yet)
-- `f(1)` and `f(1.5)` cannot both be called in this order, but the reverse is ok: convert int to float.
-- `function f(x):y` === `f=\(x):y`? stackless?
 - strings (bytes and unicode) as values; then with ops (`|x` `x+y` `x*n` `n*x` etc); short strings 0-7 chars kept in 64-bit words;
 - a garbage collector;
 - call syntax: f a; f a,b,c; etc;
-- multi-value assignment, returns;
+- multi-value assignment, returns; multiple split [with 'rest' \*]
 - floats: **yet to do:** more float literals (pi-based), `INF` and `NAN` (literals, tests, and `0.0/0.0`-like
   results are only reachable through overflow now), comparison with tolerance (comparisons are exact for now),
-  (**pragma** tolerance?), output formatting (**pragma** precision? proper formatting: precision, width, layout;
+  (**pragma** tolerance - no), output formatting (**pragma** precision? proper formatting: precision, width, layout;
   the 15-digit format is provisional), explicit conversion int <-> float (`int(x)`, `float(i)`, rounding,
   floor/ceil), implicit conversion on assignment (strict now), math functions (sqrt, sin, ...);
-- INF, NAN -- #inf -#inf #nan
+- INF, NAN -- #inf -#inf #nan; #pi, #tau
 - many int and float types (other sizes)
-- arrays (lists), dictionaries, sets, tuples;
+- arrays (lists); literals 1 2 3 \_4, 5.0 6 \_7, [5.0,6,\_7], ["s","tt"]; gen 0$100, 1.0$10, ""$5
+- dictionaries, sets, tuples;
+- structures; classes;
 - enums;
 - big integers;
 - `assert` expr [, str]
@@ -22,10 +22,13 @@
 - `swich` or `case` statement;
 - `break 2` or `break break`
 - radix 3..36 literals 3#122 8#377 36#zzz;
+- `f(1)` and `f(1.5)` cannot both be called in this order, but the reverse is ok: convert int to float --
+  implicit conversion; also make general rules of implicit conversion. and make explicit conversion.
+- `function f(x):y` === `f=\(x):y`? stackless?
 - modules, import;
-- integer overflow detection (as **pragma** intoverflow? other checks as pragmas);
 - named and optional arguments;
-- input (no way to read a value yet);
+- input (no way to read a value yet); get;
+- print --> put;
 - operations on strings (+ etc), numbers (?);
 - `#'...'` hex strings
 - `"^ctrl..."` multi-line strings, with/without indents, with/without interpretation, etc.
@@ -40,6 +43,7 @@
 - if it's not too much work (≈10%), make an option to print out AST. This is rather optional;
 - if it's not too much work (≈10%), make an option to print out Assembler listing. This is VERY optional;
 - like in PL/I, dump vars with their types. Very optional too;
+- integer overflow detection (as **pragma** int-overflow? other checks as pragmas: OVFL, INIT, ZDIV, BNDS, NULL, ASRT);
 - pragmas
 ```
 Checks: OVF, ASSERT, BOUNDS, NULL, INIT, ZERODIV (hardware), FP (produce INF, NAN, UFL)
@@ -80,15 +84,15 @@ bool is_prime(int64_t n)
 |---|---|---|---|
 | !  | not              | ?!          |                                 |
 | ?  | random           | ?!          |                                 |
-| \\ | function         | int div, drop?      |                         |
-| /  | strip?           | float div, take?    |                         |
-| %  |                  | modulo, split?      |                         |
-| \| | abs, len?        | bitwise or, cut?       | \|\| logical or      |
-| &  |                  | bitwise and, contains? | && logical and       |
-| ~  | bitwise not      | bitwise xor, match? |                         |
+| \\ | function         | int div, drop       |                         |
+| /  | strip            | float div, take     |                         |
+| %  | split_blanks     | modulo, split       |                         |
+| \| | abs, len         | bitwise or, find       | \|\| logical or      |
+| &  |                  | bitwise and, contains  | && logical and       |
+| ~  | bitwise not      | bitwise xor, match  |                         |
 | *  | scatter?         | multiply, repeat    |                         |
-| +  | identity, upper? | plus, concat        |                         |
-| -  | negate,   lower? | minus       |                                 |
+| +  | identity, upper  | plus, concat        |                         |
+| -  | negate, reverse  | minus       |                                 |
 | <  |                  | less        | << shift left   <\* rotate left |
 | >  |                  | greater     | >> shift right  \*> +> ...      |
 | =  | return           | assignment  | == equal                        |
@@ -97,6 +101,6 @@ bool is_prime(int64_t n)
 | ^  | global var       | power       |   ..starts with                 |
 | @  | upper-level var  | char-at     |                                 |
 | \` |                  |             |                                 |
-| $  |                  |             |   ..ends with                   |
+| $  | dim              | reshape     |   ..ends with                   |
 | .  |                  | floats      |                                 |
 
