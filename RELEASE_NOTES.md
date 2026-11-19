@@ -9,7 +9,7 @@ Ka compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3,
 - **Known limits:** see IMPLEMENTATION.txt section 9 (float printing last digit, fractional float powers checked only in an emulator, no strings as values, no input, no GC).
 
 ## Version 6.3
-- **Random numbers: the unary operator `?x`.** `?n`, `?x`.
+- **Random numbers:** the unary operator `?x`. `?n`, `?x`.
 - `PLANS.md` updated by the user.
 - 3 new tests: `62_random`, `err_const_random`, `err_type_random_function`.
 
@@ -17,7 +17,7 @@ Ka compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3,
 - **Tests:** `tests/` holds only the `.ka` programs now; the expected output, exit codes, warnings and expected errors are in `tests/results/` (`run_tests.py` and `tools/annotate_tests.py` updated).
 - `tools/annotate_tests.py --check`: verifies that every `-- =>` comment tells what the program really prints (the annotator used to skip lines that already had a comment, so a comment could become stale
   after a change of behaviour: test 48 had one after 6.2, fixed by the user). All comments agree now.
-- **`performance/cs.ka` fixed:** `n = n / 2` is a float division since version 6 (the program no longer compiled); it is `n \ 2` now, as `//` in the Python version. All eight benchmarks were compared with their
+- `performance/cs.ka` fixed: `n = n / 2` is a float division since version 6 (the program no longer compiled); it is `n \ 2` now, as `//` in the Python version. All eight benchmarks were compared with their
   Python versions at reduced sizes: same results. The timings in `performance/benchmarks.txt` are older; `%` and `\` on ints cost a few instructions more since 6.2 (floor correction), so `cs` and `prime` may be a little slower.
 - Docs: `PLANS.md` replaces `TODO.txt` (README, NOTES, IMPLEMENTATION updated; README said `PLANS.txt`); a missing parenthesis in LANGUAGE.md.
 

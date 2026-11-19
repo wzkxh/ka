@@ -43,15 +43,15 @@
 - pragmas
 ```
 Checks: OVF, ASSERT, BOUNDS, NULL, INIT, ZERODIV (hardware), FP (produce INF, NAN, UFL)
-%-O %+O -- --overflow
-%-I %+I -- --initialization
-%-A %+A -- --assert
-%-B %+B -- --bounds
-%-N %+N -- --null
+#-O #+O -- --overflow
+#-I #+I -- --initialization
+#-A #+A -- --assert
+#-B #+B -- --bounds
+#-N #+N -- --null
 comp.tolerance, output.precision -- not worth, don't do
-%CT=0
-%CT=n -- digits
-%CT=0.0|1e-14 -- tolerance
+#CT=0
+#CT=n -- digits
+#CT=0.0|1e-14 -- tolerance
 -- abs(a-b) < CT\*max(abs(a),abs(b))
 ```
 I think at file level it must be this way: when a piece of code is compiled that needs such flag (i.e. int a = b + c;),
