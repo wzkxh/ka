@@ -65,9 +65,9 @@ Shared by Checker and CodeGen. `lookup(name, scope, line, mode)` -> `("g",name)`
 plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing functions, then globals.
 
 ### Type checker (`Checker`)
-- Monomorphic unification. `Ty` kinds `int`, `float`, `str`, `fn(params, ret)`, `var`. `print` accepts int/float/str; numeric constraints reject str; string equality is not implemented. Variables keyed `("g",name)` or `(scope,name)`; every function has a type with a fresh variable per parameter and result (`fn_ty`);
+- Monomorphic unification. `Ty` kinds `int`, `float`, `str`, `fn(params, ret)`, `var`. `print` accepts int/float/str. `+` is constrained as numeric addition or string concatenation; `eq` and `order` constraints support numeric comparisons or byte-string content comparisons. Variables keyed `("g",name)` or `(scope,name)`; every function has a type with a fresh variable per parameter and result (`fn_ty`);
   bodies are checked once (`check_body`). No occurs check; `unify_raw` skips pairs already being compared; `show()` cuts cycles.
-- Operators whose result type depends on operand types that may be unknown yet (`+ - * % ^`, `== !=`, `?:`) are constraints (`arith`, `eq`, `cond`, `num` in `Checker.pending`), settled by `step()` /
+- Operators whose result type or allowed operand type depends on operand types that may be unknown yet (`+ - * % ^`, comparisons, `?:`) are constraints (`arith`, `eq`, `order`, `cond`, `num` in `Checker.pending`), settled by `step()` /
   `solve()`; `finish()` makes what is still unknown int. `/` (float result) and `\` (int result) only need numeric operands (`need_num`). Assignments, arguments, returns use plain `unify` (strict).
 - `Checker.types` maps `id(expression node)` to its `Ty` (the AST must stay alive; `compile_source` keeps it). Bare `return` / falling off the end are not unified.
 
@@ -81,8 +81,8 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
   flag in edx). Float `\`: `movapd xmm2,xmm0; call rt_fmodfloor; subsd xmm2,xmm4; divsd xmm2,xmm1; cvtsd2si rax,xmm2; sub rax,rdx`. The division result is only nearly an integer (`a - fmod` can be rounded:
   13276.999999999998), so it is rounded to nearest (`cvtsd2si`), not truncated.
 - Shifts: count `< 0` -> negate and use the opposite shift; `> 63` (unsigned compare) -> 0 (`+>`: sign fill; negative: 0); rotates: `rol/ror rax,cl` (count modulo 64 by the hardware).
-- Chained comparison: the previous operand lives at `[rsp]`; each link jumps to a fail label (`FAIL_CC`, or `fcmp_false` for floats). Int power: square-and-multiply loop inline.
-- Runtime routines (`rt_print_str`, `rt_print_value_str`, `rt_print_int`, `rt_print_float`, `rt_alloc`, `rt_divzero`, `rt_notfn`, `rt_negexp`, `rt_badpow`) set up their own aligned frame; `exit_process` aligns too.
+- Chained comparison: the previous operand lives at `[rsp]`; each link jumps to a fail label (`FAIL_CC`, `fcmp_false` for floats, or `rt_strcmp` for strings). String binary comparisons call `rt_strcmp`; `+` calls `rt_strcat`. Int power: square-and-multiply loop inline.
+- Runtime routines (`rt_print_str`, `rt_print_value_str`, `rt_print_int`, `rt_print_float`, `rt_strcmp`, `rt_strcat`, `rt_alloc`, `rt_divzero`, `rt_notfn`, `rt_negexp`, `rt_badpow`) set up their own aligned frame; `rt_strcat` keeps its operands/lengths in frame locals across `rt_alloc`; `exit_process` aligns too.
 - `Asm.rip(opcode_bytes, symbol)`: instruction whose last 4 bytes are the rip-relative disp32. `call/jmp/jcc` take labels (rel32). `lea rax,[rip+label]` = `48 8D 05` + `_ref`.
 - **Calling convention (own):** caller pushes arguments left to right, evaluates the callee (closure pointer) into rax, null check (`rt_notfn`), `push rax`, `call [rax]`. Callee: `push rbp; mov rbp,rsp;
   push 0 * nlocals`, `ret 8*(nparams+1)`. Frame: `[rbp+16]` closure pointer, params above, locals below.
@@ -112,3 +112,9 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
 1. The user uploads the zip/folder. Unzip; read NOTES.md, RELEASE_NOTES.md, LANGUAGE.md, PLANS.md; `pip install unicorn pefile keystone-engine`; run `python run_tests.py --emu`.
 2. Implement the requested changes; run all tests; add/adjust tests (with comments) and docs (see 0); bump `VERSION`.
 3. Re-zip (`ka.zip`), present it, summarise what to check on Windows and any open question.
+
+
+## Byte-string operations (version 6.5)
+- `str` comparisons use unsigned byte-wise lexicographical order; equality is content equality, not pointer equality. `rt_strcmp` returns -1, 0 or 1.
+- `+` and `+=` concatenate strings. `rt_strcat` allocates `[u64 length][bytes]` using the existing process heap; no old string is freed. Empty results use the null pointer.
+- The checker resolves `+` as numeric arithmetic or string concatenation, and relational comparisons as numeric or string comparisons, based on inferred operand types.

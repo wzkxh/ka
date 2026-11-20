@@ -1,0 +1,34 @@
+a = 'apple'
+b = 'apple'
+c = 'apricot'
+print (a == b), ' ', (a != c), ' ', (a < c), ' ', (c > a), ' ', (a <= b), ' ', (c >= b)
+chain1 = 'a' < 'b' < 'c'
+chain2 = 'a' < 'c' < 'b'
+chain3 = 'a' < 'b' < 'c' < 'd'
+chain4 = 'a' < 'c' < 'b' < 'd'
+print chain1, ' ', chain2, ' ', chain3, ' ', chain4
+empty_eq = '' == ''
+empty_lt = '' < 'a'
+a_gt_empty = 'a' > ''
+print empty_eq, ' ', empty_lt, ' ', a_gt_empty
+high_gt = '^ff' > '^7f'
+zero_lt = 'A^00B' < 'A^00C'
+print high_gt, ' ', zero_lt
+x = 'Hello'
+y = x + ' '
+y += 'world'
+y += '!'
+print y
+z = 'foo' + 'bar'
+print z
+function join(a, b): return a + b
+print join('left', 'right')
+function less(a, b): return a < b
+print less('abc', 'abd')
+function decorate(s): return s + '!'
+print decorate('immutable')
+empty = '' + ''
+print empty == ''
+dup = 'ha'
+dup += dup
+print dup

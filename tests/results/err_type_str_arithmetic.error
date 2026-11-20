@@ -1,1 +1,1 @@
-type mismatch in left operand of '+': expected a number, found str
+type mismatch in right operand of '+': expected str, found int

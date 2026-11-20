@@ -1,5 +1,4 @@
 ## Not in the language (yet)
-- str concatenation `x+y`;
 - str repetition `x*n` `n*x`;
 - `|x` unary abs (numbers) and len (str);
 - short strings 0-7 chars kept in 64-bit words; literals - maybe one table;

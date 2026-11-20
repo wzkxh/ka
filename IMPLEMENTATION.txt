@@ -49,9 +49,10 @@ Strings: `'...'` = byte string, `"..."` = unicode string (user). For now both ar
   Version 6.4 byte-string values: each non-empty literal is stored in `.data` as an aligned `[u64 byte_length][bytes]` object;
   the expression value is its address. The empty string is the null pointer. Variables, parameters, return values and closure boxes already
   carry 64-bit values, so assignment/calls/returns copy only the pointer and require no special calling convention. Strings are immutable;
-  no runtime allocation, freeing, reference counting or GC is needed yet. `rt_print_value_str` handles null and passes the object's
-  length and contents to the existing `rt_print_str`. The checker has a distinct `str` type; it is not numeric, and string comparisons
-  are deliberately not enabled yet. Unicode (`text`) literals are still printable only.
+  literals are static, while concatenation allocates new objects. There is no freeing, reference counting or GC yet. `rt_print_value_str` handles null and passes the object's
+  length and contents to the existing `rt_print_str`. Version 6.5 adds `rt_strcmp` for content-based equality and unsigned-byte
+  lexicographical ordering, and `rt_strcat` for `+` / `+=`. Concatenation allocates a new `[u64 length][bytes]` object with `HeapAlloc`;
+  old objects are deliberately not freed yet. Unicode (`text`) literals are still printable only.
 Keywords: `function` with the synonym `\` (user), `skip` (empty statement), `elif`; `fn` is gone. A one-parameter function needs no parentheses
   (`function f x: ...`, `\x: =x+1`): `function name x` is a definition, `function x:` a literal; decided by two tokens of lookahead.
 Operator spelling is the user's: `+>` arithmetic shift right, `<*` / `*>` rotate, `?` and `!` for the conditional (`!` because `:` starts blocks),

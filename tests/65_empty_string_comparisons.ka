@@ -1,0 +1,22 @@
+eq = '' == ''
+ne = '' != ''
+ne_a = '' != 'a'
+print eq, ' ', ne, ' ', ne_a  -- => 1 0 1
+
+lt = '' < 'a'
+le_eq = '' <= ''
+le_a = '' <= 'a'
+print lt, ' ', le_eq, ' ', le_a  -- => 1 1 1
+
+gt = 'a' > ''
+ge = 'a' >= ''
+gt_z = 'a' > 'z'
+print gt, ' ', ge, ' ', gt_z  -- => 1 1 0
+
+empty = ''
+a = 'a'
+b = 'b'
+chain1 = empty < a < b
+chain2 = b > a > empty
+print chain1  -- => 1
+print chain2  -- => 1

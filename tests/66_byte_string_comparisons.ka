@@ -1,0 +1,334 @@
+-- Exhaustive byte-string comparison test.
+-- Operand forms: EL = empty literal, NL = non-empty literal,
+--                EV = empty variable, NV = non-empty variable.
+-- For two non-empty operands, test all three orderings: <, ==, >.
+
+empty_var = ''
+
+EL_EL_ONLY_eq_result = ('' == '')
+print 'EL_EL_ONLY_== ', EL_EL_ONLY_eq_result
+EL_EL_ONLY_ne_result = ('' != '')
+print 'EL_EL_ONLY_!= ', EL_EL_ONLY_ne_result
+EL_EL_ONLY_lt_result = ('' < '')
+print 'EL_EL_ONLY_< ', EL_EL_ONLY_lt_result
+EL_EL_ONLY_le_result = ('' <= '')
+print 'EL_EL_ONLY_<= ', EL_EL_ONLY_le_result
+EL_EL_ONLY_gt_result = ('' > '')
+print 'EL_EL_ONLY_> ', EL_EL_ONLY_gt_result
+EL_EL_ONLY_ge_result = ('' >= '')
+print 'EL_EL_ONLY_>= ', EL_EL_ONLY_ge_result
+
+EL_NL_ONLY_eq_result = ('' == 'a')
+print 'EL_NL_ONLY_== ', EL_NL_ONLY_eq_result
+EL_NL_ONLY_ne_result = ('' != 'a')
+print 'EL_NL_ONLY_!= ', EL_NL_ONLY_ne_result
+EL_NL_ONLY_lt_result = ('' < 'a')
+print 'EL_NL_ONLY_< ', EL_NL_ONLY_lt_result
+EL_NL_ONLY_le_result = ('' <= 'a')
+print 'EL_NL_ONLY_<= ', EL_NL_ONLY_le_result
+EL_NL_ONLY_gt_result = ('' > 'a')
+print 'EL_NL_ONLY_> ', EL_NL_ONLY_gt_result
+EL_NL_ONLY_ge_result = ('' >= 'a')
+print 'EL_NL_ONLY_>= ', EL_NL_ONLY_ge_result
+
+EL_EV_ONLY_eq_result = ('' == empty_var)
+print 'EL_EV_ONLY_== ', EL_EV_ONLY_eq_result
+EL_EV_ONLY_ne_result = ('' != empty_var)
+print 'EL_EV_ONLY_!= ', EL_EV_ONLY_ne_result
+EL_EV_ONLY_lt_result = ('' < empty_var)
+print 'EL_EV_ONLY_< ', EL_EV_ONLY_lt_result
+EL_EV_ONLY_le_result = ('' <= empty_var)
+print 'EL_EV_ONLY_<= ', EL_EV_ONLY_le_result
+EL_EV_ONLY_gt_result = ('' > empty_var)
+print 'EL_EV_ONLY_> ', EL_EV_ONLY_gt_result
+EL_EV_ONLY_ge_result = ('' >= empty_var)
+print 'EL_EV_ONLY_>= ', EL_EV_ONLY_ge_result
+
+EL_NV_ONLY_R_var = 'a'
+EL_NV_ONLY_eq_result = ('' == EL_NV_ONLY_R_var)
+print 'EL_NV_ONLY_== ', EL_NV_ONLY_eq_result
+EL_NV_ONLY_ne_result = ('' != EL_NV_ONLY_R_var)
+print 'EL_NV_ONLY_!= ', EL_NV_ONLY_ne_result
+EL_NV_ONLY_lt_result = ('' < EL_NV_ONLY_R_var)
+print 'EL_NV_ONLY_< ', EL_NV_ONLY_lt_result
+EL_NV_ONLY_le_result = ('' <= EL_NV_ONLY_R_var)
+print 'EL_NV_ONLY_<= ', EL_NV_ONLY_le_result
+EL_NV_ONLY_gt_result = ('' > EL_NV_ONLY_R_var)
+print 'EL_NV_ONLY_> ', EL_NV_ONLY_gt_result
+EL_NV_ONLY_ge_result = ('' >= EL_NV_ONLY_R_var)
+print 'EL_NV_ONLY_>= ', EL_NV_ONLY_ge_result
+
+NL_EL_ONLY_eq_result = ('a' == '')
+print 'NL_EL_ONLY_== ', NL_EL_ONLY_eq_result
+NL_EL_ONLY_ne_result = ('a' != '')
+print 'NL_EL_ONLY_!= ', NL_EL_ONLY_ne_result
+NL_EL_ONLY_lt_result = ('a' < '')
+print 'NL_EL_ONLY_< ', NL_EL_ONLY_lt_result
+NL_EL_ONLY_le_result = ('a' <= '')
+print 'NL_EL_ONLY_<= ', NL_EL_ONLY_le_result
+NL_EL_ONLY_gt_result = ('a' > '')
+print 'NL_EL_ONLY_> ', NL_EL_ONLY_gt_result
+NL_EL_ONLY_ge_result = ('a' >= '')
+print 'NL_EL_ONLY_>= ', NL_EL_ONLY_ge_result
+
+NL_NL_LT_eq_result = ('a' == 'b')
+print 'NL_NL_LT_== ', NL_NL_LT_eq_result
+NL_NL_LT_ne_result = ('a' != 'b')
+print 'NL_NL_LT_!= ', NL_NL_LT_ne_result
+NL_NL_LT_lt_result = ('a' < 'b')
+print 'NL_NL_LT_< ', NL_NL_LT_lt_result
+NL_NL_LT_le_result = ('a' <= 'b')
+print 'NL_NL_LT_<= ', NL_NL_LT_le_result
+NL_NL_LT_gt_result = ('a' > 'b')
+print 'NL_NL_LT_> ', NL_NL_LT_gt_result
+NL_NL_LT_ge_result = ('a' >= 'b')
+print 'NL_NL_LT_>= ', NL_NL_LT_ge_result
+
+NL_NL_EQ_eq_result = ('a' == 'a')
+print 'NL_NL_EQ_== ', NL_NL_EQ_eq_result
+NL_NL_EQ_ne_result = ('a' != 'a')
+print 'NL_NL_EQ_!= ', NL_NL_EQ_ne_result
+NL_NL_EQ_lt_result = ('a' < 'a')
+print 'NL_NL_EQ_< ', NL_NL_EQ_lt_result
+NL_NL_EQ_le_result = ('a' <= 'a')
+print 'NL_NL_EQ_<= ', NL_NL_EQ_le_result
+NL_NL_EQ_gt_result = ('a' > 'a')
+print 'NL_NL_EQ_> ', NL_NL_EQ_gt_result
+NL_NL_EQ_ge_result = ('a' >= 'a')
+print 'NL_NL_EQ_>= ', NL_NL_EQ_ge_result
+
+NL_NL_GT_eq_result = ('b' == 'a')
+print 'NL_NL_GT_== ', NL_NL_GT_eq_result
+NL_NL_GT_ne_result = ('b' != 'a')
+print 'NL_NL_GT_!= ', NL_NL_GT_ne_result
+NL_NL_GT_lt_result = ('b' < 'a')
+print 'NL_NL_GT_< ', NL_NL_GT_lt_result
+NL_NL_GT_le_result = ('b' <= 'a')
+print 'NL_NL_GT_<= ', NL_NL_GT_le_result
+NL_NL_GT_gt_result = ('b' > 'a')
+print 'NL_NL_GT_> ', NL_NL_GT_gt_result
+NL_NL_GT_ge_result = ('b' >= 'a')
+print 'NL_NL_GT_>= ', NL_NL_GT_ge_result
+
+NL_EV_ONLY_eq_result = ('a' == empty_var)
+print 'NL_EV_ONLY_== ', NL_EV_ONLY_eq_result
+NL_EV_ONLY_ne_result = ('a' != empty_var)
+print 'NL_EV_ONLY_!= ', NL_EV_ONLY_ne_result
+NL_EV_ONLY_lt_result = ('a' < empty_var)
+print 'NL_EV_ONLY_< ', NL_EV_ONLY_lt_result
+NL_EV_ONLY_le_result = ('a' <= empty_var)
+print 'NL_EV_ONLY_<= ', NL_EV_ONLY_le_result
+NL_EV_ONLY_gt_result = ('a' > empty_var)
+print 'NL_EV_ONLY_> ', NL_EV_ONLY_gt_result
+NL_EV_ONLY_ge_result = ('a' >= empty_var)
+print 'NL_EV_ONLY_>= ', NL_EV_ONLY_ge_result
+
+NL_NV_LT_R_var = 'b'
+NL_NV_LT_eq_result = ('a' == NL_NV_LT_R_var)
+print 'NL_NV_LT_== ', NL_NV_LT_eq_result
+NL_NV_LT_ne_result = ('a' != NL_NV_LT_R_var)
+print 'NL_NV_LT_!= ', NL_NV_LT_ne_result
+NL_NV_LT_lt_result = ('a' < NL_NV_LT_R_var)
+print 'NL_NV_LT_< ', NL_NV_LT_lt_result
+NL_NV_LT_le_result = ('a' <= NL_NV_LT_R_var)
+print 'NL_NV_LT_<= ', NL_NV_LT_le_result
+NL_NV_LT_gt_result = ('a' > NL_NV_LT_R_var)
+print 'NL_NV_LT_> ', NL_NV_LT_gt_result
+NL_NV_LT_ge_result = ('a' >= NL_NV_LT_R_var)
+print 'NL_NV_LT_>= ', NL_NV_LT_ge_result
+
+NL_NV_EQ_R_var = 'a'
+NL_NV_EQ_eq_result = ('a' == NL_NV_EQ_R_var)
+print 'NL_NV_EQ_== ', NL_NV_EQ_eq_result
+NL_NV_EQ_ne_result = ('a' != NL_NV_EQ_R_var)
+print 'NL_NV_EQ_!= ', NL_NV_EQ_ne_result
+NL_NV_EQ_lt_result = ('a' < NL_NV_EQ_R_var)
+print 'NL_NV_EQ_< ', NL_NV_EQ_lt_result
+NL_NV_EQ_le_result = ('a' <= NL_NV_EQ_R_var)
+print 'NL_NV_EQ_<= ', NL_NV_EQ_le_result
+NL_NV_EQ_gt_result = ('a' > NL_NV_EQ_R_var)
+print 'NL_NV_EQ_> ', NL_NV_EQ_gt_result
+NL_NV_EQ_ge_result = ('a' >= NL_NV_EQ_R_var)
+print 'NL_NV_EQ_>= ', NL_NV_EQ_ge_result
+
+NL_NV_GT_R_var = 'a'
+NL_NV_GT_eq_result = ('b' == NL_NV_GT_R_var)
+print 'NL_NV_GT_== ', NL_NV_GT_eq_result
+NL_NV_GT_ne_result = ('b' != NL_NV_GT_R_var)
+print 'NL_NV_GT_!= ', NL_NV_GT_ne_result
+NL_NV_GT_lt_result = ('b' < NL_NV_GT_R_var)
+print 'NL_NV_GT_< ', NL_NV_GT_lt_result
+NL_NV_GT_le_result = ('b' <= NL_NV_GT_R_var)
+print 'NL_NV_GT_<= ', NL_NV_GT_le_result
+NL_NV_GT_gt_result = ('b' > NL_NV_GT_R_var)
+print 'NL_NV_GT_> ', NL_NV_GT_gt_result
+NL_NV_GT_ge_result = ('b' >= NL_NV_GT_R_var)
+print 'NL_NV_GT_>= ', NL_NV_GT_ge_result
+
+EV_EL_ONLY_eq_result = (empty_var == '')
+print 'EV_EL_ONLY_== ', EV_EL_ONLY_eq_result
+EV_EL_ONLY_ne_result = (empty_var != '')
+print 'EV_EL_ONLY_!= ', EV_EL_ONLY_ne_result
+EV_EL_ONLY_lt_result = (empty_var < '')
+print 'EV_EL_ONLY_< ', EV_EL_ONLY_lt_result
+EV_EL_ONLY_le_result = (empty_var <= '')
+print 'EV_EL_ONLY_<= ', EV_EL_ONLY_le_result
+EV_EL_ONLY_gt_result = (empty_var > '')
+print 'EV_EL_ONLY_> ', EV_EL_ONLY_gt_result
+EV_EL_ONLY_ge_result = (empty_var >= '')
+print 'EV_EL_ONLY_>= ', EV_EL_ONLY_ge_result
+
+EV_NL_ONLY_eq_result = (empty_var == 'a')
+print 'EV_NL_ONLY_== ', EV_NL_ONLY_eq_result
+EV_NL_ONLY_ne_result = (empty_var != 'a')
+print 'EV_NL_ONLY_!= ', EV_NL_ONLY_ne_result
+EV_NL_ONLY_lt_result = (empty_var < 'a')
+print 'EV_NL_ONLY_< ', EV_NL_ONLY_lt_result
+EV_NL_ONLY_le_result = (empty_var <= 'a')
+print 'EV_NL_ONLY_<= ', EV_NL_ONLY_le_result
+EV_NL_ONLY_gt_result = (empty_var > 'a')
+print 'EV_NL_ONLY_> ', EV_NL_ONLY_gt_result
+EV_NL_ONLY_ge_result = (empty_var >= 'a')
+print 'EV_NL_ONLY_>= ', EV_NL_ONLY_ge_result
+
+EV_EV_ONLY_eq_result = (empty_var == empty_var)
+print 'EV_EV_ONLY_== ', EV_EV_ONLY_eq_result
+EV_EV_ONLY_ne_result = (empty_var != empty_var)
+print 'EV_EV_ONLY_!= ', EV_EV_ONLY_ne_result
+EV_EV_ONLY_lt_result = (empty_var < empty_var)
+print 'EV_EV_ONLY_< ', EV_EV_ONLY_lt_result
+EV_EV_ONLY_le_result = (empty_var <= empty_var)
+print 'EV_EV_ONLY_<= ', EV_EV_ONLY_le_result
+EV_EV_ONLY_gt_result = (empty_var > empty_var)
+print 'EV_EV_ONLY_> ', EV_EV_ONLY_gt_result
+EV_EV_ONLY_ge_result = (empty_var >= empty_var)
+print 'EV_EV_ONLY_>= ', EV_EV_ONLY_ge_result
+
+EV_NV_ONLY_R_var = 'a'
+EV_NV_ONLY_eq_result = (empty_var == EV_NV_ONLY_R_var)
+print 'EV_NV_ONLY_== ', EV_NV_ONLY_eq_result
+EV_NV_ONLY_ne_result = (empty_var != EV_NV_ONLY_R_var)
+print 'EV_NV_ONLY_!= ', EV_NV_ONLY_ne_result
+EV_NV_ONLY_lt_result = (empty_var < EV_NV_ONLY_R_var)
+print 'EV_NV_ONLY_< ', EV_NV_ONLY_lt_result
+EV_NV_ONLY_le_result = (empty_var <= EV_NV_ONLY_R_var)
+print 'EV_NV_ONLY_<= ', EV_NV_ONLY_le_result
+EV_NV_ONLY_gt_result = (empty_var > EV_NV_ONLY_R_var)
+print 'EV_NV_ONLY_> ', EV_NV_ONLY_gt_result
+EV_NV_ONLY_ge_result = (empty_var >= EV_NV_ONLY_R_var)
+print 'EV_NV_ONLY_>= ', EV_NV_ONLY_ge_result
+
+NV_EL_ONLY_L_var = 'a'
+NV_EL_ONLY_eq_result = (NV_EL_ONLY_L_var == '')
+print 'NV_EL_ONLY_== ', NV_EL_ONLY_eq_result
+NV_EL_ONLY_ne_result = (NV_EL_ONLY_L_var != '')
+print 'NV_EL_ONLY_!= ', NV_EL_ONLY_ne_result
+NV_EL_ONLY_lt_result = (NV_EL_ONLY_L_var < '')
+print 'NV_EL_ONLY_< ', NV_EL_ONLY_lt_result
+NV_EL_ONLY_le_result = (NV_EL_ONLY_L_var <= '')
+print 'NV_EL_ONLY_<= ', NV_EL_ONLY_le_result
+NV_EL_ONLY_gt_result = (NV_EL_ONLY_L_var > '')
+print 'NV_EL_ONLY_> ', NV_EL_ONLY_gt_result
+NV_EL_ONLY_ge_result = (NV_EL_ONLY_L_var >= '')
+print 'NV_EL_ONLY_>= ', NV_EL_ONLY_ge_result
+
+NV_NL_LT_L_var = 'a'
+NV_NL_LT_eq_result = (NV_NL_LT_L_var == 'b')
+print 'NV_NL_LT_== ', NV_NL_LT_eq_result
+NV_NL_LT_ne_result = (NV_NL_LT_L_var != 'b')
+print 'NV_NL_LT_!= ', NV_NL_LT_ne_result
+NV_NL_LT_lt_result = (NV_NL_LT_L_var < 'b')
+print 'NV_NL_LT_< ', NV_NL_LT_lt_result
+NV_NL_LT_le_result = (NV_NL_LT_L_var <= 'b')
+print 'NV_NL_LT_<= ', NV_NL_LT_le_result
+NV_NL_LT_gt_result = (NV_NL_LT_L_var > 'b')
+print 'NV_NL_LT_> ', NV_NL_LT_gt_result
+NV_NL_LT_ge_result = (NV_NL_LT_L_var >= 'b')
+print 'NV_NL_LT_>= ', NV_NL_LT_ge_result
+
+NV_NL_EQ_L_var = 'a'
+NV_NL_EQ_eq_result = (NV_NL_EQ_L_var == 'a')
+print 'NV_NL_EQ_== ', NV_NL_EQ_eq_result
+NV_NL_EQ_ne_result = (NV_NL_EQ_L_var != 'a')
+print 'NV_NL_EQ_!= ', NV_NL_EQ_ne_result
+NV_NL_EQ_lt_result = (NV_NL_EQ_L_var < 'a')
+print 'NV_NL_EQ_< ', NV_NL_EQ_lt_result
+NV_NL_EQ_le_result = (NV_NL_EQ_L_var <= 'a')
+print 'NV_NL_EQ_<= ', NV_NL_EQ_le_result
+NV_NL_EQ_gt_result = (NV_NL_EQ_L_var > 'a')
+print 'NV_NL_EQ_> ', NV_NL_EQ_gt_result
+NV_NL_EQ_ge_result = (NV_NL_EQ_L_var >= 'a')
+print 'NV_NL_EQ_>= ', NV_NL_EQ_ge_result
+
+NV_NL_GT_L_var = 'b'
+NV_NL_GT_eq_result = (NV_NL_GT_L_var == 'a')
+print 'NV_NL_GT_== ', NV_NL_GT_eq_result
+NV_NL_GT_ne_result = (NV_NL_GT_L_var != 'a')
+print 'NV_NL_GT_!= ', NV_NL_GT_ne_result
+NV_NL_GT_lt_result = (NV_NL_GT_L_var < 'a')
+print 'NV_NL_GT_< ', NV_NL_GT_lt_result
+NV_NL_GT_le_result = (NV_NL_GT_L_var <= 'a')
+print 'NV_NL_GT_<= ', NV_NL_GT_le_result
+NV_NL_GT_gt_result = (NV_NL_GT_L_var > 'a')
+print 'NV_NL_GT_> ', NV_NL_GT_gt_result
+NV_NL_GT_ge_result = (NV_NL_GT_L_var >= 'a')
+print 'NV_NL_GT_>= ', NV_NL_GT_ge_result
+
+NV_EV_ONLY_L_var = 'a'
+NV_EV_ONLY_eq_result = (NV_EV_ONLY_L_var == empty_var)
+print 'NV_EV_ONLY_== ', NV_EV_ONLY_eq_result
+NV_EV_ONLY_ne_result = (NV_EV_ONLY_L_var != empty_var)
+print 'NV_EV_ONLY_!= ', NV_EV_ONLY_ne_result
+NV_EV_ONLY_lt_result = (NV_EV_ONLY_L_var < empty_var)
+print 'NV_EV_ONLY_< ', NV_EV_ONLY_lt_result
+NV_EV_ONLY_le_result = (NV_EV_ONLY_L_var <= empty_var)
+print 'NV_EV_ONLY_<= ', NV_EV_ONLY_le_result
+NV_EV_ONLY_gt_result = (NV_EV_ONLY_L_var > empty_var)
+print 'NV_EV_ONLY_> ', NV_EV_ONLY_gt_result
+NV_EV_ONLY_ge_result = (NV_EV_ONLY_L_var >= empty_var)
+print 'NV_EV_ONLY_>= ', NV_EV_ONLY_ge_result
+
+NV_NV_LT_L_var = 'a'
+NV_NV_LT_R_var = 'b'
+NV_NV_LT_eq_result = (NV_NV_LT_L_var == NV_NV_LT_R_var)
+print 'NV_NV_LT_== ', NV_NV_LT_eq_result
+NV_NV_LT_ne_result = (NV_NV_LT_L_var != NV_NV_LT_R_var)
+print 'NV_NV_LT_!= ', NV_NV_LT_ne_result
+NV_NV_LT_lt_result = (NV_NV_LT_L_var < NV_NV_LT_R_var)
+print 'NV_NV_LT_< ', NV_NV_LT_lt_result
+NV_NV_LT_le_result = (NV_NV_LT_L_var <= NV_NV_LT_R_var)
+print 'NV_NV_LT_<= ', NV_NV_LT_le_result
+NV_NV_LT_gt_result = (NV_NV_LT_L_var > NV_NV_LT_R_var)
+print 'NV_NV_LT_> ', NV_NV_LT_gt_result
+NV_NV_LT_ge_result = (NV_NV_LT_L_var >= NV_NV_LT_R_var)
+print 'NV_NV_LT_>= ', NV_NV_LT_ge_result
+
+NV_NV_EQ_L_var = 'a'
+NV_NV_EQ_R_var = 'a'
+NV_NV_EQ_eq_result = (NV_NV_EQ_L_var == NV_NV_EQ_R_var)
+print 'NV_NV_EQ_== ', NV_NV_EQ_eq_result
+NV_NV_EQ_ne_result = (NV_NV_EQ_L_var != NV_NV_EQ_R_var)
+print 'NV_NV_EQ_!= ', NV_NV_EQ_ne_result
+NV_NV_EQ_lt_result = (NV_NV_EQ_L_var < NV_NV_EQ_R_var)
+print 'NV_NV_EQ_< ', NV_NV_EQ_lt_result
+NV_NV_EQ_le_result = (NV_NV_EQ_L_var <= NV_NV_EQ_R_var)
+print 'NV_NV_EQ_<= ', NV_NV_EQ_le_result
+NV_NV_EQ_gt_result = (NV_NV_EQ_L_var > NV_NV_EQ_R_var)
+print 'NV_NV_EQ_> ', NV_NV_EQ_gt_result
+NV_NV_EQ_ge_result = (NV_NV_EQ_L_var >= NV_NV_EQ_R_var)
+print 'NV_NV_EQ_>= ', NV_NV_EQ_ge_result
+
+NV_NV_GT_L_var = 'b'
+NV_NV_GT_R_var = 'a'
+NV_NV_GT_eq_result = (NV_NV_GT_L_var == NV_NV_GT_R_var)
+print 'NV_NV_GT_== ', NV_NV_GT_eq_result
+NV_NV_GT_ne_result = (NV_NV_GT_L_var != NV_NV_GT_R_var)
+print 'NV_NV_GT_!= ', NV_NV_GT_ne_result
+NV_NV_GT_lt_result = (NV_NV_GT_L_var < NV_NV_GT_R_var)
+print 'NV_NV_GT_< ', NV_NV_GT_lt_result
+NV_NV_GT_le_result = (NV_NV_GT_L_var <= NV_NV_GT_R_var)
+print 'NV_NV_GT_<= ', NV_NV_GT_le_result
+NV_NV_GT_gt_result = (NV_NV_GT_L_var > NV_NV_GT_R_var)
+print 'NV_NV_GT_> ', NV_NV_GT_gt_result
+NV_NV_GT_ge_result = (NV_NV_GT_L_var >= NV_NV_GT_R_var)
+print 'NV_NV_GT_>= ', NV_NV_GT_ge_result

@@ -35,6 +35,8 @@ This file defines the language; the reasons behind the decisions are in IMPLEMEN
     (`print ("one" NEWLINE "two")`) or with a line ending in `,`. `'...'` and `"..."` cannot be joined.
   - Byte strings (`str`) are immutable values. They can be assigned to variables, copied between variables, passed as function arguments, and returned from functions. Assignment copies a 64-bit pointer; the string data is shared. The empty byte string is represented by a null pointer. Other values point to a static object containing a 64-bit byte length followed by the bytes.
   - Unicode strings (`text`) remain limited to `print` literals; they are not values yet.
+  - Byte strings support content-based `==`, `!=`, `<`, `<=`, `>`, `>=` comparisons (unsigned-byte lexicographical order), and `+` concatenation. `+=` concatenates and reassigns. Equal contents compare equal even when their addresses differ; pointer identity is only an implementation fast path.
+  - Concatenation creates a new immutable string object. Old objects are not freed yet.
   - `print` accepts numbers, byte-string variables, and either kind of string literal.
   - Output is written as UTF-8 bytes; the program sets the console code page to UTF-8 at start.
 - **Compatibility forms:** `# ` comments and `0x` hex literals exist only to ease the migration of existing sources and programs from other languages, and for the
@@ -43,9 +45,10 @@ This file defines the language; the reasons behind the decisions are in IMPLEMEN
   and the assignment forms `= += -= *= /= \= %= ^= &= |= ~= &&= ||= <<= >>= +>= <*= *>=`.
 
 ## 2. Values and types
-Three types:
+Four types:
 - **int** - 64-bit signed integer (two's complement, arithmetic wraps);
 - **float** - 64-bit IEEE 754 number;
+- **str** - immutable byte string; the value is a pointer to a length-prefixed byte sequence (null for empty);
 - **function** - a closure; written `fn(T1,T2)->R` in compiler messages.
 
 Types are checked at compile time, never written, and inferred:
@@ -57,13 +60,13 @@ Types are checked at compile time, never written, and inferred:
 - Calls check the number and types of the arguments. Calling a number is an error.
 - Function types may refer to themselves (`function f(a): return a(a)` with `d = f(q)`, `function q(x): return x`).
 - **Numbers** (int, float) are accepted by `+ - * / \ % ^`, unary `-` `?`, `< <= > >= == !=`, `&& || !`, conditions of `if`, `while`, `?!`, and `print`.
+  **Byte strings** (`str`) are accepted by `+`, `+=`, and all six comparisons. String ordering is lexicographical by unsigned byte values; equality compares contents.
   **Ints only** are accepted by `& | ~ << >> +> <* *>`, unary `~` and `exit`.
   Functions are accepted by `==` and `!=` (equal if they are the same function; same signature).
-- **Int and float mix inside operators:** `+ - * % ^` give a float if either side is a float (the other side is converted), else an int.
+- **Int and float mix inside operators:** `+ - * % ^` give a float if either side is a float (the other side is converted), else an int. `+` also concatenates two `str` values and returns `str`.
   `/` always gives a float, `\` always an int. A comparison with a float operand is done on floats.
   `1 + 0.5` is 1.5, `7 / 2` is 3.5, `7 \ 2` is 3, `1 == 1.0` is 1.
-- There is no other implicit conversion: assigning, passing or returning a float where an int is expected is an error, and vice versa
-  (`x = 0` then `x = 0.5` is an error; `f(1)` and `f(1.5)` cannot both be called).
+- There is no implicit conversion between types: assigning, passing or returning a float where an int is expected is an error, and vice versa; `str` never converts to or from a number (`x = 0` then `x = 0.5` is an error; `f(1)` and `f(1.5)` cannot both be called).
 - The branches of `c ? a ! b` have the same type, int and float mix as in an operator.
 - Truth: `0`, `0.0` and `-0.0` are false, any other number (also NaN) is true. Comparisons and logical operators give the int `0` or `1`.
 

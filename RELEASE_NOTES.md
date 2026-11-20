@@ -1,16 +1,26 @@
 # Ka - release notes (newest first)
 
-## Current state (version 6.4)
+## Current state (version 6.5.2)
+## Version 6.5.1
+- Fixed chained byte-string comparisons: the comparison helper clobbered `rdx`, and the chain code incorrectly reused it to preserve the middle operand. The current string operand is already saved before calling the helper; do not overwrite it afterward.
+- Extended the byte-string comparison test with successful and failing chains of three comparisons.
+
 Ka compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3, no dependencies). The version is the `VERSION` constant in `ka.py`.
-- **Language:** 64-bit ints and floats, first-class functions and closures (shared by reference, never freed), static type inference, constants, byte-string (`str`) values and byte/unicode string literals for `print`.
+- **Language:** 64-bit ints and floats, first-class functions and closures (shared by reference, never freed), static type inference, constants, byte-string (`str`) values, content comparisons and concatenation, and byte/unicode string literals for `print`.
   Details: LANGUAGE.md. Reasons: IMPLEMENTATION.txt.
-- **Tests:** 198 programs in `tests/` (194 from version 6.3 plus 4 for byte-string values). All 198 pass compilation and expected-error checks; runtime execution of the new test still needs verification on Windows or with the optional emulator dependencies.
-- **Checked on real Windows by the user:** all 194 tests of version 6.3 passed.
+- **Tests:** 201 programs in `tests/`, including byte-string values, comparisons and concatenation. The complete suite should be run on Windows; the development environment used for this release has no Windows runtime or Unicorn emulator.
+- **Checked on real Windows by the user:** all 198 tests of version 6.4 passed.
 - **Known limits:** see IMPLEMENTATION.txt section 9 (float printing last digit, fractional float powers checked only in an emulator, no unicode `text` values, no input, no GC).
+
+## Version 6.5
+- Byte strings (`str`) support `==`, `!=`, `<`, `<=`, `>`, `>=` by content. Ordering is lexicographical over unsigned bytes; embedded zero bytes are ordinary data.
+- `+` concatenates two byte strings; `+=` concatenates and reassigns. A new immutable object is allocated for a non-empty result; old objects are not freed.
+- Numeric arithmetic and comparisons retain their existing behavior. Mixed `str`/numeric operations are compile-time errors.
+- Added runtime helpers `rt_strcmp` and `rt_strcat`, plus tests for comparisons, chained comparisons, concatenation, compound assignment, functions and type errors.
 
 ## Version 6.4
 - **Byte strings as values (`str`):** assign literals to variables, copy values, pass/return them through functions, capture them in closures, and print variables. Strings are immutable; variables copy a 64-bit pointer. Empty string is null; non-empty literals use static `[u64 length][bytes]` objects in `.data`. No allocation or freeing is needed yet.
-- Unicode (`text`) literals remain printable only, not values. String operations, comparison, and GC are not implemented.
+- Unicode (`text`) literals remain printable only, not values. Unicode (`text`) values, operations, and GC are not implemented.
 - 1 runtime test and 3 type-error tests added.
 
 ## Version 6.3
@@ -84,3 +94,8 @@ Ka compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3,
 
 ## Version 1 - Tiny
 - The first language "Tiny" (`.tiny`): `let`, `input`, `global`, `nonlocal`, `and/or/not`, expression-bodied functions, first-class functions with closures, compiled to a PE `.exe` by `tinyc.py`; 49 tests. (I just asked Claude 'can you write a compiler ...' and expected 'I can' or some conditions etc, but in 3 minutes it just returned the first version of compiler, quite capable!)
+
+## Version 6.5.2
+- **Tests:** 202 programs (201 existing plus the empty-string regression test).
+- Fixed `rt_strcmp` null-left handling: the pointer-null test was followed by `cmp`, which overwrote the condition flags before the branch. Empty-left comparisons such as `'' < 'a'` could dereference address zero.
+- Added regression coverage for empty-string comparisons in both operand positions and chained comparisons.

@@ -19,7 +19,7 @@ import struct
 import sys
 
 
-VERSION = "6.4"                         # see RELEASE_NOTES.md
+VERSION = "6.5.2"                         # see RELEASE_NOTES.md
 
 
 class CompileError(Exception):
@@ -1146,6 +1146,14 @@ class Checker(Resolver):
     if kind == "arith":                 # result = float if one side is float, else int
       _, res, a, b, line, op = c
       a, b = prune(a), prune(b)
+      if op == "+" and (a.kind == "str" or b.kind == "str"):
+        for side, t in (("left", a), ("right", b)):
+          if t.kind == "var":
+            self.unify(t, STR, line, f"in {side} operand of '+'")
+          elif t.kind != "str":
+            self.err(line, f"type mismatch in {side} operand of '+': expected str, found {show(t)}")
+        self.result(res, STR, line, op)
+        return True
       if a.kind not in ("int", "float", "var"):
         self.err(line, f"type mismatch in left operand of '{op}': expected a number, found {show(a)}")
       if b.kind not in ("int", "float", "var"):
@@ -1160,11 +1168,16 @@ class Checker(Resolver):
         self.result(res, INT, line, op)
         return True
       return False
-    if kind == "eq":                    # two numbers (any mix) or two functions of the same type
+    if kind == "eq":                    # two numbers (any mix), strings, or functions of the same type
       _, a, b, line, what = c
       a, b = prune(a), prune(b)
       if a.kind == "str" or b.kind == "str":
-        self.err(line, f"type mismatch {what}: string values cannot be compared yet")
+        for t in (a, b):
+          if t.kind == "var":
+            self.unify(t, STR, line, what)
+          elif t.kind != "str":
+            self.err(line, f"type mismatch {what}: cannot compare str and {show(t)}")
+        return True
       if a.kind == "fn" or b.kind == "fn":
         self.unify(a, b, line, what)
         return True
@@ -1173,6 +1186,24 @@ class Checker(Resolver):
       if a.kind == "var" and b.kind == "var":
         return False
       self.pending.append(("num", a if a.kind == "var" else b, line, what))
+      return True
+    if kind == "order":                 # numbers (any mix) or two byte strings
+      _, a, b, line, op = c
+      a, b = prune(a), prune(b)
+      if a.kind == "str" or b.kind == "str":
+        for t in (a, b):
+          if t.kind == "var":
+            self.unify(t, STR, line, f"in '{op}'")
+          elif t.kind != "str":
+            self.err(line, f"type mismatch in '{op}': cannot compare str and {show(t)}")
+        return True
+      for side, t in (("left", a), ("right", b)):
+        if t.kind not in ("int", "float", "var"):
+          self.err(line, f"type mismatch in {side} operand of '{op}': expected a number, found {show(t)}")
+      if a.kind == "var" and b.kind == "var":
+        return False
+      if a.kind == "var" or b.kind == "var":
+        self.pending.append(("num", a if a.kind == "var" else b, line, f"in '{op}'"))
       return True
     if kind == "cond":                  # c ? a ! b : numbers mix like in an operator, functions must agree
       _, res, a, b, line, what = c
@@ -1306,8 +1337,8 @@ class Checker(Resolver):
         ta, tb = self.expr(e[2], sc, line), self.expr(e[3], sc, line)
         self.constrain(("eq", ta, tb, line, f"in '{op}' (both sides must have the same type, or both be numbers)"))
       elif op in ("<", "<=", ">", ">="):
-        self.need_num(self.expr(e[2], sc, line), line, f"in left operand of '{op}'")
-        self.need_num(self.expr(e[3], sc, line), line, f"in right operand of '{op}'")
+        ta, tb = self.expr(e[2], sc, line), self.expr(e[3], sc, line)
+        self.constrain(("order", ta, tb, line, op))
       else:                             # bitwise operators and shifts: integers only
         self.operand(e[2], sc, line, f"left operand of '{op}'")
         self.operand(e[3], sc, line, f"right operand of '{op}'")
@@ -1319,8 +1350,7 @@ class Checker(Resolver):
         if op in ("==", "!="):
           self.constrain(("eq", a, b, line, f"in '{op}' (both sides must have the same type, or both be numbers)"))
         else:
-          self.need_num(a, line, f"in operand of '{op}'")
-          self.need_num(b, line, f"in operand of '{op}'")
+          self.constrain(("order", a, b, line, op))
       return INT
     if k == "cond":
       self.need_num(self.expr(e[1], sc, line), line, "in the condition of '?'")
@@ -1739,15 +1769,22 @@ class CodeGen(Resolver):
         self.expr(xs[i + 1])                         # each operand is evaluated once
         a.emit(0x48, 0x89, 0xC2)                     # mov rdx,rax
         a.emit(0x48, 0x8B, 0x0C, 0x24)               # mov rcx,[rsp]
-        if "float" in (tys[i], tys[i + 1]):
+        if tys[i] == tys[i + 1] == "str":
+          a.emit(0x48, 0x89, 0x14, 0x24)             # save current operand for the next link
+          a.emit(0x48, 0x89, 0xC8)                   # mov rax,rcx (previous string)
+          a.emit(0x48, 0x89, 0xD1)                   # mov rcx,rdx (current string)
+          a.call("rt_strcmp")
+          a.emit(0x48, 0x83, 0xF8, 0x00)             # cmp rax,0
+          a.jcc(FAIL_CC[op], lf)
+        elif "float" in (tys[i], tys[i + 1]):
           self.load_xmm(0, 1, tys[i])                  # previous operand (rcx) -> xmm0
           self.load_xmm(1, 2, tys[i + 1])              # this operand (rdx) -> xmm1
           self.fcmp_false(op, lf)
         else:
           a.emit(0x48, 0x39, 0xD1)                   # cmp rcx,rdx
           a.jcc(FAIL_CC[op], lf)                     # stop at the first false link
-        if i < len(ops) - 1:
-          a.emit(0x48, 0x89, 0x14, 0x24)           # mov [rsp],rdx
+        if i < len(ops) - 1 and not (tys[i] == tys[i + 1] == "str"):
+          a.emit(0x48, 0x89, 0x14, 0x24)           # mov [rsp],rdx; string case saved it before the helper call
       a.emit(0xB8, 1, 0, 0, 0)                         # mov eax,1
       a.jmp(le)
       a.label(lf)
@@ -1805,7 +1842,13 @@ class CodeGen(Resolver):
       a.emit(0x48, 0x89, 0xC1)                         # mov rcx,rax
       a.emit(0x58)                                     # pop rax
       tl, tr = self.tk(e[2]), self.tk(e[3])
-      if (op in ARITH_OPS or op == "/") and self.tk(e) == "float":   # float arithmetic; an int operand is converted
+      if op == "+" and tl == tr == "str":
+        a.call("rt_strcat")                         # rax = new immutable concatenation
+      elif op in CMP_SETCC and tl == tr == "str":
+        a.call("rt_strcmp")
+        a.emit(0x48, 0x83, 0xF8, 0x00)               # cmp rax,0  (-1, 0 or 1)
+        a.emit(0x0F, CMP_SETCC[op], 0xC0, 0x0F, 0xB6, 0xC0)  # setcc al; movzx eax,al
+      elif (op in ARITH_OPS or op == "/") and self.tk(e) == "float":   # float arithmetic; an int operand is converted
         self.load_xmm(0, 0, tl)                      # left  (rax) -> xmm0
         self.load_xmm(1, 1, tr)                      # right (rcx) -> xmm1
         if op in ("+", "-", "*"):
@@ -2181,6 +2224,138 @@ class CodeGen(Resolver):
       a.call("rt_print_str")
       a.emit(0xB9, 1, 0, 0, 0)                         # mov ecx,1
       self.exit_process()
+
+    # rt_strcmp: rax = left string, rcx = right string -> rax = -1, 0 or 1.
+    # Strings are [u64 byte length][bytes]; null is the empty string.
+    a.label("rt_strcmp")
+    a.emit(prologue)
+    a.emit(0x49, 0x89, 0xC0)                           # mov r8,rax (left object)
+    left_empty = a.new_label("sc_left_empty")
+    right_empty = a.new_label("sc_right_empty")
+    sc_loop = a.new_label("sc_loop")
+    sc_lengths = a.new_label("sc_lengths")
+    sc_less = a.new_label("sc_less")
+    sc_greater = a.new_label("sc_greater")
+    sc_done = a.new_label("sc_done")
+    sc_same = a.new_label("sc_same")
+    a.emit(0x48, 0x39, 0xC8)                           # cmp rax,rcx (same immutable object => equal)
+    a.jcc(4, sc_same)
+    a.emit(0x4D, 0x85, 0xC0)                           # test r8,r8 (left pointer is null?)
+    a.jcc(4, left_empty)
+    a.emit(0x49, 0x8B, 0x10)                           # mov rdx,[r8] (left length)
+    a.emit(0x4D, 0x8D, 0x40, 0x08)                     # lea r8,[r8+8] (left bytes)
+    a.jmp(sc_lengths + "_left")
+    a.label(left_empty)
+    a.emit(0x31, 0xD2, 0x4D, 0x31, 0xC0)               # xor edx,edx; xor r8,r8
+    a.label(sc_lengths + "_left")
+    a.emit(0x49, 0x89, 0xC9)                           # mov r9,rcx (right object)
+    a.emit(0x4D, 0x85, 0xC9)                           # test r9,r9
+    a.jcc(4, right_empty)
+    a.emit(0x4D, 0x8B, 0x11)                           # mov r10,[r9] (right length)
+    a.emit(0x4D, 0x8D, 0x49, 0x08)                     # lea r9,[r9+8] (right bytes)
+    a.jmp(sc_lengths)
+    a.label(right_empty)
+    a.emit(0x45, 0x31, 0xD2, 0x4D, 0x31, 0xC9)         # xor r10d,r10d; xor r9,r9
+    a.label(sc_lengths)
+    a.label(sc_loop)
+    a.emit(0x48, 0x85, 0xD2)                           # test rdx,rdx
+    a.jcc(4, sc_lengths + "_end")
+    a.emit(0x4D, 0x85, 0xD2)                           # test r10,r10
+    a.jcc(4, sc_lengths + "_end")
+    a.emit(0x41, 0x0F, 0xB6, 0x00)                     # movzx eax,byte [r8]
+    a.emit(0x41, 0x0F, 0xB6, 0x09)                     # movzx ecx,byte [r9]
+    a.emit(0x39, 0xC8)                                 # cmp eax,ecx (unsigned byte values)
+    a.jcc(2, sc_less)                                  # jb
+    a.jcc(7, sc_greater)                               # ja
+    a.emit(0x49, 0xFF, 0xC0, 0x49, 0xFF, 0xC1)         # inc r8; inc r9
+    a.emit(0x48, 0xFF, 0xCA, 0x49, 0xFF, 0xCA)         # dec rdx; dec r10
+    a.jmp(sc_loop)
+    a.label(sc_lengths + "_end")
+    a.emit(0x4C, 0x39, 0xD2)                           # cmp rdx,r10 (remaining lengths)
+    a.jcc(2, sc_less)                                  # jb
+    a.jcc(7, sc_greater)                               # ja
+    a.label(sc_same)
+    a.emit(0x31, 0xC0)                                 # xor eax,eax
+    a.jmp(sc_done)
+    a.label(sc_less)
+    a.emit(0x48, 0xC7, 0xC0, 0xFF, 0xFF, 0xFF, 0xFF)   # mov rax,-1 (sign-extended)
+    a.jmp(sc_done)
+    a.label(sc_greater)
+    a.emit(0xB8, 1, 0, 0, 0)                           # mov eax,1
+    a.label(sc_done)
+    a.emit(epilogue)
+
+    # rt_strcat: rax = left, rcx = right -> a newly allocated [length][bytes] object.
+    # Old strings are intentionally not freed; empty result is the null pointer.
+    a.label("rt_strcat")
+    a.emit(prologue)
+    a.emit(0x48, 0x89, 0x45, 0xF8)                     # mov [rbp-8],rax (left object)
+    a.emit(0x48, 0x89, 0x4D, 0xF0)                     # mov [rbp-16],rcx (right object)
+    a.emit(0x31, 0xD2)                                 # xor edx,edx
+    a.emit(0x48, 0x85, 0xC0)                           # test rax,rax
+    cat_left_empty = a.new_label("cat_left_empty")
+    cat_right_empty = a.new_label("cat_right_empty")
+    cat_empty = a.new_label("cat_empty")
+    cat_left_loop = a.new_label("cat_left_loop")
+    cat_right_setup = a.new_label("cat_right_setup")
+    cat_right_loop = a.new_label("cat_right_loop")
+    cat_finish = a.new_label("cat_finish")
+    cat_done = a.new_label("cat_done")
+    a.jcc(4, cat_left_empty)
+    a.emit(0x48, 0x8B, 0x10)                           # mov rdx,[rax]
+    a.label(cat_left_empty)
+    a.emit(0x48, 0x89, 0x55, 0xE8)                     # mov [rbp-24],rdx (left length)
+    a.emit(0x31, 0xD2)                                 # xor edx,edx
+    a.emit(0x48, 0x8B, 0x4D, 0xF0)                     # mov rcx,[rbp-16]
+    a.emit(0x48, 0x85, 0xC9)                           # test rcx,rcx
+    a.jcc(4, cat_right_empty)
+    a.emit(0x48, 0x8B, 0x11)                           # mov rdx,[rcx]
+    a.label(cat_right_empty)
+    a.emit(0x48, 0x89, 0x55, 0xE0)                     # mov [rbp-32],rdx (right length)
+    a.emit(0x48, 0x8B, 0x45, 0xE8)                     # mov rax,[rbp-24]
+    a.emit(0x48, 0x03, 0x45, 0xE0)                     # add rax,[rbp-32]
+    a.emit(0x48, 0x85, 0xC0)                           # test rax,rax
+    a.jcc(4, cat_empty)
+    a.emit(0x48, 0x89, 0x45, 0xD8)                     # mov [rbp-40],rax (total length)
+    a.emit(0x48, 0x8D, 0x48, 0x08)                     # lea rcx,[rax+8] (allocation size)
+    a.call("rt_alloc")
+    a.emit(0x48, 0x8B, 0x55, 0xD8)                     # mov rdx,[rbp-40]
+    a.emit(0x48, 0x89, 0x10)                           # mov [rax],rdx (length)
+    a.emit(0x48, 0x89, 0x45, 0xD0)                     # mov [rbp-48],rax (result object)
+    a.emit(0x49, 0x89, 0xC2)                           # mov r10,rax (result object)
+    a.emit(0x49, 0x83, 0xC2, 0x08)                     # add r10,8 (destination)
+    a.emit(0x48, 0x8B, 0x45, 0xF8)                     # mov rax,[rbp-8]
+    a.emit(0x48, 0x85, 0xC0)                           # test rax,rax
+    a.jcc(4, cat_right_setup)
+    a.emit(0x4C, 0x8D, 0x40, 0x08)                     # lea r8,[rax+8]
+    a.emit(0x48, 0x8B, 0x55, 0xE8)                     # mov rdx,[rbp-24]
+    a.label(cat_left_loop)
+    a.emit(0x48, 0x85, 0xD2)                           # test rdx,rdx
+    a.jcc(4, cat_right_setup)
+    a.emit(0x41, 0x8A, 0x08, 0x41, 0x88, 0x0A)         # mov cl,[r8]; mov [r10],cl
+    a.emit(0x49, 0xFF, 0xC0, 0x49, 0xFF, 0xC2)         # inc r8; inc r10
+    a.emit(0x48, 0xFF, 0xCA)                           # dec rdx
+    a.jmp(cat_left_loop)
+    a.label(cat_right_setup)
+    a.emit(0x48, 0x8B, 0x45, 0xF0)                     # mov rax,[rbp-16]
+    a.emit(0x48, 0x85, 0xC0)                           # test rax,rax
+    a.jcc(4, cat_finish)
+    a.emit(0x4C, 0x8D, 0x40, 0x08)                     # lea r8,[rax+8]
+    a.emit(0x48, 0x8B, 0x55, 0xE0)                     # mov rdx,[rbp-32]
+    a.label(cat_right_loop)
+    a.emit(0x48, 0x85, 0xD2)                           # test rdx,rdx
+    a.jcc(4, cat_finish)
+    a.emit(0x41, 0x8A, 0x08, 0x41, 0x88, 0x0A)         # mov cl,[r8]; mov [r10],cl
+    a.emit(0x49, 0xFF, 0xC0, 0x49, 0xFF, 0xC2)         # inc r8; inc r10
+    a.emit(0x48, 0xFF, 0xCA)                           # dec rdx
+    a.jmp(cat_right_loop)
+    a.label(cat_finish)
+    a.emit(0x48, 0x8B, 0x45, 0xD0)                     # mov rax,[rbp-48]
+    a.jmp(cat_done)
+    a.label(cat_empty)
+    a.emit(0x31, 0xC0)                                 # xor eax,eax
+    a.label(cat_done)
+    a.emit(epilogue)
 
     # rt_alloc: rcx = size in bytes -> rax = zeroed memory from the process heap
     a.label("rt_alloc")

@@ -1,0 +1,2 @@
+s = 'text'
+x = s < 1  -- ERROR: type mismatch in '<': cannot compare str and int
