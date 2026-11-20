@@ -1,7 +1,9 @@
 # Ka - a small language compiled to Windows .exe
 
 ```
-python ka.py program.ka            # -> program.exe (python is pure Python 3, runs on any OS)
+python ka.py program.ka            # -> program.exe
+python ka.py program.ka -o p.exe   # -> p.exe
+
 python run_tests.py                # on Windows: compiles and RUNS every test
 python run_tests.py -k closure -v  # subset, verbose
 python run_tests.py --emu          # Linux/macOS: run tests in an emulator (pip install unicorn pefile)
@@ -27,8 +29,8 @@ python run_tests.py --emu          # Linux/macOS: run tests in an emulator (pip 
 ## Resuming work in a new Claude chat
 Upload this folder (or the zip) and write, for example:
 
-> We continue the Ka compiler. Read NOTES.md, LANGUAGE.md, IMPLEMENTATION.txt and RELEASE_NOTES.md first, run the tests
-> (`python run_tests.py --emu`), then let's work on: \<what you want\>.
-> At the end update the docs and tests and give me a new zip.
+> We continue the Ka compiler. Read NOTES.md, LANGUAGE.md, IMPLEMENTATION.txt and RELEASE_NOTES.md first,
+> then let's work on: \<what you want\>.
+> At the end update the docs and run the tests (`python run_tests.py --emu`) and give me a new zip.
 
-After a change, run `python run_tests.py` on Windows and send Claude the failing output (use `-v`).
+After that, run `python run_tests.py` on Windows and send Claude the failing output (use `-v`).
