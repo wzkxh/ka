@@ -9,22 +9,20 @@ Ka compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3,
 - **Known limits:** see IMPLEMENTATION.txt section 9 (float printing last digit, fractional float powers checked only in an emulator, no strings as values, no input, no GC).
 
 ## Version 6.3
-- **Random numbers:** the unary operator `?x`. `?n`, `?x`.
-- `PLANS.md` updated by the user.
+- **Random numbers:** the unary operator `?x`; int/float: `?n -> 0..n-1`, `?x -> [0.0..x)`.
 - 3 new tests: `62_random`, `err_const_random`, `err_type_random_function`.
 
 ## Version 6.2.1 (no change to the compiler)
 - **Tests:** `tests/` holds only the `.ka` programs now; the expected output, exit codes, warnings and expected errors are in `tests/results/` (`run_tests.py` and `tools/annotate_tests.py` updated).
 - `tools/annotate_tests.py --check`: verifies that every `-- =>` comment tells what the program really prints (the annotator used to skip lines that already had a comment, so a comment could become stale
   after a change of behaviour: test 48 had one after 6.2, fixed by the user). All comments agree now.
-- `performance/cs.ka` fixed: `n = n / 2` is a float division since version 6 (the program no longer compiled); it is `n \ 2` now, as `//` in the Python version. All eight benchmarks were compared with their
-  Python versions at reduced sizes: same results. The timings in `performance/benchmarks.txt` are older; `%` and `\` on ints cost a few instructions more since 6.2 (floor correction), so `cs` and `prime` may be a little slower.
+- `performance/cs.ka` fixed: `n = n / 2` is a float division since version 6 (the program no longer compiled); it is `n \ 2` now, as `//` in the Python version. All eight benchmarks were compared with their Python versions at reduced sizes: same results. The timings in `performance/benchmarks.txt` are older; `%` and `\` on ints cost a few instructions more since 6.2 (floor correction), so `cs` and `prime` may be a little slower.
 - Docs: `PLANS.md` replaces `TODO.txt` (README, NOTES, IMPLEMENTATION updated; README said `PLANS.txt`); a missing parenthesis in LANGUAGE.md.
 
 ## Version 6.2
-- **Floored division and modulo (incompatible for negative operands):** `a \ b` is floor(a / b) (toward minus infinity) and `a % b` has the sign of `b`, for ints and floats, so `-7 \ 3` is -3,
+- **Floored division and modulo** (incompatible for negative operands): `a \ b` is floor(a / b) (toward minus infinity) and `a % b` has the sign of `b`, for ints and floats, so `-7 \ 3` is -3,
   `-7 % 3` is 2, `7 % -3` is -2, and `a \ b * b + a % b == a` holds for ints (for floats up to rounding). Before, both truncated toward zero (`-7 % 3` was -1). A zero float remainder is `+0.0`.
-- **Fixed: float `\` was off by one in rare cases** (the intermediate quotient was truncated instead of rounded; versions 6 and 6.1: `6049232.4789095735 \ 455.61461813570327` gave 13276, the right answer is 13277).
+- **Fixed: float `\`** was off by one in rare cases (the intermediate quotient was truncated instead of rounded; versions 6 and 6.1: `6049232.4789095735 \ 455.61461813570327` gave 13276, the right answer is 13277).
 - `# ` comments and `0x` literals are documented as compatibility forms (for migrating and copying from other languages), discouraged in new programs.
 - `ka.py --version` removed (the `VERSION` constant is enough).
 - 1 new test (191 total); the expectations of 3 tests with negative operands changed (02, 48, 56).
@@ -49,7 +47,7 @@ Ka compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3,
 - **Docs:** split into LANGUAGE.md (short definition), IMPLEMENTATION.txt (decisions, reasons, issues), NOTES.md (for Claude), RELEASE_NOTES.md (this file), TODO.txt (next steps), README.md.
 
 ## Version 5 - floats
-- 64-bit floats: literals `1.5`, `1_000.25`, `6.02e23`, `1E-9`, `5e3`; no `.5`, `1.`, INF, NAN.
+- **64-bit floats:** literals `1.5`, `1_000.25`, `6.02e23`, `1E-9`, `5e3`; no `.5`, `1.`, INF, NAN.
 - Operators `+ - * / % ^` and unary `-` on floats, exact comparisons (also chained), truth values, `?:`; bit operators, shifts and `exit` need ints. Int and float mix inside operators (the int is
   converted); assignment, arguments and `return` are strict.
 - `print` of floats: 15 significant digits, Python-like layout (`0.1 + 0.2` prints `0.3`, `100.0`, `1e-05`, `inf`, `nan`).
@@ -58,15 +56,21 @@ Ka compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3,
 - Documented "yet to do": more literals, INF, NAN, comparison tolerance, formatting, explicit conversion.
 
 ## Version 4
-- Binary literals `2#0001_1011`.
-- Compound assignment `+= -= *= /= %= ^= &= |= ~= &&= ||=` and the shift forms.
-- Shifts and rotates `<<  >>  +>  <*  *>` (arithmetic left shift = `<<`, no separate operator).
-- Constants: names in capitals, defined once at the top level with a constant expression, created at program start. 133 tests.
+- **Binary literals** `2#0001_1011`.
+- **Compound assignment** `+= -= *= /= %= ^= &= |= ~= &&= ||=` and the shift forms.
+- **Shifts and rotates** `<<  >>  +>  <*  *>` (arithmetic left shift = `<<`, no separate operator).
+- **Constants:** names in capitals, defined once at the top level with a constant expression, created at program start. 133 tests.
 
 ## Version 3
-- `function` keyword with the synonym `\`; one parameter without parentheses; `@x` for variables of the enclosing function (replaced `\x`); `{ ... }` as an ordinary statement; `skip`;
-  conditional expression `c ? a ! b`; unary operators bind tighter than `^` (`-2^2` is 4); bit operators between `+` and comparisons; TAB no longer special; 2-space indentation in code and tests;
-  `fn` removed; recursive function types allowed; documented that variables start as 0. 107 tests.
+- **`function` keyword with the synonym `\`**; one parameter without parentheses;
+- `fn` removed (now it's `function` or `\` (looks like **λ**));
+- recursive function types allowed;
+- documented that **variables start as 0**.
+- `@x` for variables of the enclosing function (replaced `\x`);
+- `{ ... }` as an ordinary statement;
+- **empty statement** `skip`;
+- **conditional expression** `c ? a ! b`; unary operators bind tighter than `^` (`-2^2` is 4); bit operators between `+` and comparisons; TAB no longer special; 2-space indentation in code and tests;
+- 107 tests.
 
 ## Version 2 - Ka
 - Rename Tiny -> Ka (`ka.py`, `.ka`). Language reworked by the user: comments `--`, `--[[ ]]--`, `--[[ --]]`; `elif`; removed `let input and or not global nonlocal`; `&& || !`; globals `^x`;
@@ -74,4 +78,4 @@ Ka compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3,
   `\x` for enclosing-function variables (draft); max 20 parameters. Compiler, type checker and tests rebuilt (95 tests).
 
 ## Version 1 - Tiny
-- The first language "Tiny" (`.tiny`): `let`, `input`, `global`, `nonlocal`, `and/or/not`, expression-bodied functions, first-class functions with closures, compiled to a PE `.exe` by `tinyc.py`; 49 tests.
+- The first language "Tiny" (`.tiny`): `let`, `input`, `global`, `nonlocal`, `and/or/not`, expression-bodied functions, first-class functions with closures, compiled to a PE `.exe` by `tinyc.py`; 49 tests. (I just asked Claude 'can you write a compiler ...' and expected 'I can' or some conditions etc, but in 3 minutes it just returned the first version of compiler, quite capable!)
