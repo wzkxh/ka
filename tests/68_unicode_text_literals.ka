@@ -1,0 +1,7 @@
+-- Unicode literal escapes and adjacent literal joining
+s1 = "caf^e9"
+s2 = "caf^u00e9"
+s3 = "^U01F680"  -- ^U takes exactly six hex digits
+s4 = "^u4F60" "^u597D"
+print s1, '|', s2, '|', s3, '|', s4
+print (s1 == s2), ' ', (s3 == "🚀"), ' ', (s4 == "你好")

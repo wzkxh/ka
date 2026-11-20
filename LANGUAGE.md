@@ -25,19 +25,19 @@ This file defines the language; the reasons behind the decisions are in IMPLEMEN
 - **Float literals** (64-bit): `digits.digits`, `digits[.digits]e|E[sign]digits`; digits are 0-9 with optional `_` between digits:
   `1.5`, `1_000.25`, `6.02e23`, `1E-9`, `5e3` (the float 5000.0).
   No `.5`, no `1.`, no infinity or NaN literal (yet). Too large for a double is an error, too small gives 0.0 or a denormal.
-- **String literals:** `'...'` is a byte string (`str`), `"..."` a unicode string (`text`). Byte strings can be values; unicode strings are still only printable literals. A string cannot contain a raw newline.
+- **String literals:** `'...'` is a byte string (`str`), `"..."` a Unicode string (`text`). Both are immutable values. A string cannot contain a raw newline.
   - Escape character `^`: `^n` newline, `^t` TAB, `^r` CR, `^^` caret, `^"` quote, `^'` apostrophe (both quotes in both kinds).
-  - `^XX` (two hex digits, `^e9`, `^E9`, `^00`): the byte XX in a byte string; the character U+00XX in a unicode string.
+  - `^XX` (two hex digits, `^e9`, `^E9`, `^00`): the byte XX in a byte string; the character U+00XX in a Unicode string.
   - `^uXXXX` (4 hex digits), `^UXXXXXX` (6 hex digits): a Unicode character (to 10FFFF, no surrogates); in a byte string its UTF-8 bytes.
-  - Other characters stand for themselves; non-ASCII source text becomes UTF-8 bytes. Any other escape is an error.
-  - A string may contain the byte 0.
+  - Other characters stand for themselves; non-ASCII source text is encoded as UTF-8 for `str` and stored as its Unicode code point for `text`. Any other escape is an error.
+  - `str` may contain byte 0; `text` may contain U+0000.
   - String literals written one after another are joined: `'a' 'b' 'c'`. A string over several lines is written in parentheses
     (`print ("one" NEWLINE "two")`) or with a line ending in `,`. `'...'` and `"..."` cannot be joined.
-  - Byte strings (`str`) are immutable values. They can be assigned to variables, copied between variables, passed as function arguments, and returned from functions. Assignment copies a 64-bit pointer; the string data is shared. The empty byte string is represented by a null pointer. Other values point to a static object containing a 64-bit byte length followed by the bytes.
-  - Unicode strings (`text`) remain limited to `print` literals; they are not values yet.
-  - Byte strings support content-based `==`, `!=`, `<`, `<=`, `>`, `>=` comparisons (unsigned-byte lexicographical order), and `+` concatenation. `+=` concatenates and reassigns. Equal contents compare equal even when their addresses differ; pointer identity is only an implementation fast path.
-  - Concatenation creates a new immutable string object. Old objects are not freed yet.
-  - `print` accepts numbers, byte-string variables, and either kind of string literal.
+  - Both types can be assigned to variables, copied, passed as function arguments, returned from functions, captured by closures, and printed. Assignment copies a 64-bit pointer; immutable string data is shared. The empty string is represented by a null pointer.
+  - A non-empty `str` points to `[u64 byte length][raw bytes]`. A non-empty `text` points to `[u64 code-point length][u32 Unicode scalar values]`. The `text` length counts Unicode code points, not UTF-8 bytes or grapheme clusters.
+  - Both types support content-based `==`, `!=`, `<`, `<=`, `>`, `>=` comparisons and `+` concatenation; `+=` concatenates and reassigns. `str` ordering compares unsigned bytes; `text` ordering compares Unicode code points. Equal contents compare equal even when addresses differ; pointer identity is only an implementation fast path.
+  - Concatenation creates a new immutable string object. Old objects are not freed yet. Text printing encodes code points as UTF-8 without allocating a temporary string.
+  - `str` and `text` cannot be mixed in assignments, arguments, returns, concatenation, or comparisons. Explicit conversions may be added later.
   - Output is written as UTF-8 bytes; the program sets the console code page to UTF-8 at start.
 - **Compatibility forms:** `# ` comments and `0x` hex literals exist only to ease the migration of existing sources and programs from other languages, and for the
   ease of copying code and constants between them. They are not Ka style and are discouraged in new programs: write `--` comments and `#ff` / `2#...` literals.
@@ -45,10 +45,11 @@ This file defines the language; the reasons behind the decisions are in IMPLEMEN
   and the assignment forms `= += -= *= /= \= %= ^= &= |= ~= &&= ||= <<= >>= +>= <*= *>=`.
 
 ## 2. Values and types
-Four types:
+Five types:
 - **int** - 64-bit signed integer (two's complement, arithmetic wraps);
 - **float** - 64-bit IEEE 754 number;
-- **str** - immutable byte string; the value is a pointer to a length-prefixed byte sequence (null for empty);
+- **str** - immutable byte string; the value is a pointer to `[u64 byte length][bytes]` (null for empty);
+- **text** - immutable Unicode string; the value is a pointer to `[u64 code-point length][u32 code points]` (null for empty);
 - **function** - a closure; written `fn(T1,T2)->R` in compiler messages.
 
 Types are checked at compile time, never written, and inferred:
@@ -60,14 +61,14 @@ Types are checked at compile time, never written, and inferred:
 - Calls check the number and types of the arguments. Calling a number is an error.
 - Function types may refer to themselves (`function f(a): return a(a)` with `d = f(q)`, `function q(x): return x`).
 - **Numbers** (int, float) are accepted by `+ - * / \ % ^`, unary `-` `?`, `< <= > >= == !=`, `&& || !`, conditions of `if`, `while`, `?!`, and `print`.
-  **Byte strings** (`str`) are accepted by `+`, `+=`, and all six comparisons. String ordering is lexicographical by unsigned byte values; equality compares contents.
+  **Strings** (`str` and `text`) are accepted by `+`, `+=`, and all six comparisons, but the two types cannot be mixed. `str` ordering is lexicographical by unsigned byte values; `text` ordering is lexicographical by Unicode code points; equality compares contents.
   **Ints only** are accepted by `& | ~ << >> +> <* *>`, unary `~` and `exit`.
   Functions are accepted by `==` and `!=` (equal if they are the same function; same signature).
-- **Int and float mix inside operators:** `+ - * % ^` give a float if either side is a float (the other side is converted), else an int. `+` also concatenates two `str` values and returns `str`.
+- **Int and float mix inside operators:** `+ - * % ^` give a float if either side is a float (the other side is converted), else an int. `+` also concatenates two values of the same string type and returns that type.
   `/` always gives a float, `\` always an int. A comparison with a float operand is done on floats.
   `1 + 0.5` is 1.5, `7 / 2` is 3.5, `7 \ 2` is 3, `1 == 1.0` is 1.
-- There is no implicit conversion between types: assigning, passing or returning a float where an int is expected is an error, and vice versa; `str` never converts to or from a number (`x = 0` then `x = 0.5` is an error; `f(1)` and `f(1.5)` cannot both be called).
-- The branches of `c ? a ! b` have the same type, int and float mix as in an operator.
+- There is no implicit conversion between types: assigning, passing or returning a float where an int is expected is an error, and vice versa; `str` and `text` do not convert to each other or to numbers (`x = 0` then `x = 0.5` is an error; `f(1)` and `f(1.5)` cannot both be called).
+- The branches of `c ? a ! b` have the same type, int and float mix as in an operator; `str` and `text` branches must match exactly.
 - Truth: `0`, `0.0` and `-0.0` are false, any other number (also NaN) is true. Comparisons and logical operators give the int `0` or `1`.
 
 ## 3. Statements and lines
@@ -147,7 +148,7 @@ Precedence, highest to lowest; binary operators are left-associative except `^`:
 |---|---|
 | `name = expr`, `^name = expr`, `@name = expr` | assign, creates a variable / a global / an enclosing function's variable (see 7) |
 | `name op= expr` | `name = name op expr` for `+ - * / \ % ^ & \| ~ && \|\| << >> +> <* *>`; `&&=` and `\|\|=` short-circuit; also `^name op= expr`, `@name op= expr` |
-| `print a, b, "text", ...` | print the items one after another, then a newline; `print` alone prints an empty line. Items are numbers, `str` values, or string literals |
+| `print a, b, "text", ...` | print the items one after another, then a newline; `print` alone prints an empty line. Items are numbers, `str`/`text` values, or string literals |
 | `if cond block [elif cond block]... [else block]` | conditional (`else if` also works) |
 | `while cond block` | loop |
 | `break`, `continue` | only inside a `while` of the same function |
@@ -222,7 +223,7 @@ Very deep recursion overflows the 1 MB stack and crashes.
   `bad number '1.5abc...'`, `a float needs digits after the dot` / `before the dot`, `float literal too large`, `integer literal too large`.
 - *layout / syntax:* `unexpected indentation`, `inconsistent indentation`, `expected an indented block after ':'`, `'(' is never closed`, `'{' is never closed`,
   `unmatched '}'`, `unmatched ')'`, `expected end of statement, found ...`, `unexpected end of line in expression`, `unexpected 'else'`,
-  `expected '{' or ':' after the parameters`, `expected '(' or a parameter name`, `expected '!'`, `a unicode string can only be printed (it is not a value)`,
+  `expected '{' or ':' after the parameters`, `expected '(' or a parameter name`, `expected '!'`, `cannot mix text and str`,
   `'break' outside of a loop`, `'return' outside of a function`, `'=' (return) needs a value`, `duplicate parameter 'a'`,
   `too many parameters (at most 20)`, `function 'f' is already defined in this scope`.
 - *names:* `undefined variable 'x'`, `undefined global variable 'x'`, `variable 'x' used before assignment`,
@@ -233,7 +234,7 @@ Very deep recursion overflows the 1 MB stack and crashes.
   `constant 'X' cannot be changed`, `'@X': a constant cannot be an enclosing function's variable`, `parameter 'N' looks like a constant`,
   `the value of constant 'X' must be a constant expression (...): it uses the variable 'a'` (or `it calls a function`, `it uses 'B', which is defined later`).
 - *types:* `type mismatch <where>: expected T, found U` (`in assignment to 'x'`, `in argument 2 of the call`, `in left operand of '+'`,
-  `in the condition of 'if'`, `in 'print' (only numbers and byte strings can be printed)`, `in 'return' (all returns of a function must agree)`, ...),
+  `in the condition of 'if'`, `in 'print' (only numbers, str and text can be printed)`, `in 'return' (all returns of a function must agree)`, ...),
   `the result is float, expected int`, `wrong number of arguments: the function takes N, called with M`, `an int is not a function` (or `a float ...`),
   `expected a number, found fn()`, `in '?!' (both branches must have the same type, or both be numbers)`, `in the condition of '?'`.
 - *warning:* `the value of this expression is not used`.
@@ -243,7 +244,7 @@ Very deep recursion overflows the 1 MB stack and crashes.
 | char | usage |
 |---|---|
 | ' | byte string |
-| " | unicode string |
+| " | Unicode string |
 | # | hex literal `#ff`, binary literal `2#101`; `# ` comment |
 | ! | unary not, conditional `c ? a ! b`, != - not equal |
 | ? | unary random, conditional `c ? a ! b` |

@@ -1,0 +1,48 @@
+-- Unicode text values: assignment, copying, parameters, return, comparison and concatenation
+empty = ""
+empty_copy = empty
+hello = "Привіт!"
+copy = hello
+print empty, '|', empty_copy, '|', copy
+empty_join = "" + ""
+left_empty = "" + "x"
+right_empty = "x" + ""
+print (empty_join == ""), ' ', (left_empty == "x"), ' ', (right_empty == "x")
+copy += " 🌍"
+print copy
+print hello
+
+byte_hello = 'Привіт!'
+text_hello = "Привіт!"
+print byte_hello, '|', text_hello, '|', "你好", '|', "🚀"
+
+joined = "你好" + "，世界"
+joined += " 🚀"
+print joined
+
+function text_join(a, b): return a + b
+function text_same(a, b): return a == b
+print text_join("добрий ", "день"), '|', text_same("текст", "текст")
+
+lt = "a" < "b"
+eq = "你好" == "你好"
+gt = "🚀" > "z"
+ne = "a" != "b"
+le = "a" <= "a"
+ge = "b" >= "a"
+print lt, ' ', eq, ' ', gt, ' ', ne, ' ', le, ' ', ge
+
+chain1 = "a" < "b" < "c"
+chain2 = "a" < "c" < "b"
+print chain1, ' ', chain2
+
+empty_eq = "" == ""
+empty_lt = "" < "a"
+a_gt_empty = "a" > ""
+print empty_eq, ' ', empty_lt, ' ', a_gt_empty
+
+function captured_text():
+  value = "captured 🚀"
+  function get(): return value
+  return get()
+print captured_text()

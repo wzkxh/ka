@@ -49,9 +49,9 @@ Reasons behind decisions: IMPLEMENTATION.txt. History and state: RELEASE_NOTES.m
   `parse_function` saves and resets `self.nblock` (a function body starts counting again).
 - Expression levels low to high: `cond` `or_` `and_` `eq` `cmp` `bor` `bxor` `band` `shift` `add` `mul` (`* / % \`) `power` `unary` `postfix`. `chain()` builds `("cmp", ops, operands)` for 2+
   comparisons of one level. `power()` = `unary ['^' power]`; `-5`/`-1.5` are folded into literals.
-- Print items: `string_item()` collects adjacent byte/unicode literals or a parenthesised group. In expressions, `primary()` accepts byte literals (`bstr` AST node) and joins adjacent byte literals; unicode literals remain print-only.
+- Print items: `string_item()` collects adjacent byte/Unicode literals or a parenthesised group. In expressions, `primary()` accepts byte literals (`bstr`) and Unicode literals (`btext`), joining adjacent literals of the same kind.
 - AST (line last): statements `("assign",name,expr,line,mode[,True])` (6th element = constant definition) `("print",items,line) ("if",c,then,else,line) ("while",c,body,line) ("exit",e,line)
-  ("exprstmt",e,line) ("return",e|None,line) ("fn",Scope) ("block",stmts) ("skip",) ("break",) ("continue",)`; expressions `("num",n) ("flt",x) ("bstr",index) ("var",name,line,mode) ("call",callee,args,line)
+  ("exprstmt",e,line) ("return",e|None,line) ("fn",Scope) ("block",stmts) ("skip",) ("break",) ("continue",)`; expressions `("num",n) ("flt",x) ("bstr",index) ("btext",index) ("var",name,line,mode) ("call",callee,args,line)
   ("fnlit",Scope) ("bin",op,l,r) ("cmp",ops,xs) ("cond",c,a,b) ("and"|"or",l,r) ("neg"|"not"|"bnot",e)`. `mode`: None, `^` (global), `@` (enclosing function).
 - Scopes: `Scope` per function plus the global scope (`parent is None`). `declare(name, mode, line)` registers assigned names; `globals_decl` / `nonlocal_decl` record names used as `^x` / `@x`
   (a name cannot be both local and marked). `^x` in a function also creates the global slot and adds it to `fn_globals`.
@@ -65,7 +65,7 @@ Shared by Checker and CodeGen. `lookup(name, scope, line, mode)` -> `("g",name)`
 plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing functions, then globals.
 
 ### Type checker (`Checker`)
-- Monomorphic unification. `Ty` kinds `int`, `float`, `str`, `fn(params, ret)`, `var`. `print` accepts int/float/str. `+` is constrained as numeric addition or string concatenation; `eq` and `order` constraints support numeric comparisons or byte-string content comparisons. Variables keyed `("g",name)` or `(scope,name)`; every function has a type with a fresh variable per parameter and result (`fn_ty`);
+- Monomorphic unification. `Ty` kinds `int`, `float`, `str`, `text`, `fn(params, ret)`, `var`. `print` accepts int/float/str/text. `+` is constrained as numeric addition or same-type string concatenation; `eq` and `order` constraints support numeric comparisons or byte-string/Unicode-code-point comparisons. `str` and `text` cannot mix. Variables keyed `("g",name)` or `(scope,name)`; every function has a type with a fresh variable per parameter and result (`fn_ty`);
   bodies are checked once (`check_body`). No occurs check; `unify_raw` skips pairs already being compared; `show()` cuts cycles.
 - Operators whose result type or allowed operand type depends on operand types that may be unknown yet (`+ - * % ^`, comparisons, `?:`) are constraints (`arith`, `eq`, `order`, `cond`, `num` in `Checker.pending`), settled by `step()` /
   `solve()`; `finish()` makes what is still unknown int. `/` (float result) and `\` (int result) only need numeric operands (`need_num`). Assignments, arguments, returns use plain `unify` (strict).
@@ -74,15 +74,15 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
 ### Code generation
 - Values are 64-bit words; a float is a double's bit pattern. Expression result in **rax**. Binary ops: eval left, `push rax`, eval right, `mov rcx,rax`, `pop rax`. Generated code uses only rax/rcx/rdx as
   scratch (xmm0-xmm2 for floats); runtime routines may clobber rcx, rdx, r8-r11, rsi, rdi, rbx, r12-r15, rax, xmm0-xmm3 and preserve rbp/rsp. No value stays in a register across a call.
-- `CodeGen.tk(e)` gives the type of a node (`int`/`float`/`str`/`fn`; unknown = int). Float arithmetic: `load_xmm` (movq for floats, cvtsi2sd for ints), `addsd` ... ; `/` and `%` and `\` check the divisor bits
+- `CodeGen.tk(e)` gives the type of a node (`int`/`float`/`str`/`text`/`fn`; unknown = int). Float arithmetic: `load_xmm` (movq for floats, cvtsi2sd for ints), `addsd` ... ; `/` and `%` and `\` check the divisor bits
   (`shl 1` ignores the sign) and jump to `rt_divzero`. `fcmp_false(op, label)` compares with `ucomisd` (nan-correct); `test_rax(kind)` is the truth test (floats: `shl rcx,1`).
   Int `\` and `%` are floored: `cqo; idiv`, then if the remainder is not 0 and its sign differs from the divisor's (`xor` of the two, `jns`), `dec rax` (for `\`) or `add rdx,rcx` (for `%`).
   Float `%`: `call rt_fmodfloor` (in `runtime()`: calls `rt_fmod`, then adds `y` if the remainder is not 0 and its sign differs from `y`'s; a zero becomes +0.0; returns the plain fmod in xmm4 and a 0/1
   flag in edx). Float `\`: `movapd xmm2,xmm0; call rt_fmodfloor; subsd xmm2,xmm4; divsd xmm2,xmm1; cvtsd2si rax,xmm2; sub rax,rdx`. The division result is only nearly an integer (`a - fmod` can be rounded:
   13276.999999999998), so it is rounded to nearest (`cvtsd2si`), not truncated.
 - Shifts: count `< 0` -> negate and use the opposite shift; `> 63` (unsigned compare) -> 0 (`+>`: sign fill; negative: 0); rotates: `rol/ror rax,cl` (count modulo 64 by the hardware).
-- Chained comparison: the previous operand lives at `[rsp]`; each link jumps to a fail label (`FAIL_CC`, `fcmp_false` for floats, or `rt_strcmp` for strings). String binary comparisons call `rt_strcmp`; `+` calls `rt_strcat`. Int power: square-and-multiply loop inline.
-- Runtime routines (`rt_print_str`, `rt_print_value_str`, `rt_print_int`, `rt_print_float`, `rt_strcmp`, `rt_strcat`, `rt_alloc`, `rt_divzero`, `rt_notfn`, `rt_negexp`, `rt_badpow`) set up their own aligned frame; `rt_strcat` keeps its operands/lengths in frame locals across `rt_alloc`; `exit_process` aligns too.
+- Chained comparison: the previous operand lives at `[rsp]`; each link jumps to a fail label (`FAIL_CC`, `fcmp_false` for floats, or `rt_strcmp` / `rt_textcmp` for strings). `str` binary comparisons call `rt_strcmp` / `rt_strcat`; `text` uses `rt_textcmp` / `rt_textcat`.
+- Runtime routines (`rt_print_str`, `rt_print_value_str`, `rt_print_value_text`, `rt_print_int`, `rt_print_float`, `rt_strcmp`, `rt_strcat`, `rt_textcmp`, `rt_textcat`, `rt_alloc`, `rt_divzero`, `rt_notfn`, `rt_negexp`, `rt_badpow`) set up their own aligned frame; `rt_strcat` keeps its operands/lengths in frame locals across `rt_alloc`; `exit_process` aligns too.
 - `Asm.rip(opcode_bytes, symbol)`: instruction whose last 4 bytes are the rip-relative disp32. `call/jmp/jcc` take labels (rel32). `lea rax,[rip+label]` = `48 8D 05` + `_ref`.
 - **Calling convention (own):** caller pushes arguments left to right, evaluates the callee (closure pointer) into rax, null check (`rt_notfn`), `push rax`, `call [rax]`. Callee: `push rbp; mov rbp,rsp;
   push 0 * nlocals`, `ret 8*(nparams+1)`. Frame: `[rbp+16]` closure pointer, params above, locals below.
@@ -99,7 +99,7 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
 ### PE writer (`build_pe`)
 - Sections `.text` (RX) at 0x1000, `.idata` (RW), `.data` (RW). ImageBase 0x140000000, no relocs, console subsystem, 1 MB stack. kernel32 imports (`IMPORTS`): GetStdHandle, WriteFile, SetConsoleOutputCP,
   ExitProcess, GetProcessHeap, HeapAlloc.
-- `.data`: 0 stdout handle, 8 unused, 0x10 `written`, 0x18 heap handle, 0x20..0x40 number buffer, 0x40 random generator state (the initial value is written by `build_pe`), 0x48..0x80 unused, then globals (8 bytes each), static closures (16 each), aligned byte-string value objects (`u64 length` + raw bytes), then print/runtime strings (NUL
+- `.data`: 0 stdout handle, 8 unused, 0x10 `written`, 0x18 heap handle, 0x20..0x40 number buffer, 0x40 random generator state (the initial value is written by `build_pe`), 0x48..0x80 unused, then globals (8 bytes each), static closures (16 each), aligned `str` objects (`u64 byte length` + raw bytes) and `text` objects (`u64 code-point length` + u32 code points), then print/runtime strings (NUL
   terminators are only for storage convenience; explicit lengths are passed to `WriteFile`). Strings 0..4 are reserved for the runtime (newline, division by zero, unset function, negative exponent, bad power).
 
 ## 2. Testing and tools
@@ -114,7 +114,9 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
 3. Re-zip (`ka.zip`), present it, summarise what to check on Windows and any open question.
 
 
-## Byte-string operations (version 6.5)
-- `str` comparisons use unsigned byte-wise lexicographical order; equality is content equality, not pointer equality. `rt_strcmp` returns -1, 0 or 1.
-- `+` and `+=` concatenate strings. `rt_strcat` allocates `[u64 length][bytes]` using the existing process heap; no old string is freed. Empty results use the null pointer.
-- The checker resolves `+` as numeric arithmetic or string concatenation, and relational comparisons as numeric or string comparisons, based on inferred operand types.
+## String values (versions 6.5 and 6.6)
+- `str` objects are `[u64 byte length][bytes]`; `text` objects are `[u64 code-point length][u32 code points]`. Empty values are null pointers.
+- `str` comparisons use unsigned byte-wise lexicographical order; `text` comparisons use unsigned Unicode code-point order. Equality is content equality, not pointer equality. Helpers return -1, 0 or 1.
+- `+` and `+=` concatenate same-type strings. Concatenation allocates a new object on the process heap; no old string is freed. Empty results use the null pointer.
+- `rt_print_value_text` encodes each code point as UTF-8 and writes it directly, without allocating a temporary buffer on the heap.
+- The checker resolves `+` as numeric arithmetic or same-type string concatenation, and comparisons as numeric or same-type string comparisons. Mixing `str` and `text` is a type error.

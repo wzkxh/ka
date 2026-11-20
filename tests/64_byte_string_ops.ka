@@ -32,3 +32,14 @@ print empty == ''
 dup = 'ha'
 dup += dup
 print dup
+
+-- longer strings: a few chars, a dozen, and one hundred bytes
+short_a = 'abc'
+short_b = 'abd'
+print (short_a < short_b), ' ', (short_a + short_b)
+mid_a = 'abcdefghijkl'
+mid_b = 'abcdefghijkm'
+print (mid_a < mid_b), ' ', (mid_a + mid_b)
+long_a = '0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789'
+long_b = '0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456788'
+print (long_a == long_a), ' ', (long_a < long_b), ' ', (long_a + long_b)

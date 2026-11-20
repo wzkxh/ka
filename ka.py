@@ -19,7 +19,7 @@ import struct
 import sys
 
 
-VERSION = "6.5.2"                         # see RELEASE_NOTES.md
+VERSION = "6.6"                         # see RELEASE_NOTES.md
 
 
 class CompileError(Exception):
@@ -362,8 +362,9 @@ class Parser:
     self.fn_globals = set()             # names assigned as ^x inside some function
     self.nfuncs = 0
     self.closed_at = -1                 # token index right after a consumed line end / dedent
-    # strings 0..3 are used by the runtime
+    # strings 0..4 are used by the runtime
     self.byte_strings = []                 # immutable byte-string values stored in .data
+    self.text_strings = []                 # immutable Unicode code-point strings stored in .data
     self.strings = [b"\n", b"runtime error: division by zero\n",
                     b"runtime error: call of an unset function\n",
                     b"runtime error: negative exponent\n",
@@ -934,10 +935,11 @@ class Parser:
         if tok[1][1] != kind:
           raise CompileError(f"line {tok[2]}: cannot join '...' and \"...\" strings")
         data += tok[1][0]
-      if kind != "b":
-        raise CompileError(f"line {line}: a unicode string can only be printed (it is not a value)")
-      self.byte_strings.append(data)
-      return ("bstr", len(self.byte_strings) - 1)
+      if kind == "b":
+        self.byte_strings.append(data)
+        return ("bstr", len(self.byte_strings) - 1)
+      self.text_strings.append([ord(ch) for ch in data.decode("utf-8")])
+      return ("btext", len(self.text_strings) - 1)
     if k == "op" and v == "(":
       self.ctx.append("(")
       e = self.expr()
@@ -993,7 +995,7 @@ class Resolver:
 
 
 # ----------------------------------------------------------------------------
-# Static types: int, float and functions.  Every variable, parameter and function result gets a type variable;
+# Static types: int, float, str, text and functions. Every variable, parameter and function result gets a type variable;
 # types are found by unification (no annotations needed). A variable keeps the type of its first value (no
 # implicit conversion on assignment, in calls or in `return`); a parameter takes its type from the way it is
 # used and from the calls of the function.
@@ -1010,6 +1012,7 @@ class Ty:
 INT = Ty("int")
 FLOAT = Ty("float")
 STR = Ty("str")
+TEXT = Ty("text")
 ARITH_OPS = ("+", "-", "*", "%", "^")      # float if either side is float (`/` is always float, `\\` always int)
 
 
@@ -1021,7 +1024,7 @@ def prune(t):
 
 def show(t, seen=()):
   t = prune(t)
-  if t.kind in ("int", "float", "str"):
+  if t.kind in ("int", "float", "str", "text"):
     return t.kind
   if t.kind == "var":
     return "?"
@@ -1113,7 +1116,7 @@ class Checker(Resolver):
   def need_print(self, t, line):
     t = prune(t)
     if t.kind == "fn":
-      self.err(line, f"type mismatch in 'print' (only numbers and byte strings can be printed): found {show(t)}")
+      self.err(line, f"type mismatch in 'print' (only numbers, str and text can be printed): found {show(t)}")
     if t.kind == "var":
       self.pending.append(("print", t, line))
 
@@ -1135,7 +1138,7 @@ class Checker(Resolver):
       if t.kind == "var":
         return False
       if t.kind == "fn":
-        self.err(c[2], f"type mismatch in 'print' (only numbers and byte strings can be printed): found {show(t)}")
+        self.err(c[2], f"type mismatch in 'print' (only numbers, str and text can be printed): found {show(t)}")
       return True
     if kind == "num":
       t = prune(c[1])
@@ -1146,13 +1149,17 @@ class Checker(Resolver):
     if kind == "arith":                 # result = float if one side is float, else int
       _, res, a, b, line, op = c
       a, b = prune(a), prune(b)
-      if op == "+" and (a.kind == "str" or b.kind == "str"):
+      if op == "+" and (a.kind in ("str", "text") or b.kind in ("str", "text")):
+        string_kind = a.kind if a.kind in ("str", "text") else b.kind
+        string_type = STR if string_kind == "str" else TEXT
         for side, t in (("left", a), ("right", b)):
           if t.kind == "var":
-            self.unify(t, STR, line, f"in {side} operand of '+'")
-          elif t.kind != "str":
-            self.err(line, f"type mismatch in {side} operand of '+': expected str, found {show(t)}")
-        self.result(res, STR, line, op)
+            self.unify(t, string_type, line, f"in {side} operand of '+'")
+          elif t.kind != string_kind:
+            if string_kind == "str":
+              self.err(line, f"type mismatch in {side} operand of '+': expected str, found {show(t)}")
+            self.err(line, f"type mismatch in {side} operand of '+': cannot mix text and {show(t)}")
+        self.result(res, string_type, line, op)
         return True
       if a.kind not in ("int", "float", "var"):
         self.err(line, f"type mismatch in left operand of '{op}': expected a number, found {show(a)}")
@@ -1168,15 +1175,17 @@ class Checker(Resolver):
         self.result(res, INT, line, op)
         return True
       return False
-    if kind == "eq":                    # two numbers (any mix), strings, or functions of the same type
+    if kind == "eq":                    # two numbers (any mix), same-kind strings, or functions of the same type
       _, a, b, line, what = c
       a, b = prune(a), prune(b)
-      if a.kind == "str" or b.kind == "str":
+      if a.kind in ("str", "text") or b.kind in ("str", "text"):
+        string_kind = a.kind if a.kind in ("str", "text") else b.kind
+        string_type = STR if string_kind == "str" else TEXT
         for t in (a, b):
           if t.kind == "var":
-            self.unify(t, STR, line, what)
-          elif t.kind != "str":
-            self.err(line, f"type mismatch {what}: cannot compare str and {show(t)}")
+            self.unify(t, string_type, line, what)
+          elif t.kind != string_kind:
+            self.err(line, f"type mismatch {what}: cannot compare {string_kind} and {show(t)}")
         return True
       if a.kind == "fn" or b.kind == "fn":
         self.unify(a, b, line, what)
@@ -1187,15 +1196,17 @@ class Checker(Resolver):
         return False
       self.pending.append(("num", a if a.kind == "var" else b, line, what))
       return True
-    if kind == "order":                 # numbers (any mix) or two byte strings
+    if kind == "order":                 # numbers (any mix) or two strings of the same kind
       _, a, b, line, op = c
       a, b = prune(a), prune(b)
-      if a.kind == "str" or b.kind == "str":
+      if a.kind in ("str", "text") or b.kind in ("str", "text"):
+        string_kind = a.kind if a.kind in ("str", "text") else b.kind
+        string_type = STR if string_kind == "str" else TEXT
         for t in (a, b):
           if t.kind == "var":
-            self.unify(t, STR, line, f"in '{op}'")
-          elif t.kind != "str":
-            self.err(line, f"type mismatch in '{op}': cannot compare str and {show(t)}")
+            self.unify(t, string_type, line, f"in '{op}'")
+          elif t.kind != string_kind:
+            self.err(line, f"type mismatch in '{op}': cannot compare {string_kind} and {show(t)}")
         return True
       for side, t in (("left", a), ("right", b)):
         if t.kind not in ("int", "float", "var"):
@@ -1208,7 +1219,7 @@ class Checker(Resolver):
     if kind == "cond":                  # c ? a ! b : numbers mix like in an operator, functions must agree
       _, res, a, b, line, what = c
       a, b = prune(a), prune(b)
-      if a.kind in ("fn", "str") or b.kind in ("fn", "str"):
+      if a.kind in ("fn", "str", "text") or b.kind in ("fn", "str", "text"):
         self.unify(a, b, line, what)
         self.unify(res, a, line, what)
         return True
@@ -1301,6 +1312,8 @@ class Checker(Resolver):
       return FLOAT
     if k == "bstr":
       return STR
+    if k == "btext":
+      return TEXT
     if k == "var":
       return self.var_ty(e[1], sc, e[2], e[3])
     if k == "fnlit":
@@ -1481,13 +1494,14 @@ FLOAT_RT = {
 
 
 class CodeGen(Resolver):
-  def __init__(self, gscope, strings, byte_strings, fn_globals, types):
+  def __init__(self, gscope, strings, byte_strings, text_strings, fn_globals, types):
     self.types = types                  # id(expression node) -> Ty, from the Checker
     self.a = Asm()
     self.g = gscope
     self.scope = gscope
     self.strings = strings
     self.strings_b = byte_strings
+    self.strings_t = text_strings
     self.fn_globals = fn_globals
     self.loops = []
     self.queue = []                     # functions still to be generated
@@ -1675,9 +1689,9 @@ class CodeGen(Resolver):
 
   # -- types in the generated code: values are always 64 bits; a float is the bit pattern of a double
   def tk(self, e):
-    """'int', 'float' or 'fn' (a type that was never determined counts as int)"""
+    """'int', 'float', 'str', 'text' or 'fn' (an undetermined type counts as int)."""
     t = prune(self.types.get(id(e), INT))
-    return t.kind if t.kind in ("float", "fn", "str") else "int"
+    return t.kind if t.kind in ("float", "fn", "str", "text") else "int"
 
   def load_xmm(self, xmm, reg, kind):
     """xmm := the number in the general register reg (0 = rax, 1 = rcx, 2 = rdx); an int is converted to float"""
@@ -1733,6 +1747,12 @@ class CodeGen(Resolver):
         a.rip([0x48, 0x8D, 0x05], f"bstr:{e[1]}")
       else:
         a.emit(0x31, 0xC0)                           # empty string = null pointer
+    elif k == "btext":
+      data = self.strings_t[e[1]]
+      if data:
+        a.rip([0x48, 0x8D, 0x05], f"btext:{e[1]}")
+      else:
+        a.emit(0x31, 0xC0)                           # empty text = null pointer
     elif k == "var":
       self.var_load(e[1], e[2], e[3])
     elif k == "fnlit":
@@ -1769,11 +1789,11 @@ class CodeGen(Resolver):
         self.expr(xs[i + 1])                         # each operand is evaluated once
         a.emit(0x48, 0x89, 0xC2)                     # mov rdx,rax
         a.emit(0x48, 0x8B, 0x0C, 0x24)               # mov rcx,[rsp]
-        if tys[i] == tys[i + 1] == "str":
+        if tys[i] == tys[i + 1] and tys[i] in ("str", "text"):
           a.emit(0x48, 0x89, 0x14, 0x24)             # save current operand for the next link
           a.emit(0x48, 0x89, 0xC8)                   # mov rax,rcx (previous string)
           a.emit(0x48, 0x89, 0xD1)                   # mov rcx,rdx (current string)
-          a.call("rt_strcmp")
+          a.call("rt_textcmp" if tys[i] == "text" else "rt_strcmp")
           a.emit(0x48, 0x83, 0xF8, 0x00)             # cmp rax,0
           a.jcc(FAIL_CC[op], lf)
         elif "float" in (tys[i], tys[i + 1]):
@@ -1783,7 +1803,7 @@ class CodeGen(Resolver):
         else:
           a.emit(0x48, 0x39, 0xD1)                   # cmp rcx,rdx
           a.jcc(FAIL_CC[op], lf)                     # stop at the first false link
-        if i < len(ops) - 1 and not (tys[i] == tys[i + 1] == "str"):
+        if i < len(ops) - 1 and not (tys[i] == tys[i + 1] and tys[i] in ("str", "text")):
           a.emit(0x48, 0x89, 0x14, 0x24)           # mov [rsp],rdx; string case saved it before the helper call
       a.emit(0xB8, 1, 0, 0, 0)                         # mov eax,1
       a.jmp(le)
@@ -1842,10 +1862,10 @@ class CodeGen(Resolver):
       a.emit(0x48, 0x89, 0xC1)                         # mov rcx,rax
       a.emit(0x58)                                     # pop rax
       tl, tr = self.tk(e[2]), self.tk(e[3])
-      if op == "+" and tl == tr == "str":
-        a.call("rt_strcat")                         # rax = new immutable concatenation
-      elif op in CMP_SETCC and tl == tr == "str":
-        a.call("rt_strcmp")
+      if op == "+" and tl == tr and tl in ("str", "text"):
+        a.call("rt_textcat" if tl == "text" else "rt_strcat")  # new immutable concatenation
+      elif op in CMP_SETCC and tl == tr and tl in ("str", "text"):
+        a.call("rt_textcmp" if tl == "text" else "rt_strcmp")
         a.emit(0x48, 0x83, 0xF8, 0x00)               # cmp rax,0  (-1, 0 or 1)
         a.emit(0x0F, CMP_SETCC[op], 0xC0, 0x0F, 0xB6, 0xC0)  # setcc al; movzx eax,al
       elif (op in ARITH_OPS or op == "/") and self.tk(e) == "float":   # float arithmetic; an int operand is converted
@@ -2011,6 +2031,8 @@ class CodeGen(Resolver):
           self.expr(v)
           if self.tk(v) == "str":
             a.call("rt_print_value_str")
+          elif self.tk(v) == "text":
+            a.call("rt_print_value_text")
           else:
             a.call("rt_print_float" if self.tk(v) == "float" else "rt_print_int")
       a.rip([0x48, 0x8D, 0x0D], "str:0")
@@ -2112,6 +2134,82 @@ class CodeGen(Resolver):
     a.jmp("rt_print_str")
     a.label(empty)
     a.emit(0xC3)                                         # ret
+
+    # rt_print_value_text: rax = null or [u64 code-point length][u32 code points].
+    # Encode each scalar value as UTF-8 and write it directly; no temporary heap allocation.
+    a.label("rt_print_value_text")
+    text_empty = a.new_label("pt_empty")
+    text_loop = a.new_label("pt_loop")
+    text_done = a.new_label("pt_done")
+    text_two = a.new_label("pt_two")
+    text_three = a.new_label("pt_three")
+    text_four = a.new_label("pt_four")
+    text_emit = a.new_label("pt_emit")
+    text_emit_done = a.new_label("pt_emit_done")
+    # Larger frame than the common runtime prologue: keep locals below the 32-byte Win64 shadow area.
+    a.emit(0x55, 0x48, 0x89, 0xE5, 0x48, 0x83, 0xEC, 0x60, 0x48, 0x83, 0xE4, 0xF0)
+    a.emit(0x48, 0x85, 0xC0)                           # test rax,rax
+    a.jcc(4, text_empty)
+    a.emit(0x48, 0x8B, 0x10)                           # mov rdx,[rax] (code-point count)
+    a.emit(0x48, 0x89, 0x55, 0xF0)                     # mov [rbp-16],rdx
+    a.emit(0x48, 0x8D, 0x50, 0x08)                     # lea rdx,[rax+8]
+    a.emit(0x48, 0x89, 0x55, 0xF8)                     # mov [rbp-8],rdx (code-point pointer)
+    a.label(text_loop)
+    a.emit(0x48, 0x83, 0x7D, 0xF0, 0x00)             # cmp qword [rbp-16],0
+    a.jcc(4, text_done)
+    a.emit(0x48, 0x8B, 0x45, 0xF8)                     # mov rax,[rbp-8]
+    a.emit(0x8B, 0x00)                                 # mov eax,[rax]
+    a.emit(0x48, 0x83, 0x45, 0xF8, 0x04)               # add qword [rbp-8],4
+    a.emit(0x48, 0xFF, 0x4D, 0xF0)                     # dec qword [rbp-16]
+    a.emit(0x89, 0x45, 0xE8)                           # mov [rbp-24],eax (code point)
+    a.emit(0x3D, 0x80, 0x00, 0x00, 0x00)               # cmp eax,0x80
+    a.jcc(2, text_emit)                               # jb: one byte
+    a.emit(0x3D, 0x00, 0x08, 0x00, 0x00)               # cmp eax,0x800
+    a.jcc(2, text_two)
+    a.emit(0x3D, 0x00, 0x00, 0x01, 0x00)               # cmp eax,0x10000
+    a.jcc(2, text_three)
+    a.jmp(text_four)
+    a.label(text_emit)                                 # ASCII: [rbp-32] = AL
+    a.emit(0x88, 0x45, 0xE0)                           # mov [rbp-32],al
+    a.emit(0x41, 0xB8, 1, 0, 0, 0)                     # mov r8d,1
+    a.jmp(text_emit_done)
+    a.label(text_two)
+    a.emit(0x8B, 0x45, 0xE8)                           # mov eax,[rbp-24]
+    a.emit(0x89, 0xC1, 0xC1, 0xE9, 0x06, 0x80, 0xC9, 0xC0)  # ecx=cp>>6; or cl,0xc0
+    a.emit(0x88, 0x4D, 0xE0)                           # mov [rbp-32],cl
+    a.emit(0x8B, 0x45, 0xE8, 0x24, 0x3F, 0x0C, 0x80)  # al=cp&0x3f; or al,0x80
+    a.emit(0x88, 0x45, 0xE1)                           # mov [rbp-31],al
+    a.emit(0x41, 0xB8, 2, 0, 0, 0)                     # mov r8d,2
+    a.jmp(text_emit_done)
+    a.label(text_three)
+    a.emit(0x8B, 0x45, 0xE8, 0x89, 0xC1, 0xC1, 0xE9, 0x0C, 0x80, 0xC9, 0xE0)
+    a.emit(0x88, 0x4D, 0xE0)                           # first byte
+    a.emit(0x8B, 0x45, 0xE8, 0xC1, 0xE8, 0x06, 0x24, 0x3F, 0x0C, 0x80)
+    a.emit(0x88, 0x45, 0xE1)                           # second byte
+    a.emit(0x8B, 0x45, 0xE8, 0x24, 0x3F, 0x0C, 0x80)
+    a.emit(0x88, 0x45, 0xE2)                           # third byte
+    a.emit(0x41, 0xB8, 3, 0, 0, 0)                     # mov r8d,3
+    a.jmp(text_emit_done)
+    a.label(text_four)
+    a.emit(0x8B, 0x45, 0xE8, 0xC1, 0xE8, 0x12, 0x0C, 0xF0)
+    a.emit(0x88, 0x45, 0xE0)                           # first byte
+    a.emit(0x8B, 0x45, 0xE8, 0xC1, 0xE8, 0x0C, 0x24, 0x3F, 0x0C, 0x80)
+    a.emit(0x88, 0x45, 0xE1)                           # second byte
+    a.emit(0x8B, 0x45, 0xE8, 0xC1, 0xE8, 0x06, 0x24, 0x3F, 0x0C, 0x80)
+    a.emit(0x88, 0x45, 0xE2)                           # third byte
+    a.emit(0x8B, 0x45, 0xE8, 0x24, 0x3F, 0x0C, 0x80)
+    a.emit(0x88, 0x45, 0xE3)                           # fourth byte
+    a.emit(0x41, 0xB8, 4, 0, 0, 0)                     # mov r8d,4
+    a.label(text_emit_done)
+    a.rip([0x48, 0x8B, 0x0D], "stdout")                # rcx = stdout handle
+    a.emit(0x48, 0x8D, 0x55, 0xE0)                     # lea rdx,[rbp-32]
+    a.rip([0x4C, 0x8D, 0x0D], "written")               # lea r9,[written]
+    a.emit(0x48, 0xC7, 0x44, 0x24, 0x20, 0, 0, 0, 0)  # fifth arg = null
+    a.rip([0xFF, 0x15], "WriteFile")
+    a.jmp(text_loop)
+    a.label(text_done)
+    a.label(text_empty)
+    a.emit(epilogue)
 
     # rt_print_int: rax = signed value
     a.label("rt_print_int")
@@ -2357,6 +2455,123 @@ class CodeGen(Resolver):
     a.label(cat_done)
     a.emit(epilogue)
 
+    # rt_textcmp: rax = left, rcx = right -> -1/0/1; lexicographical Unicode code-point order.
+    # Objects are [u64 code-point length][u32 code points]; null is empty.
+    a.label("rt_textcmp")
+    a.emit(prologue)
+    a.emit(0x49, 0x89, 0xC0)                           # mov r8,rax
+    tx_left_empty = a.new_label("tc_left_empty")
+    tx_right_empty = a.new_label("tc_right_empty")
+    tx_loop = a.new_label("tc_loop")
+    tx_end = a.new_label("tc_end")
+    tx_less = a.new_label("tc_less")
+    tx_greater = a.new_label("tc_greater")
+    tx_same = a.new_label("tc_same")
+    tx_done = a.new_label("tc_done")
+    a.emit(0x48, 0x39, 0xC8)                           # cmp rax,rcx
+    a.jcc(4, tx_same)
+    a.emit(0x4D, 0x85, 0xC0)                           # test r8,r8
+    a.jcc(4, tx_left_empty)
+    a.emit(0x49, 0x8B, 0x10)                           # mov rdx,[r8]
+    a.emit(0x4D, 0x8D, 0x40, 0x08)                     # lea r8,[r8+8]
+    a.jmp("tc_left_ready")
+    a.label(tx_left_empty)
+    a.emit(0x31, 0xD2, 0x4D, 0x31, 0xC0)               # zero length and pointer
+    a.label("tc_left_ready")
+    a.emit(0x49, 0x89, 0xC9)                           # mov r9,rcx
+    a.emit(0x4D, 0x85, 0xC9)
+    a.jcc(4, tx_right_empty)
+    a.emit(0x4D, 0x8B, 0x11)                           # mov r10,[r9]
+    a.emit(0x4D, 0x8D, 0x49, 0x08)                     # lea r9,[r9+8]
+    a.jmp(tx_loop)
+    a.label(tx_right_empty)
+    a.emit(0x45, 0x31, 0xD2, 0x4D, 0x31, 0xC9)
+    a.label(tx_loop)
+    a.emit(0x48, 0x85, 0xD2)
+    a.jcc(4, tx_end)
+    a.emit(0x4D, 0x85, 0xD2)
+    a.jcc(4, tx_end)
+    a.emit(0x41, 0x8B, 0x00)                           # mov eax,[r8]
+    a.emit(0x41, 0x8B, 0x09)                           # mov ecx,[r9]
+    a.emit(0x39, 0xC8)                                 # cmp eax,ecx (unsigned code points)
+    a.jcc(2, tx_less)
+    a.jcc(7, tx_greater)
+    a.emit(0x49, 0x83, 0xC0, 0x04, 0x49, 0x83, 0xC1, 0x04)
+    a.emit(0x48, 0xFF, 0xCA, 0x49, 0xFF, 0xCA)
+    a.jmp(tx_loop)
+    a.label(tx_end)
+    a.emit(0x4C, 0x39, 0xD2)
+    a.jcc(2, tx_less)
+    a.jcc(7, tx_greater)
+    a.label(tx_same)
+    a.emit(0x31, 0xC0)
+    a.jmp(tx_done)
+    a.label(tx_less)
+    a.emit(0x48, 0xC7, 0xC0, 0xFF, 0xFF, 0xFF, 0xFF)
+    a.jmp(tx_done)
+    a.label(tx_greater)
+    a.emit(0xB8, 1, 0, 0, 0)
+    a.label(tx_done)
+    a.emit(epilogue)
+
+    # rt_textcat: allocate [u64 code-point length][u32 code points]; old values are not freed.
+    a.label("rt_textcat")
+    a.emit(prologue)
+    a.emit(0x48, 0x89, 0x45, 0xF8)                     # left object
+    a.emit(0x48, 0x89, 0x4D, 0xF0)                     # right object
+    a.emit(0x31, 0xD2, 0x48, 0x85, 0xC0)
+    tx_cat_left_empty = a.new_label("tc_cat_left_empty")
+    tx_cat_right_empty = a.new_label("tc_cat_right_empty")
+    tx_cat_empty = a.new_label("tc_cat_empty")
+    tx_cat_left_loop = a.new_label("tc_cat_left_loop")
+    tx_cat_right_setup = a.new_label("tc_cat_right_setup")
+    tx_cat_right_loop = a.new_label("tc_cat_right_loop")
+    tx_cat_finish = a.new_label("tc_cat_finish")
+    tx_cat_done = a.new_label("tc_cat_done")
+    a.jcc(4, tx_cat_left_empty)
+    a.emit(0x48, 0x8B, 0x10)                           # left length
+    a.label(tx_cat_left_empty)
+    a.emit(0x48, 0x89, 0x55, 0xE8)                     # save left length
+    a.emit(0x31, 0xD2, 0x48, 0x8B, 0x4D, 0xF0, 0x48, 0x85, 0xC9)
+    a.jcc(4, tx_cat_right_empty)
+    a.emit(0x48, 0x8B, 0x11)                           # right length
+    a.label(tx_cat_right_empty)
+    a.emit(0x48, 0x89, 0x55, 0xE0)                     # save right length
+    a.emit(0x48, 0x8B, 0x45, 0xE8, 0x48, 0x03, 0x45, 0xE0)
+    a.emit(0x48, 0x85, 0xC0)
+    a.jcc(4, tx_cat_empty)
+    a.emit(0x48, 0x89, 0x45, 0xD8)                     # total code-point count
+    a.emit(0x48, 0x89, 0xC1, 0x48, 0xC1, 0xE1, 0x02, 0x48, 0x83, 0xC1, 0x08) # bytes = 8 + count*4
+    a.call("rt_alloc")
+    a.emit(0x48, 0x8B, 0x55, 0xD8, 0x48, 0x89, 0x10)  # store code-point length
+    a.emit(0x48, 0x89, 0x45, 0xD0, 0x49, 0x89, 0xC2, 0x49, 0x83, 0xC2, 0x08)
+    a.emit(0x48, 0x8B, 0x45, 0xF8, 0x48, 0x85, 0xC0)
+    a.jcc(4, tx_cat_right_setup)
+    a.emit(0x4C, 0x8D, 0x40, 0x08, 0x48, 0x8B, 0x55, 0xE8)
+    a.label(tx_cat_left_loop)
+    a.emit(0x48, 0x85, 0xD2)
+    a.jcc(4, tx_cat_right_setup)
+    a.emit(0x41, 0x8B, 0x08, 0x41, 0x89, 0x0A)       # copy one u32 code point
+    a.emit(0x49, 0x83, 0xC0, 0x04, 0x49, 0x83, 0xC2, 0x04, 0x48, 0xFF, 0xCA)
+    a.jmp(tx_cat_left_loop)
+    a.label(tx_cat_right_setup)
+    a.emit(0x48, 0x8B, 0x45, 0xF0, 0x48, 0x85, 0xC0)
+    a.jcc(4, tx_cat_finish)
+    a.emit(0x4C, 0x8D, 0x40, 0x08, 0x48, 0x8B, 0x55, 0xE0)
+    a.label(tx_cat_right_loop)
+    a.emit(0x48, 0x85, 0xD2)
+    a.jcc(4, tx_cat_finish)
+    a.emit(0x41, 0x8B, 0x08, 0x41, 0x89, 0x0A)
+    a.emit(0x49, 0x83, 0xC0, 0x04, 0x49, 0x83, 0xC2, 0x04, 0x48, 0xFF, 0xCA)
+    a.jmp(tx_cat_right_loop)
+    a.label(tx_cat_finish)
+    a.emit(0x48, 0x8B, 0x45, 0xD0)
+    a.jmp(tx_cat_done)
+    a.label(tx_cat_empty)
+    a.emit(0x31, 0xC0)
+    a.label(tx_cat_done)
+    a.emit(epilogue)
+
     # rt_alloc: rcx = size in bytes -> rax = zeroed memory from the process heap
     a.label("rt_alloc")
     a.emit(prologue)
@@ -2407,7 +2622,7 @@ def align(x, a):
   return (x + a - 1) // a * a
 
 
-def build_pe(asm, vars_, strings, byte_strings):
+def build_pe(asm, vars_, strings, byte_strings, text_strings):
   # ---- .data layout: fixed runtime area, then variables, then strings
   sym = {"stdout": 0, "stdin": 8, "written": 0x10, "heap": 0x18, "numbuf_end": 0x40, "state": 0x40}
   off = 0x80
@@ -2426,6 +2641,13 @@ def build_pe(asm, vars_, strings, byte_strings):
       data.append(0)
     sym[f"bstr:{i}"] = len(data)
     data += struct.pack("<Q", len(s)) + s
+  for i, chars in enumerate(text_strings):
+    if not chars:
+      continue                                  # empty text is represented by a null pointer
+    while len(data) % 8:
+      data.append(0)
+    sym[f"btext:{i}"] = len(data)
+    data += struct.pack("<Q", len(chars)) + struct.pack("<" + "I" * len(chars), *chars)
   for i, s in enumerate(strings):
     sym[f"str:{i}"] = len(data)
     data += s + b"\0"
@@ -2518,8 +2740,8 @@ def compile_source(src, warnings=None):
   checker.run(ast)
   if warnings is not None:
     warnings.extend(parser.warnings)
-  asm = CodeGen(parser.global_scope, parser.strings, parser.byte_strings, parser.fn_globals, checker.types).program(ast)
-  return build_pe(asm, parser.vars, parser.strings, parser.byte_strings)
+  asm = CodeGen(parser.global_scope, parser.strings, parser.byte_strings, parser.text_strings, parser.fn_globals, checker.types).program(ast)
+  return build_pe(asm, parser.vars, parser.strings, parser.byte_strings, parser.text_strings)
 
 
 def main():

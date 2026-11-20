@@ -34,3 +34,5 @@ Upload this folder (or the zip) and write, for example:
 > At the end update the docs and run the tests (`python run_tests.py --emu`) and give me a new zip.
 
 After that, run `python run_tests.py` on Windows and send Claude the failing output (use `-v`).
+
+Current language features include immutable `str` byte strings and `text` Unicode strings, with assignment, printing, content comparisons and concatenation.

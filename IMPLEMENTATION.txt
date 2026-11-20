@@ -39,24 +39,8 @@ Numbers: `_` only between digits (user: no `__`, not at the start or end). Hex `
   Only base 2 exists; radix 3..36 (`3#122`, `36#zzz`) is on the wish list. `#'...'` is reserved for hex byte strings.
 Floats: `digits.digits`, `digits.digits e sign digits`, `digits e sign digits` (user's list); no `.5`, no `1.`, no INF/NAN literals.
   `5e3` is a float. Specific error messages for the near-misses (`1.`, `.5`, `1e`, `1.5abc`, `1.5.2`).
-Strings: `'...'` = byte string, `"..."` = unicode string (user). For now both are stored as UTF-8 bytes and printed as such; they differ only in the meaning
-  of `^XX` (raw byte vs. character U+00XX). The user plans real unicode strings (32-bit code points) later; print will then have to encode.
-  Escape char is `^` (not `\`) so that `\` stays free (it became the `function` synonym and integer division). `^uXXXX` and `^UXXXXXX` are the user's spelling.
-  Joining of adjacent literals: a newline ends a statement, so `print "a"` NEWLINE `"b"` is two statements; inside parentheses newlines are ignored,
-  so `print ("a" NEWLINE "b")` joins (user's example). Since version 6.4, byte-string literals (`'...'`) are also values; unicode literals (`"..."`) remain print-only.
-  The generated program calls SetConsoleOutputCP(65001) at start so that UTF-8 shows correctly; the console keeps that code page afterwards
-  (restoring it was not worth the code).
-  Version 6.4 byte-string values: each non-empty literal is stored in `.data` as an aligned `[u64 byte_length][bytes]` object;
-  the expression value is its address. The empty string is the null pointer. Variables, parameters, return values and closure boxes already
-  carry 64-bit values, so assignment/calls/returns copy only the pointer and require no special calling convention. Strings are immutable;
-  literals are static, while concatenation allocates new objects. There is no freeing, reference counting or GC yet. `rt_print_value_str` handles null and passes the object's
-  length and contents to the existing `rt_print_str`. Version 6.5 adds `rt_strcmp` for content-based equality and unsigned-byte
-  lexicographical ordering, and `rt_strcat` for `+` / `+=`. Concatenation allocates a new `[u64 length][bytes]` object with `HeapAlloc`;
-  old objects are deliberately not freed yet. Unicode (`text`) literals are still printable only.
-Keywords: `function` with the synonym `\` (user), `skip` (empty statement), `elif`; `fn` is gone. A one-parameter function needs no parentheses
-  (`function f x: ...`, `\x: =x+1`): `function name x` is a definition, `function x:` a literal; decided by two tokens of lookahead.
-Operator spelling is the user's: `+>` arithmetic shift right, `<*` / `*>` rotate, `?` and `!` for the conditional (`!` because `:` starts blocks),
-  `@x` for variables of the enclosing function (temporary, user expects to redo it).
+Strings: `'...'` = byte string (`str`), `"..."` = Unicode string (`text`). Both are values. `str` stores bytes as written/escaped; `text` stores Unicode scalar values as 32-bit code points. `^XX` is a raw byte for `str` and U+00XX for `text`; `^uXXXX` / `^UXXXXXX` encode the specified scalar value. Both kinds print as UTF-8. Adjacent literals of one kind join; mixed-kind joining is an error.
+  Non-empty `str` objects are `[u64 byte_length][bytes]`; non-empty `text` objects are `[u64 code_point_length][u32 code points]`. Empty values are null. Variables, parameters, returns and closure boxes carry 64-bit values, so assignment/calls/returns copy only the pointer. Strings are immutable. Literal objects are static; concatenation allocates a new object using `HeapAlloc`, and old objects are not freed. `str` comparison is unsigned-byte lexicographical; `text` comparison is Unicode-code-point lexicographical. `rt_print_value_text` UTF-8-encodes code points directly to `WriteFile` without a temporary heap allocation. The checker rejects mixing `str` and `text`; conversions are future work.
 
 
 3. Statements and blocks
@@ -203,7 +187,6 @@ User's idea: an identifier of capitals (digits, `_`) is a constant: it gets its 
 
 10. Directions and ideas (not decided)
 --------------------------------------
-- Strings as values (bytes and unicode as 32-bit code points), operations on them.
 - Explicit conversions int <-> float, rounding, floor/ceil; INF/NAN literals; comparison with tolerance (as a pragma?); output format control.
 - Named functions as constants; per-call polymorphism; relaxing the strictness of float/int assignment.
 - Radix literals 3..36; `for` loops; arrays; input; modules; overflow checks as pragmas; a garbage collector.

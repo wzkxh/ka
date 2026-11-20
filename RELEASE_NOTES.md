@@ -1,16 +1,31 @@
 # Ka - release notes (newest first)
 
-## Current state (version 6.5.2)
+## Current state (version 6.6)
+
+Ka compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3, no dependencies). The version is the `VERSION` constant in `ka.py`.
+- **Language:** 64-bit ints and floats, first-class functions and closures (shared by reference, never freed), static type inference, constants, immutable `str` and `text` values with assignment, printing, content comparisons and concatenation.
+  Details: LANGUAGE.md. Reasons: IMPLEMENTATION.txt.
+- **Tests:** 208 programs in `tests/`, including long byte strings and Unicode text values/operations. The complete suite should be run on Windows; this development environment has no Windows runtime or Unicorn emulator.
+- **Checked on real Windows by the user:** all 202 tests of version 6.5.2 passed.
+- **Known limits:** see IMPLEMENTATION.txt section 9 (float printing last digit, fractional float powers checked only in an emulator, no input, no GC, no explicit string conversions).
+
+## Version 6.6
+- **Unicode strings (`text`) are values**, parallel to byte strings (`str`): assignment, copying, function parameters and returns, closures, printing, content comparisons and concatenation (`+`, `+=`).
+- A non-empty `text` is `[u64 code-point length][u32 Unicode scalar values]`; empty text is null. The length counts code points, not UTF-8 bytes. Printing encodes code points to UTF-8 directly.
+- `text` comparisons use lexicographical Unicode code-point order. `str` and `text` cannot be mixed; explicit conversions remain future work.
+- Expanded byte-string comparisons/concatenation tests to include strings of 3, 12 and 100 bytes. Added Unicode tests covering Cyrillic, Chinese, emoji, empty strings, functions, closures, comparisons and concatenation, plus mixed-type errors.
+- **Runtime note:** the complete Windows EXE suite must be run on Windows; this development environment has no Windows or Unicorn emulator.
+
+## Version 6.5.2
+- **Tests:** 202 programs (201 existing plus the empty-string regression test).
+- Fixed `rt_strcmp` null-left handling: the pointer-null test was followed by `cmp`, which overwrote the condition flags before the branch. Empty-left comparisons such as `'' < 'a'` could dereference address zero.
+- Added regression coverage for empty-string comparisons in both operand positions and chained comparisons.
+
 ## Version 6.5.1
 - Fixed chained byte-string comparisons: the comparison helper clobbered `rdx`, and the chain code incorrectly reused it to preserve the middle operand. The current string operand is already saved before calling the helper; do not overwrite it afterward.
 - Extended the byte-string comparison test with successful and failing chains of three comparisons.
 
-Ka compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3, no dependencies). The version is the `VERSION` constant in `ka.py`.
-- **Language:** 64-bit ints and floats, first-class functions and closures (shared by reference, never freed), static type inference, constants, byte-string (`str`) values, content comparisons and concatenation, and byte/unicode string literals for `print`.
-  Details: LANGUAGE.md. Reasons: IMPLEMENTATION.txt.
-- **Tests:** 201 programs in `tests/`, including byte-string values, comparisons and concatenation. The complete suite should be run on Windows; the development environment used for this release has no Windows runtime or Unicorn emulator.
-- **Checked on real Windows by the user:** all 198 tests of version 6.4 passed.
-- **Known limits:** see IMPLEMENTATION.txt section 9 (float printing last digit, fractional float powers checked only in an emulator, no unicode `text` values, no input, no GC).
+
 
 ## Version 6.5
 - Byte strings (`str`) support `==`, `!=`, `<`, `<=`, `>`, `>=` by content. Ordering is lexicographical over unsigned bytes; embedded zero bytes are ordinary data.
@@ -94,8 +109,3 @@ Ka compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3,
 
 ## Version 1 - Tiny
 - The first language "Tiny" (`.tiny`): `let`, `input`, `global`, `nonlocal`, `and/or/not`, expression-bodied functions, first-class functions with closures, compiled to a PE `.exe` by `tinyc.py`; 49 tests. (I just asked Claude 'can you write a compiler ...' and expected 'I can' or some conditions etc, but in 3 minutes it just returned the first version of compiler, quite capable!)
-
-## Version 6.5.2
-- **Tests:** 202 programs (201 existing plus the empty-string regression test).
-- Fixed `rt_strcmp` null-left handling: the pointer-null test was followed by `cmp`, which overwrote the condition flags before the branch. Empty-left comparisons such as `'' < 'a'` could dereference address zero.
-- Added regression coverage for empty-string comparisons in both operand positions and chained comparisons.

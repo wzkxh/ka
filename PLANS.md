@@ -3,8 +3,6 @@
 - `|x` unary abs (numbers) and len (str);
 - short strings 0-7 chars kept in 64-bit words; literals - maybe one table;
 - a garbage collector;
-- unicode string (**text**), assignment, usage, parameter pass, type check;
-- text concatenation `x+y`;
 - text repetition `x*n` `n*x`;
 - `|x` unary len (text);
 - call syntax: f a; f a,b,c; etc;
