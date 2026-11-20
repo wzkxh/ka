@@ -1,9 +1,9 @@
 ## Not in the language (yet)
-- byte string (**str**), assignment, usage, parameter pass, type check;
+- byte string (**str**), assignment, usage, parameter pass, type check; immutable;
 - str concatenation `x+y`;
 - str repetition `x*n` `n*x`;
 - `|x` unary abs (numbers) and len (str);
-- short strings 0-7 chars kept in 64-bit words;
+- short strings 0-7 chars kept in 64-bit words; literals - maybe one table;
 - a garbage collector;
 - unicode string (**text**), assignment, usage, parameter pass, type check;
 - text concatenation `x+y`;
@@ -18,8 +18,10 @@
 - implicit conversion on assignment (strict now); on calls; rules;
 - `f(1)` and `f(1.5)` cannot both be called in this order, but the reverse is ok;
 - explicit conversion int <-> float, rounding; str <-> number; formatting;
+- ord/chr, str/text; array <-> str/text; parse, format, 'fmtstr'(args);
 - input (no way to read a value yet); get;
 - print --> put;
+- fn(x,...) <=> x.fn(...);
 - many int and float types (other sizes);
 - arrays (lists); literals 1 2 3 \_4, 5.0 6 \_7, [5.0,6,\_7], ["s","tt"];
 - array generator 0$100, 1.0$10, ""$5

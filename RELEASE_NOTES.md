@@ -65,7 +65,7 @@ Ka compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3,
 - **`function` keyword with the synonym `\`**; one parameter without parentheses;
 - `fn` removed (now it's `function` or `\` (looks like **λ**));
 - recursive function types allowed;
-- documented that **variables start as 0**.
+- documented that **variables start as 0**;
 - `@x` for variables of the enclosing function (replaced `\x`);
 - `{ ... }` as an ordinary statement;
 - **empty statement** `skip`;
