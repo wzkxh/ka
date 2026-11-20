@@ -1,5 +1,4 @@
 ## Not in the language (yet)
-- byte string (**str**), assignment, usage, parameter pass, type check; immutable;
 - str concatenation `x+y`;
 - str repetition `x*n` `n*x`;
 - `|x` unary abs (numbers) and len (str);

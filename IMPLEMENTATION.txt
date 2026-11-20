@@ -43,9 +43,15 @@ Strings: `'...'` = byte string, `"..."` = unicode string (user). For now both ar
   of `^XX` (raw byte vs. character U+00XX). The user plans real unicode strings (32-bit code points) later; print will then have to encode.
   Escape char is `^` (not `\`) so that `\` stays free (it became the `function` synonym and integer division). `^uXXXX` and `^UXXXXXX` are the user's spelling.
   Joining of adjacent literals: a newline ends a statement, so `print "a"` NEWLINE `"b"` is two statements; inside parentheses newlines are ignored,
-  so `print ("a" NEWLINE "b")` joins (user's example). Strings are only items of `print` (no string values yet).
+  so `print ("a" NEWLINE "b")` joins (user's example). Since version 6.4, byte-string literals (`'...'`) are also values; unicode literals (`"..."`) remain print-only.
   The generated program calls SetConsoleOutputCP(65001) at start so that UTF-8 shows correctly; the console keeps that code page afterwards
   (restoring it was not worth the code).
+  Version 6.4 byte-string values: each non-empty literal is stored in `.data` as an aligned `[u64 byte_length][bytes]` object;
+  the expression value is its address. The empty string is the null pointer. Variables, parameters, return values and closure boxes already
+  carry 64-bit values, so assignment/calls/returns copy only the pointer and require no special calling convention. Strings are immutable;
+  no runtime allocation, freeing, reference counting or GC is needed yet. `rt_print_value_str` handles null and passes the object's
+  length and contents to the existing `rt_print_str`. The checker has a distinct `str` type; it is not numeric, and string comparisons
+  are deliberately not enabled yet. Unicode (`text`) literals are still printable only.
 Keywords: `function` with the synonym `\` (user), `skip` (empty statement), `elif`; `fn` is gone. A one-parameter function needs no parentheses
   (`function f x: ...`, `\x: =x+1`): `function name x` is a definition, `function x:` a literal; decided by two tokens of lookahead.
 Operator spelling is the user's: `+>` arithmetic shift right, `<*` / `*>` rotate, `?` and `!` for the conditional (`!` because `:` starts blocks),

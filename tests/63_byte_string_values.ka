@@ -1,0 +1,21 @@
+s = 'hello'
+t = s
+s = 'changed'
+print t, '|', s                 -- => hello|changed
+empty = ''
+print '[', empty, ']'            -- => []
+binary = 'A^00B^ff'
+print binary                    -- raw bytes: 41 00 42 ff
+joined = 'joined ' 'literals'
+print joined                    -- => joined literals
+function show(x): print x
+show(t)                         -- => hello
+function identity(x): return x
+copy = identity('passed')
+print copy                      -- => passed
+selected = 1 ? 'yes' ! 'no'
+print selected                  -- => yes
+function outer(x):
+  function inner(): print x
+  inner()
+outer('captured')                -- => captured

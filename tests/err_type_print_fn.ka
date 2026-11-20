@@ -1,2 +1,2 @@
 function f(): return 1
-print f  -- ERROR: only numbers can be printed
+print f  -- ERROR: only numbers and byte strings can be printed

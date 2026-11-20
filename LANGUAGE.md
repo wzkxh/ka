@@ -25,7 +25,7 @@ This file defines the language; the reasons behind the decisions are in IMPLEMEN
 - **Float literals** (64-bit): `digits.digits`, `digits[.digits]e|E[sign]digits`; digits are 0-9 with optional `_` between digits:
   `1.5`, `1_000.25`, `6.02e23`, `1E-9`, `5e3` (the float 5000.0).
   No `.5`, no `1.`, no infinity or NaN literal (yet). Too large for a double is an error, too small gives 0.0 or a denormal.
-- **String literals:** `'...'` is a byte string, `"..."` a unicode string; for now they are used alike. A string cannot contain a raw newline.
+- **String literals:** `'...'` is a byte string (`str`), `"..."` a unicode string (`text`). Byte strings can be values; unicode strings are still only printable literals. A string cannot contain a raw newline.
   - Escape character `^`: `^n` newline, `^t` TAB, `^r` CR, `^^` caret, `^"` quote, `^'` apostrophe (both quotes in both kinds).
   - `^XX` (two hex digits, `^e9`, `^E9`, `^00`): the byte XX in a byte string; the character U+00XX in a unicode string.
   - `^uXXXX` (4 hex digits), `^UXXXXXX` (6 hex digits): a Unicode character (to 10FFFF, no surrogates); in a byte string its UTF-8 bytes.
@@ -33,7 +33,9 @@ This file defines the language; the reasons behind the decisions are in IMPLEMEN
   - A string may contain the byte 0.
   - String literals written one after another are joined: `'a' 'b' 'c'`. A string over several lines is written in parentheses
     (`print ("one" NEWLINE "two")`) or with a line ending in `,`. `'...'` and `"..."` cannot be joined.
-  - Strings exist only as items of `print`.
+  - Byte strings (`str`) are immutable values. They can be assigned to variables, copied between variables, passed as function arguments, and returned from functions. Assignment copies a 64-bit pointer; the string data is shared. The empty byte string is represented by a null pointer. Other values point to a static object containing a 64-bit byte length followed by the bytes.
+  - Unicode strings (`text`) remain limited to `print` literals; they are not values yet.
+  - `print` accepts numbers, byte-string variables, and either kind of string literal.
   - Output is written as UTF-8 bytes; the program sets the console code page to UTF-8 at start.
 - **Compatibility forms:** `# ` comments and `0x` hex literals exist only to ease the migration of existing sources and programs from other languages, and for the
   ease of copying code and constants between them. They are not Ka style and are discouraged in new programs: write `--` comments and `#ff` / `2#...` literals.
@@ -142,7 +144,7 @@ Precedence, highest to lowest; binary operators are left-associative except `^`:
 |---|---|
 | `name = expr`, `^name = expr`, `@name = expr` | assign, creates a variable / a global / an enclosing function's variable (see 7) |
 | `name op= expr` | `name = name op expr` for `+ - * / \ % ^ & \| ~ && \|\| << >> +> <* *>`; `&&=` and `\|\|=` short-circuit; also `^name op= expr`, `@name op= expr` |
-| `print a, b, "text", ...` | print the items one after another, then a newline; `print` alone prints an empty line. Items are numbers or string literals |
+| `print a, b, "text", ...` | print the items one after another, then a newline; `print` alone prints an empty line. Items are numbers, `str` values, or string literals |
 | `if cond block [elif cond block]... [else block]` | conditional (`else if` also works) |
 | `while cond block` | loop |
 | `break`, `continue` | only inside a `while` of the same function |
@@ -217,7 +219,7 @@ Very deep recursion overflows the 1 MB stack and crashes.
   `bad number '1.5abc...'`, `a float needs digits after the dot` / `before the dot`, `float literal too large`, `integer literal too large`.
 - *layout / syntax:* `unexpected indentation`, `inconsistent indentation`, `expected an indented block after ':'`, `'(' is never closed`, `'{' is never closed`,
   `unmatched '}'`, `unmatched ')'`, `expected end of statement, found ...`, `unexpected end of line in expression`, `unexpected 'else'`,
-  `expected '{' or ':' after the parameters`, `expected '(' or a parameter name`, `expected '!'`, `a string can only be printed (it is not a value)`,
+  `expected '{' or ':' after the parameters`, `expected '(' or a parameter name`, `expected '!'`, `a unicode string can only be printed (it is not a value)`,
   `'break' outside of a loop`, `'return' outside of a function`, `'=' (return) needs a value`, `duplicate parameter 'a'`,
   `too many parameters (at most 20)`, `function 'f' is already defined in this scope`.
 - *names:* `undefined variable 'x'`, `undefined global variable 'x'`, `variable 'x' used before assignment`,
@@ -228,7 +230,7 @@ Very deep recursion overflows the 1 MB stack and crashes.
   `constant 'X' cannot be changed`, `'@X': a constant cannot be an enclosing function's variable`, `parameter 'N' looks like a constant`,
   `the value of constant 'X' must be a constant expression (...): it uses the variable 'a'` (or `it calls a function`, `it uses 'B', which is defined later`).
 - *types:* `type mismatch <where>: expected T, found U` (`in assignment to 'x'`, `in argument 2 of the call`, `in left operand of '+'`,
-  `in the condition of 'if'`, `in 'print' (only numbers can be printed)`, `in 'return' (all returns of a function must agree)`, ...),
+  `in the condition of 'if'`, `in 'print' (only numbers and byte strings can be printed)`, `in 'return' (all returns of a function must agree)`, ...),
   `the result is float, expected int`, `wrong number of arguments: the function takes N, called with M`, `an int is not a function` (or `a float ...`),
   `expected a number, found fn()`, `in '?!' (both branches must have the same type, or both be numbers)`, `in the condition of '?'`.
 - *warning:* `the value of this expression is not used`.

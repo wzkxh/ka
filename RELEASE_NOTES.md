@@ -1,12 +1,17 @@
 # Ka - release notes (newest first)
 
-## Current state (version 6.3)
+## Current state (version 6.4)
 Ka compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3, no dependencies). The version is the `VERSION` constant in `ka.py`.
-- **Language:** 64-bit ints and floats, first-class functions and closures (shared by reference, never freed), static type inference, constants, byte/unicode string literals for `print`.
+- **Language:** 64-bit ints and floats, first-class functions and closures (shared by reference, never freed), static type inference, constants, byte-string (`str`) values and byte/unicode string literals for `print`.
   Details: LANGUAGE.md. Reasons: IMPLEMENTATION.txt.
-- **Tests:** 194 programs in `tests/` with their expected results in `tests/results/` (all pass under the emulator on Linux; the user runs them on real Windows). Every test has `-- =>` result comments.
+- **Tests:** 198 programs in `tests/` (194 from version 6.3 plus 4 for byte-string values). All 198 pass compilation and expected-error checks; runtime execution of the new test still needs verification on Windows or with the optional emulator dependencies.
 - **Checked on real Windows by the user:** all 194 tests of version 6.3 passed.
-- **Known limits:** see IMPLEMENTATION.txt section 9 (float printing last digit, fractional float powers checked only in an emulator, no strings as values, no input, no GC).
+- **Known limits:** see IMPLEMENTATION.txt section 9 (float printing last digit, fractional float powers checked only in an emulator, no unicode `text` values, no input, no GC).
+
+## Version 6.4
+- **Byte strings as values (`str`):** assign literals to variables, copy values, pass/return them through functions, capture them in closures, and print variables. Strings are immutable; variables copy a 64-bit pointer. Empty string is null; non-empty literals use static `[u64 length][bytes]` objects in `.data`. No allocation or freeing is needed yet.
+- Unicode (`text`) literals remain printable only, not values. String operations, comparison, and GC are not implemented.
+- 1 runtime test and 3 type-error tests added.
 
 ## Version 6.3
 - **Random numbers:** the unary operator `?x`; int/float: `?n -> 0..n-1`, `?x -> [0.0..x)`.

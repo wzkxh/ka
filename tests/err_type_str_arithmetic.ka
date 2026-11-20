@@ -1,0 +1,2 @@
+s = 'text'
+x = s + 1  -- ERROR: type mismatch in left operand of '+': expected a number, found str

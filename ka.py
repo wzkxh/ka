@@ -19,7 +19,7 @@ import struct
 import sys
 
 
-VERSION = "6.3"                         # see RELEASE_NOTES.md
+VERSION = "6.4"                         # see RELEASE_NOTES.md
 
 
 class CompileError(Exception):
@@ -363,6 +363,7 @@ class Parser:
     self.nfuncs = 0
     self.closed_at = -1                 # token index right after a consumed line end / dedent
     # strings 0..3 are used by the runtime
+    self.byte_strings = []                 # immutable byte-string values stored in .data
     self.strings = [b"\n", b"runtime error: division by zero\n",
                     b"runtime error: call of an unset function\n",
                     b"runtime error: negative exponent\n",
@@ -927,7 +928,16 @@ class Parser:
     if (k == "kw" and v == "function") or (k == "op" and v == "\\"):
       return ("fnlit", self.parse_function(None, line, literal=True))
     if k == "str":
-      raise CompileError(f"line {line}: a string can only be printed (it is not a value)")
+      data, kind = v
+      while self.peek()[0] == "str":
+        tok = self.next()
+        if tok[1][1] != kind:
+          raise CompileError(f"line {tok[2]}: cannot join '...' and \"...\" strings")
+        data += tok[1][0]
+      if kind != "b":
+        raise CompileError(f"line {line}: a unicode string can only be printed (it is not a value)")
+      self.byte_strings.append(data)
+      return ("bstr", len(self.byte_strings) - 1)
     if k == "op" and v == "(":
       self.ctx.append("(")
       e = self.expr()
@@ -999,6 +1009,7 @@ class Ty:
 
 INT = Ty("int")
 FLOAT = Ty("float")
+STR = Ty("str")
 ARITH_OPS = ("+", "-", "*", "%", "^")      # float if either side is float (`/` is always float, `\\` always int)
 
 
@@ -1010,7 +1021,7 @@ def prune(t):
 
 def show(t, seen=()):
   t = prune(t)
-  if t.kind in ("int", "float"):
+  if t.kind in ("int", "float", "str"):
     return t.kind
   if t.kind == "var":
     return "?"
@@ -1094,10 +1105,17 @@ class Checker(Resolver):
   def need_num(self, t, line, what):
     """t must be a number (int or float)"""
     t = prune(t)
-    if t.kind == "fn":
+    if t.kind not in ("int", "float", "var"):
       self.err(line, f"type mismatch {what}: expected a number, found {show(t)}")
     if t.kind == "var":
       self.pending.append(("num", t, line, what))
+
+  def need_print(self, t, line):
+    t = prune(t)
+    if t.kind == "fn":
+      self.err(line, f"type mismatch in 'print' (only numbers and byte strings can be printed): found {show(t)}")
+    if t.kind == "var":
+      self.pending.append(("print", t, line))
 
   def constrain(self, c):
     if not self.step(c):
@@ -1112,6 +1130,13 @@ class Checker(Resolver):
   def step(self, c):
     """try to settle one constraint; False if its operand types are still unknown"""
     kind = c[0]
+    if kind == "print":
+      t = prune(c[1])
+      if t.kind == "var":
+        return False
+      if t.kind == "fn":
+        self.err(c[2], f"type mismatch in 'print' (only numbers and byte strings can be printed): found {show(t)}")
+      return True
     if kind == "num":
       t = prune(c[1])
       if t.kind == "var":
@@ -1121,9 +1146,9 @@ class Checker(Resolver):
     if kind == "arith":                 # result = float if one side is float, else int
       _, res, a, b, line, op = c
       a, b = prune(a), prune(b)
-      if a.kind == "fn":
+      if a.kind not in ("int", "float", "var"):
         self.err(line, f"type mismatch in left operand of '{op}': expected a number, found {show(a)}")
-      if b.kind == "fn":
+      if b.kind not in ("int", "float", "var"):
         self.err(line, f"type mismatch in right operand of '{op}': expected a number, found {show(b)}")
       if a.kind == "float" or b.kind == "float":
         self.result(res, FLOAT, line, op)
@@ -1138,6 +1163,8 @@ class Checker(Resolver):
     if kind == "eq":                    # two numbers (any mix) or two functions of the same type
       _, a, b, line, what = c
       a, b = prune(a), prune(b)
+      if a.kind == "str" or b.kind == "str":
+        self.err(line, f"type mismatch {what}: string values cannot be compared yet")
       if a.kind == "fn" or b.kind == "fn":
         self.unify(a, b, line, what)
         return True
@@ -1150,7 +1177,7 @@ class Checker(Resolver):
     if kind == "cond":                  # c ? a ! b : numbers mix like in an operator, functions must agree
       _, res, a, b, line, what = c
       a, b = prune(a), prune(b)
-      if a.kind == "fn" or b.kind == "fn":
+      if a.kind in ("fn", "str") or b.kind in ("fn", "str"):
         self.unify(a, b, line, what)
         self.unify(res, a, line, what)
         return True
@@ -1184,7 +1211,7 @@ class Checker(Resolver):
       if not self.pending:
         return
       for c in self.pending:
-        ops = c[1:2] if c[0] == "num" else c[1:4] if c[0] in ("arith", "cond") else c[1:3]
+        ops = c[1:2] if c[0] in ("num", "print") else c[1:4] if c[0] in ("arith", "cond") else c[1:3]
         for t in ops:
           t = prune(t)
           if t.kind == "var":
@@ -1203,7 +1230,7 @@ class Checker(Resolver):
     elif k == "print":
       for kind, v in s[1]:
         if kind == "expr":
-          self.need_num(self.expr(v, sc, s[2]), s[2], "in 'print' (only numbers can be printed)")
+          self.need_print(self.expr(v, sc, s[2]), s[2])
     elif k == "if":
       self.need_num(self.expr(s[1], sc, s[4]), s[4], "in the condition of 'if'")
       self.stmts(s[2], sc)
@@ -1241,6 +1268,8 @@ class Checker(Resolver):
       return INT
     if k == "flt":
       return FLOAT
+    if k == "bstr":
+      return STR
     if k == "var":
       return self.var_ty(e[1], sc, e[2], e[3])
     if k == "fnlit":
@@ -1422,12 +1451,13 @@ FLOAT_RT = {
 
 
 class CodeGen(Resolver):
-  def __init__(self, gscope, strings, fn_globals, types):
+  def __init__(self, gscope, strings, byte_strings, fn_globals, types):
     self.types = types                  # id(expression node) -> Ty, from the Checker
     self.a = Asm()
     self.g = gscope
     self.scope = gscope
     self.strings = strings
+    self.strings_b = byte_strings
     self.fn_globals = fn_globals
     self.loops = []
     self.queue = []                     # functions still to be generated
@@ -1617,7 +1647,7 @@ class CodeGen(Resolver):
   def tk(self, e):
     """'int', 'float' or 'fn' (a type that was never determined counts as int)"""
     t = prune(self.types.get(id(e), INT))
-    return t.kind if t.kind in ("float", "fn") else "int"
+    return t.kind if t.kind in ("float", "fn", "str") else "int"
 
   def load_xmm(self, xmm, reg, kind):
     """xmm := the number in the general register reg (0 = rax, 1 = rcx, 2 = rdx); an int is converted to float"""
@@ -1667,6 +1697,12 @@ class CodeGen(Resolver):
       self.mov_rax_imm(e[1])
     elif k == "flt":
       self.mov_rax_imm(struct.unpack("<q", struct.pack("<d", e[1]))[0])
+    elif k == "bstr":
+      data = self.strings_b[e[1]]
+      if data:
+        a.rip([0x48, 0x8D, 0x05], f"bstr:{e[1]}")
+      else:
+        a.emit(0x31, 0xC0)                           # empty string = null pointer
     elif k == "var":
       self.var_load(e[1], e[2], e[3])
     elif k == "fnlit":
@@ -1930,7 +1966,10 @@ class CodeGen(Resolver):
           a.call("rt_print_str")
         else:
           self.expr(v)
-          a.call("rt_print_float" if self.tk(v) == "float" else "rt_print_int")
+          if self.tk(v) == "str":
+            a.call("rt_print_value_str")
+          else:
+            a.call("rt_print_float" if self.tk(v) == "float" else "rt_print_int")
       a.rip([0x48, 0x8D, 0x0D], "str:0")
       a.emit(0xBA, 1, 0, 0, 0)
       a.call("rt_print_str")
@@ -2019,6 +2058,17 @@ class CodeGen(Resolver):
     a.emit(0x48, 0xC7, 0x44, 0x24, 0x20, 0, 0, 0, 0)     # mov qword [rsp+32],0
     a.rip([0xFF, 0x15], "WriteFile")
     a.emit(epilogue)
+
+    # rt_print_value_str: rax = null (empty) or pointer to [u64 length][bytes]
+    a.label("rt_print_value_str")
+    empty = a.new_label("ps_empty")
+    a.emit(0x48, 0x85, 0xC0)                             # test rax,rax
+    a.jcc(4, empty)
+    a.emit(0x48, 0x8B, 0x10)                             # mov rdx,[rax] (length)
+    a.emit(0x48, 0x8D, 0x48, 0x08)                       # lea rcx,[rax+8] (contents)
+    a.jmp("rt_print_str")
+    a.label(empty)
+    a.emit(0xC3)                                         # ret
 
     # rt_print_int: rax = signed value
     a.label("rt_print_int")
@@ -2182,7 +2232,7 @@ def align(x, a):
   return (x + a - 1) // a * a
 
 
-def build_pe(asm, vars_, strings):
+def build_pe(asm, vars_, strings, byte_strings):
   # ---- .data layout: fixed runtime area, then variables, then strings
   sym = {"stdout": 0, "stdin": 8, "written": 0x10, "heap": 0x18, "numbuf_end": 0x40, "state": 0x40}
   off = 0x80
@@ -2194,6 +2244,13 @@ def build_pe(asm, vars_, strings):
     off += 16
   data = bytearray(off)
   data[0x40:0x48] = struct.pack("<Q",0x123456789ABCDEF0)       # the state of the random generator at the start of every program
+  for i, s in enumerate(byte_strings):
+    if not s:
+      continue                                  # empty string is represented by a null pointer
+    while len(data) % 8:
+      data.append(0)
+    sym[f"bstr:{i}"] = len(data)
+    data += struct.pack("<Q", len(s)) + s
   for i, s in enumerate(strings):
     sym[f"str:{i}"] = len(data)
     data += s + b"\0"
@@ -2286,8 +2343,8 @@ def compile_source(src, warnings=None):
   checker.run(ast)
   if warnings is not None:
     warnings.extend(parser.warnings)
-  asm = CodeGen(parser.global_scope, parser.strings, parser.fn_globals, checker.types).program(ast)
-  return build_pe(asm, parser.vars, parser.strings)
+  asm = CodeGen(parser.global_scope, parser.strings, parser.byte_strings, parser.fn_globals, checker.types).program(ast)
+  return build_pe(asm, parser.vars, parser.strings, parser.byte_strings)
 
 
 def main():

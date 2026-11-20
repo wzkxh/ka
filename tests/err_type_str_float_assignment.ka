@@ -1,0 +1,3 @@
+f = 1.5
+s = 'text'
+f = s  -- ERROR: type mismatch in assignment to 'f': expected float, found str

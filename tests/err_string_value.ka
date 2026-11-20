@@ -1,1 +1,1 @@
-x = "abc"  -- ERROR: a string can only be printed
+x = "abc"  -- ERROR: a unicode string can only be printed
