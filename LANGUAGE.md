@@ -241,8 +241,8 @@ Very deep recursion overflows the 1 MB stack and crashes.
 ## 10. Characters (JFYI)
 | char | usage |
 |---|---|
-| ' | byte string |
-| " | Unicode string |
+| ' | byte string `str` |
+| " | Unicode string `text` |
 | # | hex literal `#ff`, binary literal `2#101`; `# ` comment |
 | ! | unary not, conditional `c ? a ! b`, != - not equal |
 | ? | unary random, conditional `c ? a ! b` |
