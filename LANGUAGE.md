@@ -33,10 +33,8 @@ This file defines the language; the reasons behind the decisions are in IMPLEMEN
   - `str` may contain byte 0; `text` may contain U+0000.
   - String literals written one after another are joined: `'a' 'b' 'c'`. A string over several lines is written in parentheses
     (`print ("one" NEWLINE "two")`) or with a line ending in `,`. `'...'` and `"..."` cannot be joined.
-  - Both types can be assigned to variables, copied, passed as function arguments, returned from functions, captured by closures, and printed. Assignment copies a 64-bit pointer; immutable string data is shared. The empty string is represented by a null pointer.
-  - A non-empty `str` points to `[u64 byte length][raw bytes]`. A non-empty `text` points to `[u64 code-point length][u32 Unicode scalar values]`. The `text` length counts Unicode code points, not UTF-8 bytes or grapheme clusters.
-  - Both types support content-based `==`, `!=`, `<`, `<=`, `>`, `>=` comparisons and `+` concatenation; `+=` concatenates and reassigns. `str` ordering compares unsigned bytes; `text` ordering compares Unicode code points. Equal contents compare equal even when addresses differ; pointer identity is only an implementation fast path.
-  - Concatenation creates a new immutable string object. Old objects are not freed yet. Text printing encodes code points as UTF-8 without allocating a temporary string.
+  - Both types support content-based `==`, `!=`, `<`, `<=`, `>`, `>=` comparisons and `+` concatenation; `+=` concatenates and reassigns. `str` ordering compares unsigned bytes; `text` ordering compares Unicode code points.
+  - Concatenation creates a new immutable string object. Text printing encodes code points as UTF-8 without allocating a temporary string.
   - `str` and `text` cannot be mixed in assignments, arguments, returns, concatenation, or comparisons. Explicit conversions may be added later.
   - Output is written as UTF-8 bytes; the program sets the console code page to UTF-8 at start.
 - **Compatibility forms:** `# ` comments and `0x` hex literals exist only to ease the migration of existing sources and programs from other languages, and for the
@@ -248,21 +246,21 @@ Very deep recursion overflows the 1 MB stack and crashes.
 | # | hex literal `#ff`, binary literal `2#101`; `# ` comment |
 | ! | unary not, conditional `c ? a ! b`, != - not equal |
 | ? | unary random, conditional `c ? a ! b` |
-| / | unary - nothing, float division; /= |
-| % | unary - nothing, modulo (floored); %= |
-| & | unary - nothing, bitwise and, && - logical and; &= &&= |
-| \| | unary - nothing, bitwise or, \|\| - logical or; \|= \|\|= |
-| ~ | unary bitwise not, xor; ~= |
-| * | unary - nothing (scatter?), multiply; \*= ; `<*` `*>` rotate |
-| + | identity, plus; += ; `+>` arithmetic shift right |
-| - | negative, minus; -= |
-| < | unary - nothing, less; <= - le; `<<` shift left, `<*` rotate left |
-| > | unary - nothing, greater; >= - ge; `>>` shift right, `+>` `*>` |
-| = | return, assignment, == - equal |
+| / | unary - nothing, float division; `/=` |
+| % | unary - nothing, modulo (floored); `%=` |
+| & | unary - nothing, bitwise and, `&&` - logical and; `&=` `&&=` |
+| \| | unary - nothing, bitwise or, \|\| - logical or; `\|=` `\|\|=` |
+| ~ | unary bitwise not, xor; `~=` |
+| * | unary - nothing (scatter?), multiply; `\*=` `<*` `*>` rotate |
+| + | identity, plus, concatenate; `+=` ; `+>` arithmetic shift right |
+| - | negative, minus; `-=` |
+| < | unary - nothing, less; `<=` - le; `<<` shift left, `<*` rotate left |
+| > | unary - nothing, greater; `>=` - ge; `>>` shift right, `+>` `*>` |
+| = | return, assignment, `==` - equal |
 | , | separate parameters, arguments |
 | : | start block, unary - nothing |
 | ; | separate statements, unary - nothing |
-| \\ | function (synonym of `function`) where an operand or statement is expected; integer division (binary); \\= |
+| \\ | function (synonym of `function`) where an operand or statement is expected; integer division; `\\=` |
 | ^ | global variable (prefix), power (binary); ^= |
 | _ | 'blank' in ids and numbers, ids can start/end with it |
 | @ | upper-level variable |

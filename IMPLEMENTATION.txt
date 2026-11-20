@@ -41,7 +41,21 @@ Floats: `digits.digits`, `digits.digits e sign digits`, `digits e sign digits` (
   `5e3` is a float. Specific error messages for the near-misses (`1.`, `.5`, `1e`, `1.5abc`, `1.5.2`).
 Strings: `'...'` = byte string (`str`), `"..."` = Unicode string (`text`). Both are values. `str` stores bytes as written/escaped; `text` stores Unicode scalar values as 32-bit code points. `^XX` is a raw byte for `str` and U+00XX for `text`; `^uXXXX` / `^UXXXXXX` encode the specified scalar value. Both kinds print as UTF-8. Adjacent literals of one kind join; mixed-kind joining is an error.
   Non-empty `str` objects are `[u64 byte_length][bytes]`; non-empty `text` objects are `[u64 code_point_length][u32 code points]`. Empty values are null. Variables, parameters, returns and closure boxes carry 64-bit values, so assignment/calls/returns copy only the pointer. Strings are immutable. Literal objects are static; concatenation allocates a new object using `HeapAlloc`, and old objects are not freed. `str` comparison is unsigned-byte lexicographical; `text` comparison is Unicode-code-point lexicographical. `rt_print_value_text` UTF-8-encodes code points directly to `WriteFile` without a temporary heap allocation. The checker rejects mixing `str` and `text`; conversions are future work.
-
+For now both are stored as UTF-8 bytes and printed as such; they differ only in the meaning
+  of `^XX` (raw byte vs. character U+00XX). Print will then have to encode.
+  Escape char is `^` (not `\`) so that `\` stays free (in strings it's good for Windows paths). `^uXXXX` and `^UXXXXXX` are the user's spelling.
+  Joining of adjacent literals: a newline ends a statement, so `print "a"` NEWLINE `"b"` is two statements; inside parentheses newlines are ignored,
+  so `print ("a" NEWLINE "b")` joins (user's example). Strings are only items of `print` (no string values yet).
+<from LANGUAGE.md - should be here:>
+Both string type values can be assigned to variables, copied, passed as function arguments, returned from functions, captured by closures, and printed. Assignment copies a 64-bit pointer; immutable string data is shared. The empty string is represented by a null pointer. A non-empty `str` points to `[u64 byte length][raw bytes]`. A non-empty `text` points to `[u64 code-point length][u32 Unicode scalar values]`. The `text` length counts Unicode code points, not UTF-8 bytes or grapheme clusters.
+<on string comparison:>  Equal contents compare equal even when addresses differ; pointer identity is only an implementation fast path.
+<on concatenation:> Old objects are not freed yet.
+  The generated program calls SetConsoleOutputCP(65001) at start so that UTF-8 shows correctly; the console keeps that code page afterwards
+  (restoring it was not worth the code).
+Keywords: `function` with the synonym `\` (user), `skip` (empty statement), `elif`; `fn` is gone. A one-parameter function needs no parentheses
+  (`function f x: ...`, `\x: =x+1`): `function name x` is a definition, `function x:` a literal; decided by two tokens of lookahead.
+Operator spelling is the user's: `+>` arithmetic shift right, `<*` / `*>` rotate, `?` and `!` for the conditional (`!` because `:` starts blocks),
+  `@x` for variables of the enclosing function (temporary, user expects to redo it).
 
 3. Statements and blocks
 ------------------------
