@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-run_tests.py - compile every tests/*.ka, run the program, compare with expectations.
+rt.py (run_tests) - compile every tests/*.ka, run the program, compare with expectations.
 
-    python run_tests.py              run everything (on Windows: really runs the .exe files)
-    python run_tests.py -k closure   only tests whose name contains "closure"
-    python run_tests.py -v           show expected/actual on failures
-    python run_tests.py --emu        run in the Unicorn emulator instead (Linux/macOS; needs
-                                     `pip install unicorn pefile`)
-    python run_tests.py --keep       keep the generated .exe files in ./build
+    python rt.py              run everything (on Windows: really runs the .exe files)
+    python rt.py -k closure   only tests whose name contains "closure"
+    python rt.py -v           show expected/actual on failures
+    python rt.py --emu        run in the Unicorn emulator instead (Linux/macOS; needs
+                              `pip install unicorn pefile`)
+    python rt.py --keep       keep the generated .exe files in ./build
 
 Test files (same base name; the programs are in tests/, everything else in tests/results/):
     tests/NAME.ka                program

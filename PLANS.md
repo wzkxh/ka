@@ -1,4 +1,6 @@
 ## Not in the language (yet)
+- strings - '' and "" mean false in conditions.
+- `assert` expr [, str] -- if expr is false, print str and exit w/RC 1
 - str repetition `x*n` `n*x`;
 - `|x` unary abs (numbers) and len (str);
 - short strings 0-7 chars kept in 64-bit words; literals - maybe one table;
@@ -27,7 +29,6 @@
 - enums;
 - bool?; #true, #false or 0# 1#;
 - big integers;
-- `assert` expr [, str]
 - `for` loops;
 - `until cond` loop;
 - `else` on loops -- not sure;

@@ -8,6 +8,7 @@ Ka compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3,
 - **Tests:** 208 programs in `tests/`, including long byte strings and Unicode text values/operations. The complete suite should be run on Windows; this development environment has no Windows runtime or Unicorn emulator.
 - **Checked on real Windows by the user:** all 202 tests of version 6.5.2 passed.
 - **Known limits:** see IMPLEMENTATION.txt section 9 (float printing last digit, fractional float powers checked only in an emulator, no input, no GC, no explicit string conversions).
+- run_tests.py -> rt.py
 
 ## Version 6.6
 - **Unicode strings (`text`) are values**, parallel to byte strings (`str`): assignment, copying, function parameters and returns, closures, printing, content comparisons and concatenation (`+`, `+=`).

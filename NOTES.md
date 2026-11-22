@@ -5,8 +5,8 @@ Reasons behind decisions: IMPLEMENTATION.txt. History and state: RELEASE_NOTES.m
 (The language was called "Tiny" with extension `.tiny` until version 2, when it became Ka / `.ka`.)
 
 ## 0. Working agreement and rules for the files
-- The user designs the language, runs `python run_tests.py` on real Windows and pastes failures. Claude cannot run Windows; Claude checks code with the
-  Unicorn emulator (`tools/emu.py`; `pip install unicorn pefile`, `python run_tests.py --emu`). Keystone (`pip install keystone-engine`) is only needed to rebuild the float runtime.
+- The user designs the language, runs `python rt.py`(run_tests) on real Windows and pastes failures. Claude cannot run Windows; Claude checks code with the
+  Unicorn emulator (`tools/emu.py`; `pip install unicorn pefile`, `python rt.py --emu`). Keystone (`pip install keystone-engine`) is only needed to rebuild the float runtime.
 - The compiler stays a single file, pure Python 3, no dependencies, emitting the PE itself.
 - Every language change = `ka.py` + `LANGUAGE.md` + tests, and a line in `RELEASE_NOTES.md`; decisions and their reasons go to `IMPLEMENTATION.txt`.
 - **Document split:** LANGUAGE.md = short exact definition, no "why". IMPLEMENTATION.txt = decisions, reasons, alternatives, issues. NOTES.md = this file, how the
@@ -103,13 +103,13 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
   terminators are only for storage convenience; explicit lengths are passed to `WriteFile`). Strings 0..4 are reserved for the runtime (newline, division by zero, unset function, negative exponent, bad power).
 
 ## 2. Testing and tools
-- `python run_tests.py [-k name] [-v] [--emu] [--keep]`; the programs are `tests/NAME.ka`, what they must give is in `tests/results/` (`NAME.expected/.exit/.warn`, `err_NAME.error`); see the header of run_tests.py. Output is compared as raw bytes.
+- `python rt.py [-k name] [-v] [--emu] [--keep]`; the programs are `tests/NAME.ka`, what they must give is in `tests/results/` (`NAME.expected/.exit/.warn`, `err_NAME.error`); see the header of rt.py. Output is compared as raw bytes.
 - The emulator fakes kernel32 and asserts 16-byte stack alignment at every API call. It starts with a 64-bit x87 precision (real Windows: 53); QEMU's x87 transcendental functions are only ~4e-15 accurate.
 - When adding a feature add tests for normal use, interaction with blocks/continuation lines, error messages, and a regression for every bug found. Write `-- =>` comments (or run tools/annotate_tests.py).
 - `tools/fuzz_float.py [count]` checks the float routines; `tools/annotate_tests.py` adds result comments; `tools/build_float_rt.py` rebuilds the float runtime.
 
 ## 3. Session checklist
-1. The user uploads the zip/folder. Unzip; read NOTES.md, RELEASE_NOTES.md, LANGUAGE.md, PLANS.md; `pip install unicorn pefile keystone-engine`; run `python run_tests.py --emu`.
+1. The user uploads the zip/folder. Unzip; read NOTES.md, RELEASE_NOTES.md, LANGUAGE.md, PLANS.md; `pip install unicorn pefile keystone-engine`; run `python rt.py --emu`.
 2. Implement the requested changes; run all tests; add/adjust tests (with comments) and docs (see 0); bump `VERSION`.
 3. Re-zip (`ka.zip`), present it, summarise what to check on Windows and any open question.
 
