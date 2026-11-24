@@ -1,0 +1,34 @@
+| o | unary            | binary                | others                      |
+|---|------------------|-----------------------|-----------------------------|
+| ! | not              | c?a!b                 | !=                          |
+| ? | random           | c?a!b                 |                             |
+| \ | function (λ)     | int. div, drop        | \=                          |
+| / | sqrt, strip      | float div, take       | /=                          |
+| % | split_blanks     | modulo, split/join    | %=                          |
+| | | abs, len         | bitwise or, find      | |=  || logical or  ||=      |
+| & |                  | bitwise and, contains | &=  && logical and &&=      |
+| ~ | bitwise not      | bitwise xor, match    | ~=                          |
+| * | scatter?         | multiply, repeat      | *=     <* >* rotate <*= >*= |
+| + | identity         | plus, concat          | +=     +> arithm.shift +>=  |
+| - | negate, reverse  | minus                 | -=                          |
+| < | floor, lower     | less                  | <=  << shift left  <<=      |
+| > | ceil, upper      | greater               | >=  >> shift right >>=      |
+| = | return           | assignment            |     == equal                |
+| @ | upper-level var  | char-at               |                             |
+| ^ | global var       | power                 | starts with                 |
+| $ | shape/size/dim   | reshape               | ends with                   |
+| : |                  | start block           |                             |
+| ; |                  | separate statements   |                             |
+| . |                  | floats                |                             |
+| ` |                                                                        |
+| ' | byte string `str`                                                      |
+| " | Unicode string `text`                                                  |
+| # | hex literal `#ff`, binary literal `2#101`; `# ` comment                |
+| , | separate parameters, arguments                                         |
+| _ | 'blank' in ids and numbers, ids can start/end with it; _3 minus sign   |
+
+maybe
+^1 - literal e, ^2 - e^2 etc
+@1 - literal π, @2 - 2*π etc, or even τ
+
+() expressions  {} statements  [] index

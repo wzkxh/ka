@@ -1,0 +1,36 @@
+? accepts any expression, like ! ('' and "" - false).
+
+?1 should return int64 timestamp (UTC time) in microseconds.
+It should use GetSystemTimePreciseAsFileTime.
+Calculate: 100-ns windows time minus 116444736000000000 (1601->1970 in 100ns), divide by 10.
+
+?'...' and ?"..." should return current local time, formatted according to the format in those
+strings. '...' - str = byte string (in utf-8 if it's text), "..." - text = unicode string (array
+of 32-bit unicode codepoints). This uses fn GetLocalTime.
+Format string may contain these format codes (always a letter [ymdwHMSF] + a digit [1-4]):
+y2 - year 00..99, last two digits of current year
+y4 - current year 2026...
+m1 - month 1..12 without leading zero
+m2 - month 01..12
+d1 - day 1..31 without leading zero
+d2 - day 01..31
+H1 - hour 0..23 without leading zero
+H2 - hour 00..23
+M1 - minute 0..59 without leading zero
+M2 - minute 00..59
+S1 - second 0..59 without leading zero
+S2 - second 00..59
+F1 - fractions of second - 1/10 s (0..9)
+F2 - fractions of second - 1/100 s (00..99)
+F3 - fractions of second - 1/1000 s (000..999)
+w1 - weekday (1..7 for Monday..Sunday)
+w2 - weekday 'Mo' to 'Su'
+w3 - weekday 'Mon' to 'Sun'
+Incorrect/unrecognized/all the rest characters (full unicode) are passed as they are.
+Example: 'Now: y4/m2/d2 H2:M2:S2.F3' --> 'Now: 2026/11/22 12:02:34.296'
+First, some static buffer is used for making the result (let's limit it to some reasonable
+length, e.g. 50 or 64 chars), then a proper dynamic string (str or text) is created, filled in
+and returned. I would suggest to work with 'text' directrly, while for 'str' - to convert the format
+string to 'text' (have some standard fn, maybe w/o dynamic allocation), then work with 'text', then
+convert back to utf-8 'str' for the return (also have some standard convert fn, using two pieces of
+already allocated memory, i.e. conversion str↔text and allocation should be separate functions).

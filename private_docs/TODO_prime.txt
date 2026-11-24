@@ -1,0 +1,22 @@
+int64_t is_prime(int64_t n)
+{
+  if( n<4 ) return n>1;
+  if( (n & 1) == 0 || n % 3 == 0 ) return 0;
+  for( int64_t i = 5; i*i <= n; i += 6 )
+  {
+    if( n%i == 0 || n%(i+2) == 0 ) return 0;
+  }
+  return 1;
+}
+
+| Upper bound of n | Typical time (prime) | Notes |
+| --- | --- | --- |
+| ≤ 10⁶ – 10⁷ | < 0.001 ms | Instant |
+| ≤ 10⁹ | ~ 0.01–0.1 µs | Still essentially free |
+| ≤ 10¹¹ | ~ 1–5 µs | Negligible |
+| ≤ 10¹² | ~ 0.05–0.2 ms | Fine for most uses (practical limit) |
+| ≤ 10¹³ | ~ 0.3–1 ms | Still very usable |
+| ≤ 10¹⁴ | ~ 3–10 ms | Acceptable for occasional calls |
+| ≤ 10¹⁵ | ~ 30–50 ms | Noticeable but ok |
+| ≤ 10¹⁶ | ~ 0.1–0.2 s | Starting to feel slow |
+

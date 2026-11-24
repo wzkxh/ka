@@ -244,29 +244,26 @@ Very deep recursion overflows the 1 MB stack and crashes.
 | ' | byte string `str` |
 | " | Unicode string `text` |
 | # | hex literal `#ff`, binary literal `2#101`; `# ` comment |
-| ! | unary not, conditional `c ? a ! b`, != - not equal |
+| ! | unary not, conditional `c ? a ! b`, `!=` - not equal |
 | ? | unary random, conditional `c ? a ! b` |
 | / | unary - nothing, float division; `/=` |
 | % | unary - nothing, modulo (floored); `%=` |
 | & | unary - nothing, bitwise and, `&&` - logical and; `&=` `&&=` |
 | \| | unary - nothing, bitwise or, \|\| - logical or; `\|=` `\|\|=` |
 | ~ | unary bitwise not, xor; `~=` |
-| * | unary - nothing (scatter?), multiply; `\*=` `<*` `*>` rotate |
-| + | identity, plus, concatenate; `+=` ; `+>` arithmetic shift right |
+| * | unary - nothing (scatter?), multiply; `\*=` `<*` `*>` rotate `<*=` `*>=` |
+| + | identity, plus, concatenate; `+=` ; `+>` arithmetic shift right `+>=`|
 | - | negative, minus; `-=` |
-| < | unary - nothing, less; `<=` - le; `<<` shift left, `<*` rotate left |
-| > | unary - nothing, greater; `>=` - ge; `>>` shift right, `+>` `*>` |
+| < | unary - nothing, less; `<=` - le; `<<` shift left `<<=`, see `<*` |
+| > | unary - nothing, greater; `>=` - ge; `>>` shift right `>>=`, see `+>` `*>` |
 | = | return, assignment, `==` - equal |
 | , | separate parameters, arguments |
 | : | start block, unary - nothing |
 | ; | separate statements, unary - nothing |
-| \\ | function (synonym of `function`) where an operand or statement is expected; integer division; `\\=` |
+| \\ | function (looks like λ); integer division; `\\=` |
 | ^ | global variable (prefix), power (binary); ^= |
 | _ | 'blank' in ids and numbers, ids can start/end with it |
-| @ | upper-level variable |
+| @ | upper-level variable; binary - nothing |
 | () | expressions, parameters, arguments |
 | {} | block |
-| [] | - |
-| . | - |
-| ` | - |
-| $ | - |
+

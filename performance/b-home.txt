@@ -1,0 +1,33 @@
+wrote cs.exe (4096 bytes)
+448
+exit code: 0
+1.173_923_800
+wrote fib.exe (4096 bytes)
+9227465
+exit code: 0
+0.392_483_300
+wrote prime.exe (4096 bytes)
+78498
+exit code: 0
+0.751_019_200
+wrote crc64.exe (4608 bytes)
+6380114920827571293
+exit code: 0
+0.413_713_000
+wrote e_pi.exe (4608 bytes)
+2.71828182845905
+3.14159263359025
+exit code: 0
+0.659_702_300
+wrote mb.exe (5120 bytes)
+41300170
+exit code: 0
+0.597_086_400
+wrote sim.exe (5120 bytes)
+4431000
+exit code: 0
+0.646_480_800
+wrote fin.exe (4608 bytes)
+30524.034255981
+exit code: 0
+0.913_039_900
