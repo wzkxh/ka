@@ -8,7 +8,7 @@
 | | | abs, len         | bitwise or, find      | |=  || logical or  ||=      |
 | & |                  | bitwise and, contains | &=  && logical and &&=      |
 | ~ | bitwise not      | bitwise xor, match    | ~=                          |
-| * | scatter?         | multiply, repeat      | *=     <* >* rotate <*= >*= |
+| * | scatter?         | multiply, repeat      | *=     *> <* rotate *>= <*= |
 | + | identity         | plus, concat          | +=     +> arithm.shift +>=  |
 | - | negate, reverse  | minus                 | -=                          |
 | < | floor, lower     | less                  | <=  << shift left  <<=      |
