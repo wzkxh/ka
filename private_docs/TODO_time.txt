@@ -1,4 +1,4 @@
-? accepts any expression, like ! ('' and "" - false).
+? accepts any expression, like !.
 
 ?1 should return int64 timestamp (UTC time) in microseconds.
 It should use GetSystemTimePreciseAsFileTime.
@@ -30,7 +30,17 @@ Incorrect/unrecognized/all the rest characters (full unicode) are passed as they
 Example: 'Now: y4/m2/d2 H2:M2:S2.F3' --> 'Now: 2026/11/22 12:02:34.296'
 First, some static buffer is used for making the result (let's limit it to some reasonable
 length, e.g. 50 or 64 chars), then a proper dynamic string (str or text) is created, filled in
-and returned. I would suggest to work with 'text' directrly, while for 'str' - to convert the format
-string to 'text' (have some standard fn, maybe w/o dynamic allocation), then work with 'text', then
-convert back to utf-8 'str' for the return (also have some standard convert fn, using two pieces of
-already allocated memory, i.e. conversion str↔text and allocation should be separate functions).
+and returned. I would suggest to work with 'text' directly, while for 'str' - to convert the format
+string to 'text' (have some standard fn for conversion, maybe w/o dynamic allocation), then work
+with 'text', then convert back to utf-8 'str' for the return (also have some standard convert fn,
+using two pieces of already allocated memory, i.e. conversion str↔text and allocation should be
+separate functions).
+
+Future
+m3 - month Jan..Dec
+m4 - month January..December
+d3 - day of year 001..365 (or n1,n2,n3)
+h1 - 1..12 american hour h2 - 01..12 ameraican hour
+a1 - a/p a2 - am/pm A1 - A/P A2 - AM/PM
+w4 - weekday Monday..Sunday
+
