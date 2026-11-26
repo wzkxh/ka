@@ -1,0 +1,2 @@
+f = 2  -- ERROR: 'f' is a function (defined with 'function') and cannot be assigned
+function f(): return 1

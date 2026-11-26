@@ -1,0 +1,58 @@
+-- strings as truth values: empty is false, anything else is true
+e = ''
+f = 'x'
+if e: print 'e is true' else: print 'e is false'  -- => e is false
+if f: print 'f is true'                           -- => f is true
+te = ""
+tf = "y"
+print !e, ' ', !f, ' ', !te, ' ', !tf              -- => 1 0 1 0
+print (e || f), ' ', (e && f), ' ', (tf && tf)     -- => 1 0 1
+print (f ? 'yes' ! 'no'), ' ', (e ? 'yes' ! 'no') -- => yes no
+print (tf ? "ja" ! "nein"), (te ? "ja" ! "nein")   -- => janein
+i = 0
+s = 'a'
+while s:
+  s = i < 3 ? s + 'a' ! ''
+  i += 1
+print i                                           -- => 4
+-- a string made of nothing is empty again
+z = 'ab' + ''
+z2 = '' + ''
+print z, ' ', !z2                                  -- => ab 1
+-- constants of string type
+GREETING = 'hello'
+NAME = "wörld"
+TITLE = GREETING + ', ' + 'there'
+print TITLE                                       -- => hello, there
+print NAME, ' ', NAME == "wörld"                   -- => wörld 1
+-- parameters, results, closures
+function twice(s): return s + s
+function twice_text(s): return s + s
+print twice('ab'), ' ', twice_text(twice_text("é"))  -- => abab éééé
+function pick(c, a, b): return c ? a ! b
+print pick(1, 'one', 'two'), ' ', pick(0, 'one', 'two') -- => one two
+make = function(prefix): =function(x): =prefix + x
+hi = make('hi ')
+print hi('there'), ' ', hi('you')                  -- => hi there hi you
+counter = function() {
+  acc = ''
+  =function() {
+    @acc = acc + '#'
+    =acc
+  }
+}
+c = counter()
+c(); c()
+print c()                                         -- => ###
+-- printing expressions with several parts
+print 'a' + 'b', ' ', "c" + "d"                    -- => ab cd
+print ('x' 'y') + 'z'                              -- => xyz
+-- unicode text: code points, not bytes
+u = "añ€😀"
+print u, ' ', u == "añ€😀", ' ', u < "añ€😁"        -- => añ€😀 1 1
+-- text and str keep their bytes
+b = 'a^00b'
+print b == 'a^00b', ' ', b < 'a^00c', ' ', b + 'c' == 'a^00bc'  -- => 1 1 1
+-- a variable can be assigned a string conditionally and assigned later
+if 1: late = 'set'
+print late                                        -- => set

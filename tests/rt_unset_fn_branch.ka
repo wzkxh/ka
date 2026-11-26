@@ -1,8 +1,4 @@
 a = 0
 if a: g = \(): =1
-print "x"
-g()
-
--- the whole output:
---   x
---   runtime error: call of an unset function
+print "x"                   -- => x
+g()                         -- => runtime error: variable 'g' is not initialized (exit code 1)

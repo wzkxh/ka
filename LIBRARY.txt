@@ -1,0 +1,239 @@
+LIBRARY - the runtime of the Ka compiler as readable C code
+============================================================
+The machine code of these routines is written by hand in ka.py (function runtime() and the code generator) or generated from tools/float_rt.asm. This file says
+what every routine does, in C, for people. It is not compiled. When a routine changes, change it here too.
+
+Conventions
+- Every value is 64 bits. An int is int64_t, a float is the bit pattern of a double, a function is a pointer to a closure.
+- Input and output registers are written in the header of each routine (rax, rcx, rdx, xmm0, xmm1 ...). The generated code uses only rax, rcx, rdx, rbp, rsp and xmm0-xmm2
+  as scratch; a runtime routine may change every register except rbp and rsp.
+- `stdout`, `heap` and `state` are 8-byte slots of the data section. `numbuf` is a small buffer there.
+- A runtime error prints one line to standard output and ends the program with exit code 1.
+
+
+1. Start and end of a program
+-----------------------------
+int main(void)
+{
+  stdout = GetStdHandle(STD_OUTPUT_HANDLE);          // -11
+  SetConsoleOutputCP(65001);                         // UTF-8; the console keeps this code page after the program
+  heap = GetProcessHeap();
+  state = 0x123456789ABCDEF0;                        // the random generator (section 6): the same start every time
+  /* ... the program: create the closures of the `function name` definitions, then the statements ... */
+  ExitProcess(0);                                    // the end of the program
+}
+
+void exit_process(int code)                          // used by `exit` and by every runtime error
+{
+  ExitProcess(code);                                 // (the stack is aligned to 16 bytes first)
+}
+
+
+2. Output
+---------
+void rt_print_str(const char *p, int64_t len)        // rcx = p, rdx = len
+{
+  DWORD written;
+  WriteFile(stdout, p, len, &written, NULL);
+}
+
+void rt_print_int(int64_t v)                         // rax = v; the decimal number, no newline
+{
+  char buf[32], *end = buf + sizeof buf, *p = end;
+  uint64_t u = v < 0 ? 0 - (uint64_t)v : (uint64_t)v;   // also right for the smallest int
+  do { *--p = '0' + u % 10; u /= 10; } while (u);
+  if (v < 0) *--p = '-';
+  rt_print_str(p, end - p);
+}
+
+void rt_print_float(double x)                        // rax = bits of x; rt_fmt_float makes the text
+{
+  char buf[64];
+  int n = rt_fmt_float(x, buf);
+  rt_print_str(buf, n);
+}
+
+A `print` statement calls rt_print_str, rt_print_int or rt_print_float for every item, in order, and at the end rt_print_str("\n", 1).
+
+
+3. Memory
+---------
+void *rt_alloc(int64_t size)                         // rcx = size, result in rax
+{
+  return HeapAlloc(heap, HEAP_ZERO_MEMORY, size);    // the memory is zero: the hidden flags of captured variables rely on it
+}                                                    // closures and the boxes of captured variables are never freed
+
+
+4. Runtime errors
+-----------------
+Every routine below prints its message and calls exit_process(1). The messages are the first strings of the data section.
+
+rt_divzero    "runtime error: division by zero"                                  / \ % with a zero divisor (also 0.0, -0.0), 0.0 ^ negative
+rt_notfn      "runtime error: call of an unset function"                         the callee is 0 (a function that ended without a result)
+rt_negexp     "runtime error: negative exponent"                                 int ^ with a negative exponent
+rt_badpow     "runtime error: power of a negative number with a fractional exponent"
+rt_badrand    "runtime error: bad argument of '?'"                               ?1, ?0.0, a float that is not above 0.0, NaN
+(per variable name) "runtime error: variable 'x' is not initialized"             one tiny stub per name; a read whose hidden flag is 0 jumps to it:
+
+void uninit_stub_x(void)
+{
+  rt_print_str("runtime error: variable 'x' is not initialized\n", 47);
+  exit_process(1);
+}
+
+
+5. Floating point (tools/float_rt.asm; the x87 unit is used in extended precision)
+------------------------------------------------------------------------------------
+The routines set the x87 control word to extended precision (64-bit mantissa, round to nearest) themselves: Windows starts a process with 53 bits, which would spoil the digits.
+
+int rt_fmt_float(double x, char *out)                // rax = bits of x, rdx = out (at least 40 bytes), result = length
+{
+  // 15 significant digits, trailing zeros removed; fixed notation for 1e-4 <= |x| < 1e15, else d.ddde+XX (two digits at least)
+  if (isnan(x)) return copy(out, "nan");
+  char *o = out;
+  if (signbit(x)) { *o++ = '-'; x = -x; }
+  if (isinf(x)) return copy(o, "inf");
+  if (x == 0) return copy(o, "0.0");
+  int e10 = ((exponent_bits(x) - 1023) * 1233) >> 12;     // a first guess of floor(log10 x)
+  uint64_t n;
+  for (;;) {                                         // n = round(x * 10^(14 - e10)) must have 15 digits
+    int k = 14 - e10;
+    long double p = pow10_by_squaring((unsigned)abs(k));  // extended precision
+    n = llrintl(k >= 0 ? x * p : x / p);             // round to nearest even
+    if (n >= 1000000000000000ULL) { e10++; continue; }
+    if (n < 100000000000000ULL)   { e10--; continue; }
+    break;
+  }
+  int digits = 15;
+  while (digits > 1 && n % 10 == 0) { n /= 10; digits--; }
+  char d[16]; for (int i = digits - 1; i >= 0; i--) { d[i] = '0' + n % 10; n /= 10; }
+  if (-4 <= e10 && e10 <= 14) {
+    if (e10 >= 0) {
+      int before = e10 + 1;                          // digits before the point
+      if (digits <= before) { copy d, then (before - digits) zeros, then ".0"; }
+      else                  { copy d[0..before), '.', d[before..digits); }
+    } else {                                         // "0." then -e10-1 zeros then the digits
+      copy "0.", (-e10 - 1) zeros, d;
+    }
+  } else {                                           // d[.ddd]e+XX
+    copy d[0]; if (digits > 1) { '.', d[1..digits) }
+    'e', e10 < 0 ? '-' : '+', abs(e10) with at least two digits;
+  }
+  return length;
+}
+
+double rt_fmod(double x, double y)                   // xmm0 = x, xmm1 = y (not 0), result in xmm0; like C fmod, exact
+{
+  // the musl algorithm on the integer mantissas: shift and subtract, one bit at a time
+  uint64_t ux = bits(x), uy = bits(y);
+  int ex = (ux >> 52) & 0x7FF, ey = (uy >> 52) & 0x7FF, sx = ux >> 63;
+  if (ex == 0x7FF) return NAN;
+  if ((ux << 1) < (uy << 1)) return x;               // |x| < |y|
+  if ((ux << 1) == (uy << 1)) return sx ? -0.0 : 0.0;
+  normalize both mantissas (denormal numbers get a negative exponent), restore the hidden bit;
+  for (; ex > ey; ex--) { uint64_t i = ux - uy; if ((int64_t)i >= 0) { if (i == 0) return sx ? -0.0 : 0.0; ux = i; } ux <<= 1; }
+  { uint64_t i = ux - uy; if ((int64_t)i >= 0) { if (i == 0) return sx ? -0.0 : 0.0; ux = i; } }
+  for (; (ux >> 52) == 0; ux <<= 1, ex--) ;
+  pack ux and ex back into a double (a denormal result if ex <= 0) and set the sign sx;
+}
+
+double rt_fmodfloor(double x, double y, double *fmod_result, int *adjusted)   // xmm0 = x, xmm1 = y (not 0); xmm0 = result, xmm4 = fmod, edx = adjusted
+{
+  double r = rt_fmod(x, y);                          // the sign of x
+  *fmod_result = r; *adjusted = 0;
+  if (isnan(r)) return r;
+  if (r == 0) return +0.0;                           // a zero remainder is +0.0
+  if (signbit(r) != signbit(y)) { r += y; *adjusted = 1; }   // the sign of y
+  return r;
+}
+
+double rt_fpow(double x, double y, int *err)         // xmm0 = x, xmm1 = y, result in xmm0, edx = *err
+{                                                    // err: 0 ok, 1 = 0 to a negative power (division by zero), 2 = negative base with a fractional exponent
+  *err = 0;
+  if (y == 0) return 1.0;
+  int64_t n = (int64_t)y;                            // cvttsd2si
+  if ((double)n == y) {                              // an integer that fits in 64 bits: any base
+    long double r = 1, b = x; uint64_t k = n < 0 ? 0 - (uint64_t)n : (uint64_t)n;
+    for (; k; k >>= 1) { if (k & 1) r *= b; b *= b; }     // extended precision, rounded once at the end
+    if (n < 0) { if (x == 0) { *err = 1; return 0; } r = 1 / r; }
+    return (double)r;
+  }
+  if (x == 0) { if (signbit(y)) { *err = 1; return 0; } return 0.0; }
+  if (x < 0)  { *err = 2; return 0; }
+  return (double)exp2l(y * log2l(x));                // fyl2x, f2xm1, fscale
+}
+
+
+6. Random numbers (SplitMix64)
+------------------------------
+static uint64_t state = 0x123456789ABCDEF0ULL;       // the 8 bytes at `state`; set at the start of every program
+
+uint64_t rt_next_u64(void)                           // result in rax
+{
+  uint64_t z = (state += 0x9E3779B97F4A7C15ULL);
+  z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
+  z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+  return z ^ (z >> 31);
+}
+
+int64_t rt_rand_int(int64_t n)                       // rax = n, result in rax;   ?n for an int
+{
+  if (n == 0) return (int64_t)rt_next_u64();         // ?0: the raw 64 bits
+  if (n < 0)  { state = 0 - (uint64_t)n; return 0; } // ?m: the new state is -m (for the smallest int: itself)
+  if (n == 1) rt_badrand();                          // ?1 is not defined
+  return (int64_t)(rt_next_u64() % (uint64_t)n);     // 0 .. n-1
+}
+
+double rt_rand_float(double x)                       // rax = bits of x, result in rax;   ?x for a float
+{
+  if (!(x > 0.0)) rt_badrand();                      // 0.0, negative numbers and NaN
+  double unit = (rt_next_u64() >> 11) * 0x1.0p-53;   // in [0.0, 1.0)
+  double result = unit * x;
+  if (result >= x) result = nextafter(x, 0.0);       // guards against rounding: the result is always below x
+  return result;
+}
+
+
+7. Operations that the code generator writes in place
+-----------------------------------------------------
+These are not routines (no call), but they behave like library functions and are easy to get wrong.
+
+int64_t int_floordiv(int64_t a, int64_t b)           // a \ b for ints; b == 0 -> rt_divzero
+{
+  int64_t q = a / b, r = a % b;                      // idiv: toward zero, r has the sign of a
+  if (r != 0 && ((r ^ b) < 0)) q -= 1;               // floor
+  return q;
+}
+int64_t int_floormod(int64_t a, int64_t b)           // a % b for ints; the sign of b
+{
+  int64_t r = a % b;
+  if (r != 0 && ((r ^ b) < 0)) r += b;
+  return r;
+}
+// (the smallest int divided by -1 raises a hardware exception)
+
+int64_t float_floordiv(double a, double b)           // a \ b when an operand is a float; b == 0 -> rt_divzero
+{
+  double fm, r = rt_fmodfloor(a, b, &fm, &adjusted);
+  return (int64_t)llrint((a - fm) / b) - adjusted;   // (a - fm) / b is nearly an integer; round to nearest, not toward zero
+}                                                    // a quotient outside the int range gives the smallest int
+
+double float_mod(double a, double b)  { return rt_fmodfloor(a, b, ...); }       // a % b for floats
+double float_div(double a, double b)  { /* b == 0 or -0.0 -> rt_divzero */ return a / b; }   // a / b: always a float (ints are converted first)
+
+int64_t int_pow(int64_t a, int64_t n)                // a ^ n for ints; n < 0 -> rt_negexp; wraps like multiplication
+{
+  uint64_t r = 1, b = a;
+  for (uint64_t k = n; k; k >>= 1) { if (k & 1) r *= b; b *= b; }
+  return r;
+}
+
+int64_t shift_left(int64_t x, int64_t n)             // x << n;  >> and +> are the same with shr / sar
+{
+  if (n < 0) return shift_right_logical(x, -(uint64_t)n);     // a negative count shifts the other way (the smallest int is a huge count)
+  return (uint64_t)n > 63 ? 0 : (int64_t)((uint64_t)x << n);  // 64 or more shifts everything out (+>: 0 or -1 by the sign)
+}
+// rotates: x <* n and x *> n are rol / ror with the count taken modulo 64, so a negative count rotates the other way.
+
+int truth(int64_t v)      { return v != 0; }                  // for ints (and functions)
+int truth_float(double x) { return (bits(x) << 1) != 0; }     // -0.0 is false; NaN is true

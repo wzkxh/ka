@@ -1,0 +1,11 @@
+a = 1
+if a: v = 1
+print v                    -- => 1  (the compiler cannot prove that v is assigned: the read checks a hidden flag, which is set)
+function f(c):
+  if c: x = 5
+  return x
+print f(1)                 -- => 5
+function h(c):
+  if c: z = 9
+  return \():=z            -- a captured variable is checked as well
+print h(1)()               -- => 9

@@ -1,0 +1,2 @@
+print "x"
+print ?1  -- => runtime error: bad argument of '?' (exit code 1)

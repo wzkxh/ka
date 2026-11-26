@@ -1,7 +1,5 @@
-function setup(): ^cb = function(): print "called"
-print "x"
-cb()
-
--- the whole output:
---   x
---   runtime error: call of an unset function
+function setup(): ^cb = \(): print "called"
+function other(): skip
+other()                     -- a call: setup could have run, so cb may be assigned: the read of cb checks a hidden flag
+print "x"                   -- => x
+cb()                        -- => runtime error: variable 'cb' is not initialized (exit code 1)

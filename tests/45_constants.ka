@@ -6,10 +6,12 @@ FLAG_A = 2#0001
 FLAG_B = FLAG_A << 1
 TWICE = \x:=2*x                          -- a constant can be a function
 function limit(v): return v > MAX_SPEED ? MAX_SPEED ! v
-function SQUARE(x): return x * x          -- a function with a capital name is a constant too
+function SQUARE(x): return x * x          -- the name of a function is a constant too (so is every name defined with `function`)
 print MAX_SPEED, " ", AREA, " ", FLAG_B, " ", TWICE(21), " ", limit(500), " ", limit(5), " ", SQUARE(9) -- => 120 1920 2 42 120 5 81
-print LATER, " ", LATER + 1               -- => 7 8  (constants exist from the start, also above their definition)
-LATER = 7
+n = 5
+SUM = n + 10                                -- the value of a constant can be any expression
+ROLL = limit(150)
+print SUM, " ", SQUARE(SUM), " ", ROLL     -- => 15 225 120
 mixed_Case = 1; mixed_Case = 2; Mixed = 3; Mixed = 4 -- only names in capitals are constants
 print mixed_Case, " ", Mixed               -- => 2 4
 X1 = -5

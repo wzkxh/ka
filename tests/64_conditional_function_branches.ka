@@ -1,0 +1,9 @@
+a = 5
+f = a > 3 ? \x:=x+1 ! \x:=x-1           -- no parentheses needed: the body of the first function ends at the `!`
+print f(10)                             -- => 11
+g = a > 9 ? \x:=x+1 ! \x:=x-1
+print g(10)                             -- => 9
+h = a > 3 ? \x: y=x*2; =y+1 ! \x:=0
+print h(4)                              -- => 9
+nested = a > 3 ? \x:=x>5?1!2 ! \x:=3    -- the inner `?!` belongs to the body of the first function
+print nested(7), " ", nested(1)         -- => 1 2

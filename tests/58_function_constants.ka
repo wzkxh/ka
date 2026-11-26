@@ -8,16 +8,16 @@ function f():
   function inner(): return K + M -- visible in nested functions
   return inner()
 print f()                        -- => 31
-print SIZE_G                     -- => 5  (a global constant exists from the start)
 SIZE_G = 5
+print SIZE_G                     -- => 5
 function g():
   SIZE_G = 7                     -- a constant of g, the global one is not touched
   return SIZE_G
 print g(), " ", SIZE_G           -- 7 5
-function h():
-  print LATE                     -- constants of a function exist from its start: 8
-  LATE = 8
-h()
+function h(n):
+  DOUBLE = n * 2                 -- the value of a constant can be any expression (here: a parameter)
+  print DOUBLE                   -- => 8
+h(4)
 function BIG(): return 1000      -- a constant function inside a function
 function k():
   function SMALL(): return 1

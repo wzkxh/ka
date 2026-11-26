@@ -1,0 +1,16 @@
+-- text longer than the print buffer (1024 bytes): the output must be complete and in order
+u = "aé€😀"                     -- 1 + 2 + 3 + 4 = 10 bytes per unit
+t = ""
+i = 0
+while i < 300:
+  t += u
+  i += 1
+  if i == 1 || i == 101 || i == 102 || i == 103 || i == 205 || i == 300: print i, ':', t   -- => the line is i, ':' and i times "aé€😀"
+a = "a"
+n = 1
+while n < 2048:
+  a += a
+  n += n
+  if n == 1024 || n == 2048: print n, ':', a      -- => 1024 and 2048 times a
+b = a + "é"
+print b                                          -- => 2048 times a, then é

@@ -1,0 +1,2 @@
+print LATER  -- ERROR: variable 'LATER' used before assignment
+LATER = 7

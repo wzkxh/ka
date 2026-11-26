@@ -1,0 +1,5 @@
+function f(c):
+  if c: x = 5
+  return x
+print f(1)                  -- => 5
+print f(0)                  -- => runtime error: variable 'x' is not initialized (exit code 1)

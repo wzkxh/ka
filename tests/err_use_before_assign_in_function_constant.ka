@@ -1,0 +1,3 @@
+function f():
+  print LATE  -- ERROR: variable 'LATE' is local to function 'f' and used before assignment
+  LATE = 8

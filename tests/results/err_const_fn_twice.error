@@ -1,1 +1,1 @@
-constant 'F' is already defined
+'F' is a function (defined with 'function') and cannot be assigned

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-rt.py (run_tests) - compile every tests/*.ka, run the program, compare with expectations.
+rt.py (run tests) - compile every tests/*.ka, run the program, compare with expectations.
 
     python rt.py              run everything (on Windows: really runs the .exe files)
     python rt.py -k closure   only tests whose name contains "closure"
     python rt.py -v           show expected/actual on failures
     python rt.py --emu        run in the Unicorn emulator instead (Linux/macOS; needs
-                              `pip install unicorn pefile`)
+                                     `pip install unicorn pefile`)
     python rt.py --keep       keep the generated .exe files in ./build
 
 Test files (same base name; the programs are in tests/, everything else in tests/results/):

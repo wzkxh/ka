@@ -1,3 +1,3 @@
 function f():
-  A = B  -- ERROR: it uses 'B', which is defined later
+  A = B  -- ERROR: variable 'B' is local to function 'f' and used before assignment
   B = 1

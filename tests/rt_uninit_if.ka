@@ -1,0 +1,4 @@
+print "x"                   -- => x
+a = 0
+if a: v = 1
+print v                     -- => runtime error: variable 'v' is not initialized (exit code 1)

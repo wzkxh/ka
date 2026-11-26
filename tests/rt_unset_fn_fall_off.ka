@@ -1,0 +1,5 @@
+function f(a):
+  if a: return \(): =1
+g = f(0)                    -- the function ends without a result: g is 0, not a function
+print "x"                   -- => x
+g()                         -- => runtime error: call of an unset function (exit code 1)

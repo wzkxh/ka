@@ -1,0 +1,5 @@
+function h(c):
+  if c: z = 9
+  return \():=z
+print h(1)()                -- => 9
+print h(0)()                -- => runtime error: variable 'z' is not initialized (exit code 1)

@@ -1,2 +1,2 @@
-A = B  -- ERROR: it uses 'B', which is defined later
+A = B  -- ERROR: variable 'B' used before assignment
 B = 1

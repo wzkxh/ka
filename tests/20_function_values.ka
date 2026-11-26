@@ -4,10 +4,7 @@ say = hello
 say()
 say = world
 say()
-hello = world
-hello()
 
 -- the whole output:
 --   hello
---   world
 --   world

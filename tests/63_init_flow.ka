@@ -1,0 +1,23 @@
+-- reads that the compiler cannot prove are checked at run time; all of these are fine
+function init(): ^g = 7
+init()
+print g                      -- => 7  (assigned by a function: the read checks a hidden flag)
+c = 1
+if c: p = 1 else: p = 2
+print p                      -- => 1  (assigned on both paths: nothing to check)
+i = 0
+while i < 3:
+  if i == 2: print s         -- => 1  (s was assigned in an earlier iteration)
+  s = i
+  i += 1
+function make(n):
+  k = n * 2
+  return \():=k              -- k is assigned before the closure exists: nothing to check
+print make(4)()              -- => 8
+function make2(n):
+  if n: k = n
+  return \():=k              -- maybe assigned: checked
+print make2(3)()             -- => 3
+G = 5
+function show(): print G
+show()                       -- => 5  (G is assigned before the first call: nothing to check inside show)

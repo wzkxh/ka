@@ -1,2 +1,2 @@
 x
-runtime error: call of an unset function
+runtime error: variable 'cb' is not initialized

@@ -19,7 +19,9 @@ import struct
 import sys
 
 
-VERSION = "6.6"                         # see RELEASE_NOTES.md
+VERSION = "6.8.1"                         # see RELEASE_NOTES.md
+CHECK_INIT = True                       # runtime checks of variables that are not provably assigned (see InitCheck); a mode to switch off later
+WARN_UNUSED_VALUE = False               # warning for an expression statement that is not a call; off by default
 
 
 class CompileError(Exception):
@@ -362,13 +364,15 @@ class Parser:
     self.fn_globals = set()             # names assigned as ^x inside some function
     self.nfuncs = 0
     self.closed_at = -1                 # token index right after a consumed line end / dedent
-    # strings 0..4 are used by the runtime
-    self.byte_strings = []                 # immutable byte-string values stored in .data
-    self.text_strings = []                 # immutable Unicode code-point strings stored in .data
+    # strings 0..6 are used by the runtime
     self.strings = [b"\n", b"runtime error: division by zero\n",
                     b"runtime error: call of an unset function\n",
                     b"runtime error: negative exponent\n",
-                    b"runtime error: power of a negative number with a fractional exponent\n"]
+                    b"runtime error: power of a negative number with a fractional exponent\n",
+                    b"runtime error: bad argument of '?'\n",
+                    b"runtime error: out of memory\n"]
+    self.byte_strings = []              # str literals (bytes), stored in .data as [u64 length][bytes]
+    self.text_strings = []              # text literals (lists of code points), stored as [u64 count][u32 ...]
     self.loop_depth = 0
     self.nblock = 0                     # how many blocks are open in the current scope (a function body is one block)
     self.ctx = []                       # open '(' / '{' (innermost last)
@@ -412,6 +416,7 @@ class Parser:
     k, v, _ = self.peek()
     return (k in ("nl", "eof", "dedent")
             or (k == "op" and v in (";", "}", ")", ","))
+            or (k == "op" and v == "!" and self.ctx and self.ctx[-1] == "?")
             or (k == "kw" and v in STMT_KW | {"else", "elif"}))
 
   def end_stmt(self):
@@ -428,7 +433,8 @@ class Parser:
       self.closed_at = self.i
     elif k in ("eof", "dedent"):
       pass
-    elif k == "op" and (v in ("}", "{") or (v in (")", ",") and self.ctx and self.ctx[-1] == "(")):
+    elif k == "op" and (v in ("}", "{") or (v in (")", ",") and self.ctx and self.ctx[-1] == "(")
+                        or (v == "!" and self.ctx and self.ctx[-1] == "?")):
       pass
     elif k == "kw" and (v in STMT_KW or v in ("else", "elif", "function")):
       pass
@@ -540,39 +546,6 @@ class Parser:
                          f"it cannot also be used as '{mode}{name}'")
     (sc.globals_decl if mode == "^" else sc.nonlocal_decl).add(name)
 
-  def const_problem(self, e):
-    """why `e` is not a constant expression (None if it is): numbers, constants defined above, operators,
-    function literals"""
-    k = e[0]
-    if k == "var":
-      if e[3] not in (None, "^") or not is_const_name(e[1]):
-        return f"it uses the variable '{e[1]}'"
-      sc = self.global_scope if e[3] == "^" else self.scope
-      while sc is not None and e[1] not in sc.consts:        # constants of this function, of the functions around it, global ones
-        sc = None if e[3] == "^" else sc.parent
-      if sc is None:
-        return f"it uses '{e[1]}', which is defined later"
-      return None
-    if k == "call":
-      return "it calls a function"
-    if k in ("bin", "and", "or"):
-      parts = e[2:4] if k == "bin" else e[1:3]
-    elif k == "cmp":
-      parts = e[2]
-    elif k == "cond":
-      parts = e[1:4]
-    elif k in ("neg", "not", "bnot"):
-      parts = e[1:2]
-    elif k == "rand":
-      return "it uses '?' (a random number)"
-    else:                                   # num, fnlit
-      return None
-    for p in parts:
-      why = self.const_problem(p)
-      if why:
-        return why
-    return None
-
   def define_const(self, name, mode, line):
     sc = self.scope
     if mode is not None and sc.parent is not None:
@@ -599,10 +572,6 @@ class Parser:
       if mode == "@":
         raise CompileError(f"line {line}: '@{name}': a constant cannot be an enclosing function's variable")
       self.define_const(name, mode, line)
-      why = self.const_problem(e)
-      if why:
-        raise CompileError(f"line {line}: the value of constant '{name}' must be a constant expression "
-                           f"(numbers, constants defined above, operators, function literals): {why}")
       self.scope.consts[name] = line
       self.declare(name, mode, line)
       return ("assign", name, e, line, mode, True)
@@ -613,7 +582,7 @@ class Parser:
     line = self.peek()[2]
     e = self.expr()
     self.end_stmt()
-    if e[0] not in ("call", "rand"):                # ?x as a statement (it sets the seed) is fine
+    if WARN_UNUSED_VALUE and e[0] != "call":               # off by default
       self.warnings.append(f"line {line}: the value of this expression is not used")
     return ("exprstmt", e, line)
 
@@ -649,7 +618,12 @@ class Parser:
         items = []
         if not self.at_end():
           while True:
+            save = (self.i, len(self.ctx))
             s = self.string_item()
+            if s is not None and not (self.at_end() or self.is_(",")):
+              self.i = save[0]                          # 'a' + 'b': not a plain literal, an expression
+              del self.ctx[save[1]:]
+              s = None
             if s is not None:
               self.strings.append(s)
               items.append(("str", len(self.strings) - 1))
@@ -788,9 +762,6 @@ class Parser:
     _, name, _ = self.next()
     if any(f.name == name for f in self.scope.named_fns):
       raise CompileError(f"line {line}: function '{name}' is already defined in this scope")
-    if is_const_name(name):
-      self.define_const(name, None, line)
-      self.scope.consts[name] = line
     fn = self.parse_function(name, line, literal=False)
     self.scope.named_fns.append(fn)
     self.declare(name, None, line)
@@ -803,7 +774,9 @@ class Parser:
   def cond(self):                                     # c ? a ! b   (right-associative, lowest level)
     c = self.or_()
     if self.accept("?"):
+      self.ctx.append("?")                          # a one-line body in the middle part ends at the `!`
       a = self.expr()
+      self.ctx.pop()
       self.expect("!")
       return ("cond", c, a, self.cond())
     return c
@@ -930,7 +903,7 @@ class Parser:
       return ("fnlit", self.parse_function(None, line, literal=True))
     if k == "str":
       data, kind = v
-      while self.peek()[0] == "str":
+      while self.peek()[0] == "str":                  # literals written one after another are joined
         tok = self.next()
         if tok[1][1] != kind:
           raise CompileError(f"line {tok[2]}: cannot join '...' and \"...\" strings")
@@ -995,7 +968,7 @@ class Resolver:
 
 
 # ----------------------------------------------------------------------------
-# Static types: int, float, str, text and functions. Every variable, parameter and function result gets a type variable;
+# Static types: int, float and functions.  Every variable, parameter and function result gets a type variable;
 # types are found by unification (no annotations needed). A variable keeps the type of its first value (no
 # implicit conversion on assignment, in calls or in `return`); a parameter takes its type from the way it is
 # used and from the calls of the function.
@@ -1105,20 +1078,28 @@ class Checker(Resolver):
     self.finish()
 
   # -- numeric constraints
-  def need_num(self, t, line, what):
-    """t must be a number (int or float)"""
+  def need_num(self, t, line, what, strings=False):
+    """t must be a number (int or float); with strings=True also a str or a text (a truth value, or printing)"""
     t = prune(t)
-    if t.kind not in ("int", "float", "var"):
-      self.err(line, f"type mismatch {what}: expected a number, found {show(t)}")
+    if t.kind == "fn" or (t.kind in ("str", "text") and not strings):
+      self.err(line, f"type mismatch {what}: expected a number{' or a string' if strings else ''}, found {show(t)}")
     if t.kind == "var":
-      self.pending.append(("num", t, line, what))
+      self.pending.append(("num", t, line, what, strings))
 
-  def need_print(self, t, line):
-    t = prune(t)
-    if t.kind == "fn":
-      self.err(line, f"type mismatch in 'print' (only numbers, str and text can be printed): found {show(t)}")
-    if t.kind == "var":
-      self.pending.append(("print", t, line))
+  def string_kind(self, a, b):
+    """'str' or 'text' if one of two types is a string type, else None"""
+    return a.kind if a.kind in ("str", "text") else b.kind if b.kind in ("str", "text") else None
+
+  def same_string(self, a, b, line, err):
+    """both types must be the string type of the other one (an unknown type becomes it); err(t) is the message"""
+    kind = self.string_kind(a, b)
+    ty = STR if kind == "str" else TEXT
+    for t in (a, b):
+      if t.kind == "var":
+        self.unify(t, ty, line, "")
+      elif t.kind != kind:
+        self.err(line, err(kind, t))
+    return ty
 
   def constrain(self, c):
     if not self.step(c):
@@ -1133,37 +1114,38 @@ class Checker(Resolver):
   def step(self, c):
     """try to settle one constraint; False if its operand types are still unknown"""
     kind = c[0]
-    if kind == "print":
-      t = prune(c[1])
-      if t.kind == "var":
-        return False
-      if t.kind == "fn":
-        self.err(c[2], f"type mismatch in 'print' (only numbers, str and text can be printed): found {show(t)}")
-      return True
     if kind == "num":
       t = prune(c[1])
       if t.kind == "var":
         return False
-      self.need_num(t, c[2], c[3])
+      self.need_num(t, c[2], c[3], len(c) > 4 and c[4])
+      return True
+    if kind == "order":                 # numbers (any mix) or two strings of the same kind
+      _, a, b, line, op = c
+      a, b = prune(a), prune(b)
+      if self.string_kind(a, b):
+        self.same_string(a, b, line, lambda k, t: f"type mismatch in '{op}': cannot compare {k} and {show(t)}")
+        return True
+      for side, t in (("left", a), ("right", b)):
+        if t.kind == "fn":
+          self.err(line, f"type mismatch in {side} operand of '{op}': expected a number, found {show(t)}")
+      if a.kind == "var" and b.kind == "var":
+        return False
+      if a.kind == "var" or b.kind == "var":
+        self.pending.append(("num", a if a.kind == "var" else b, line, f"in '{op}'", False))
       return True
     if kind == "arith":                 # result = float if one side is float, else int
       _, res, a, b, line, op = c
       a, b = prune(a), prune(b)
-      if op == "+" and (a.kind in ("str", "text") or b.kind in ("str", "text")):
-        string_kind = a.kind if a.kind in ("str", "text") else b.kind
-        string_type = STR if string_kind == "str" else TEXT
-        for side, t in (("left", a), ("right", b)):
-          if t.kind == "var":
-            self.unify(t, string_type, line, f"in {side} operand of '+'")
-          elif t.kind != string_kind:
-            if string_kind == "str":
-              self.err(line, f"type mismatch in {side} operand of '+': expected str, found {show(t)}")
-            self.err(line, f"type mismatch in {side} operand of '+': cannot mix text and {show(t)}")
-        self.result(res, string_type, line, op)
+      if op == "+" and self.string_kind(a, b):         # concatenation: both sides are str, or both are text
+        def bad(k, t):
+          return f"type mismatch in {'left' if t is a else 'right'} operand of '+': " + \
+                 (f"expected str, found {show(t)}" if k == "str" else f"cannot mix text and {show(t)}")
+        self.result(res, self.same_string(a, b, line, bad), line, op)
         return True
-      if a.kind not in ("int", "float", "var"):
+      if a.kind in ("fn", "str", "text"):
         self.err(line, f"type mismatch in left operand of '{op}': expected a number, found {show(a)}")
-      if b.kind not in ("int", "float", "var"):
+      if b.kind in ("fn", "str", "text"):
         self.err(line, f"type mismatch in right operand of '{op}': expected a number, found {show(b)}")
       if a.kind == "float" or b.kind == "float":
         self.result(res, FLOAT, line, op)
@@ -1175,17 +1157,11 @@ class Checker(Resolver):
         self.result(res, INT, line, op)
         return True
       return False
-    if kind == "eq":                    # two numbers (any mix), same-kind strings, or functions of the same type
+    if kind == "eq":                    # two numbers (any mix), two strings of the same kind, or two functions of the same type
       _, a, b, line, what = c
       a, b = prune(a), prune(b)
-      if a.kind in ("str", "text") or b.kind in ("str", "text"):
-        string_kind = a.kind if a.kind in ("str", "text") else b.kind
-        string_type = STR if string_kind == "str" else TEXT
-        for t in (a, b):
-          if t.kind == "var":
-            self.unify(t, string_type, line, what)
-          elif t.kind != string_kind:
-            self.err(line, f"type mismatch {what}: cannot compare {string_kind} and {show(t)}")
+      if self.string_kind(a, b):
+        self.same_string(a, b, line, lambda k, t: f"type mismatch {what}: cannot compare {k} and {show(t)}")
         return True
       if a.kind == "fn" or b.kind == "fn":
         self.unify(a, b, line, what)
@@ -1195,26 +1171,6 @@ class Checker(Resolver):
       if a.kind == "var" and b.kind == "var":
         return False
       self.pending.append(("num", a if a.kind == "var" else b, line, what))
-      return True
-    if kind == "order":                 # numbers (any mix) or two strings of the same kind
-      _, a, b, line, op = c
-      a, b = prune(a), prune(b)
-      if a.kind in ("str", "text") or b.kind in ("str", "text"):
-        string_kind = a.kind if a.kind in ("str", "text") else b.kind
-        string_type = STR if string_kind == "str" else TEXT
-        for t in (a, b):
-          if t.kind == "var":
-            self.unify(t, string_type, line, f"in '{op}'")
-          elif t.kind != string_kind:
-            self.err(line, f"type mismatch in '{op}': cannot compare {string_kind} and {show(t)}")
-        return True
-      for side, t in (("left", a), ("right", b)):
-        if t.kind not in ("int", "float", "var"):
-          self.err(line, f"type mismatch in {side} operand of '{op}': expected a number, found {show(t)}")
-      if a.kind == "var" and b.kind == "var":
-        return False
-      if a.kind == "var" or b.kind == "var":
-        self.pending.append(("num", a if a.kind == "var" else b, line, f"in '{op}'"))
       return True
     if kind == "cond":                  # c ? a ! b : numbers mix like in an operator, functions must agree
       _, res, a, b, line, what = c
@@ -1253,7 +1209,7 @@ class Checker(Resolver):
       if not self.pending:
         return
       for c in self.pending:
-        ops = c[1:2] if c[0] in ("num", "print") else c[1:4] if c[0] in ("arith", "cond") else c[1:3]
+        ops = c[1:2] if c[0] == "num" else c[1:4] if c[0] in ("arith", "cond") else c[1:3]
         for t in ops:
           t = prune(t)
           if t.kind == "var":
@@ -1268,17 +1224,20 @@ class Checker(Resolver):
     k = s[0]
     if k == "assign":
       t = self.expr(s[2], sc, s[3])
+      r = self.lookup(s[1], sc, s[3], s[4])
+      if any(f.name == s[1] for f in (self.g if r[0] == "g" else r[1]).named_fns):
+        self.err(s[3], f"'{s[1]}' is a function (defined with 'function') and cannot be assigned")
       self.unify(self.var_ty(s[1], sc, s[3], s[4]), t, s[3], f"in assignment to '{s[1]}'")
     elif k == "print":
       for kind, v in s[1]:
         if kind == "expr":
-          self.need_print(self.expr(v, sc, s[2]), s[2])
+          self.need_num(self.expr(v, sc, s[2]), s[2], "in 'print' (only numbers, str and text can be printed)", True)
     elif k == "if":
-      self.need_num(self.expr(s[1], sc, s[4]), s[4], "in the condition of 'if'")
+      self.need_num(self.expr(s[1], sc, s[4]), s[4], "in the condition of 'if'", True)
       self.stmts(s[2], sc)
       self.stmts(s[3], sc)
     elif k == "while":
-      self.need_num(self.expr(s[1], sc, s[3]), s[3], "in the condition of 'while'")
+      self.need_num(self.expr(s[1], sc, s[3]), s[3], "in the condition of 'while'", True)
       self.stmts(s[2], sc)
     elif k == "exit":
       self.unify(INT, self.expr(s[1], sc, s[2]), s[2], "in 'exit'")
@@ -1350,8 +1309,7 @@ class Checker(Resolver):
         ta, tb = self.expr(e[2], sc, line), self.expr(e[3], sc, line)
         self.constrain(("eq", ta, tb, line, f"in '{op}' (both sides must have the same type, or both be numbers)"))
       elif op in ("<", "<=", ">", ">="):
-        ta, tb = self.expr(e[2], sc, line), self.expr(e[3], sc, line)
-        self.constrain(("order", ta, tb, line, op))
+        self.constrain(("order", self.expr(e[2], sc, line), self.expr(e[3], sc, line), line, op))
       else:                             # bitwise operators and shifts: integers only
         self.operand(e[2], sc, line, f"left operand of '{op}'")
         self.operand(e[3], sc, line, f"right operand of '{op}'")
@@ -1366,15 +1324,15 @@ class Checker(Resolver):
           self.constrain(("order", a, b, line, op))
       return INT
     if k == "cond":
-      self.need_num(self.expr(e[1], sc, line), line, "in the condition of '?'")
+      self.need_num(self.expr(e[1], sc, line), line, "in the condition of '?'", True)
       ta, tb = self.expr(e[2], sc, line), self.expr(e[3], sc, line)
       res = Ty("var")
       self.constrain(("cond", res, ta, tb, line, "in '?!' (both branches must have the same type, or both be numbers)"))
       return res
     if k in ("and", "or"):
       sym = '&&' if k == 'and' else '||'
-      self.need_num(self.expr(e[1], sc, line), line, f"in left operand of '{sym}'")
-      self.need_num(self.expr(e[2], sc, line), line, f"in right operand of '{sym}'")
+      self.need_num(self.expr(e[1], sc, line), line, f"in left operand of '{sym}'", True)
+      self.need_num(self.expr(e[2], sc, line), line, f"in right operand of '{sym}'", True)
       return INT
     if k == "neg":
       t = self.expr(e[1], sc, line)
@@ -1385,7 +1343,7 @@ class Checker(Resolver):
       self.need_num(t, line, "in operand of '?'")
       return t
     if k == "not":
-      self.need_num(self.expr(e[1], sc, line), line, "in operand of '!'")
+      self.need_num(self.expr(e[1], sc, line), line, "in operand of '!'", True)
       return INT
     if k == "bnot":
       self.operand(e[1], sc, line, "operand of '~'")
@@ -1451,6 +1409,241 @@ FAIL_CC = {"==": 5, "!=": 4, "<": 0x0D, "<=": 0x0F, ">": 0x0E, ">=": 0x0C}   # j
 CMP_SETCC = {"==": 0x94, "!=": 0x95, "<": 0x9C, "<=": 0x9E, ">": 0x9F, ">=": 0x9D}
 
 
+# ----------------------------------------------------------------------------
+# Variables used before they are assigned: definite assignment analysis.
+# For every read of a variable it is decided whether the variable is
+#   - assigned on every path that leads to the read: nothing is needed;
+#   - assigned on no path: a compile error;
+#   - maybe assigned: the variable gets a hidden "assigned" flag, the read checks it (runtime error if not set).
+# A variable of another scope (a global read in a function, a variable of the enclosing function) is safe if it is
+# assigned at every place where code of its scope can start the function: every call in the top-level code, or every
+# call and every exit of the enclosing function. Parameters and `function name` definitions are assigned from the start.
+# ----------------------------------------------------------------------------
+class InitState:
+  __slots__ = ("must","may")
+
+  def __init__(self,must,may):
+    self.must,self.may = must,may         # keys assigned on every path / on some path
+
+  def copy(self):
+    return InitState(set(self.must),set(self.may))
+
+
+def join_states(a,b):                     # None = the code is not reachable
+  if a is None:
+    return b
+  if b is None:
+    return a
+  return InitState(a.must & b.must,a.may | b.may)
+
+
+class InitCheck(Resolver):
+  def __init__(self,gscope):
+    self.g = gscope
+    self.cur = gscope
+    self.scopes = []
+    self.seen = set()
+    self.ext = set()                      # keys that code of another scope can assign (^x, @x)
+    self.calls = {}                       # scope -> the 'must' sets at its call sites
+    self.exits = {}                       # scope -> the 'must' sets where it can be left
+    self.deferred = []                    # (node, key): reads of variables of another scope
+    self.check_reads = set()              # id(var node) of the reads that need a runtime check
+    self.flagged = set()                  # keys of the variables that need a hidden flag
+
+  def key_of(self,r):                     # the same keys as Checker.key
+    return ("g",r[1]) if r[0] == "g" else (r[1],r[2])
+
+  def owner(self,key):
+    return self.g if key[0] == "g" else key[0]
+
+  def ext_own(self):
+    return {k for k in self.ext if self.owner(k) is self.cur}
+
+  # -- phase 1: all scopes, and the variables that other scopes assign
+  def add_scope(self,f):
+    if f not in self.seen:
+      self.seen.add(f)
+      self.scopes.append(f)
+      self.collect(f.body,f)
+
+  def collect(self,stmts,sc):
+    for s in stmts:
+      k = s[0]
+      if k == "assign":
+        self.collect_expr(s[2],sc)
+        key = self.key_of(self.lookup(s[1],sc,s[3],s[4]))
+        if self.owner(key) is not sc:
+          self.ext.add(key)
+      elif k == "print":
+        for kind,v in s[1]:
+          if kind == "expr":
+            self.collect_expr(v,sc)
+      elif k == "if":
+        self.collect_expr(s[1],sc)
+        self.collect(s[2],sc)
+        self.collect(s[3],sc)
+      elif k == "while":
+        self.collect_expr(s[1],sc)
+        self.collect(s[2],sc)
+      elif k in ("exit","exprstmt"):
+        self.collect_expr(s[1],sc)
+      elif k == "return":
+        if s[1] is not None:
+          self.collect_expr(s[1],sc)
+      elif k == "block":
+        self.collect(s[1],sc)
+      elif k == "fn":
+        self.add_scope(s[1])
+
+  def collect_expr(self,e,sc):
+    if isinstance(e,tuple) and e and isinstance(e[0],str):
+      if e[0] == "fnlit":
+        self.add_scope(e[1])
+        return
+      for x in e[1:]:
+        if isinstance(x,(tuple,list)):
+          self.collect_expr(x,sc)
+    elif isinstance(e,list):
+      for x in e:
+        self.collect_expr(x,sc)
+
+  # -- phase 2: the flow of every scope
+  def run(self,ast):
+    self.g.body = ast
+    self.scopes = [self.g]
+    self.seen = {self.g}
+    self.collect(ast,self.g)
+    for sc in self.scopes:
+      self.flow_scope(sc)
+    for e,key in self.deferred:           # variables of another scope
+      o = self.owner(key)
+      if not all(key in m for m in self.calls[o] + self.exits[o]):
+        self.check_reads.add(id(e))
+        self.flagged.add(key)
+
+  def flow_scope(self,sc):
+    self.cur = sc
+    self.calls[sc] = []
+    self.exits[sc] = []
+    must = {(sc,p) for p in sc.params}
+    for f in sc.named_fns:                # `function name` definitions exist from the start of the scope
+      must.add(("g",f.name) if sc is self.g else (sc,f.name))
+    end = self.stmts(sc.body,InitState(must,set(must)))
+    if end is not None and sc is not self.g:
+      self.exits[sc].append(set(end.must))
+
+  def stmts(self,lst,st):
+    for s in lst:
+      if st is None:
+        return None
+      st = self.stmt(s,st)
+    return st
+
+  def stmt(self,s,st):
+    k = s[0]
+    if k == "assign":
+      self.expr(s[2],st)
+      key = self.key_of(self.lookup(s[1],self.cur,s[3],s[4]))
+      st.must.add(key)
+      st.may.add(key)
+    elif k == "print":
+      for kind,v in s[1]:
+        if kind == "expr":
+          self.expr(v,st)
+    elif k == "if":
+      self.expr(s[1],st)
+      st = join_states(self.stmts(s[2],st.copy()),self.stmts(s[3],st.copy()))
+    elif k == "while":                    # the body may run again and again, or not at all
+      widen = self.assigned_in(s[2])
+      if self.has_call(s[1]) or self.has_call(s[2]):
+        widen |= self.ext_own()
+      head = st.copy()
+      head.may |= widen
+      self.expr(s[1],head.copy())
+      self.stmts(s[2],head.copy())
+      st.may |= widen
+    elif k == "exit":
+      self.expr(s[1],st)
+      return None
+    elif k == "exprstmt":
+      self.expr(s[1],st)
+    elif k == "return":
+      if s[1] is not None:
+        self.expr(s[1],st)
+      if self.cur is not self.g:
+        self.exits[self.cur].append(set(st.must))
+      return None
+    elif k in ("break","continue"):
+      return None
+    elif k == "block":
+      return self.stmts(s[1],st)
+    return st
+
+  def assigned_in(self,stmts):            # keys assigned in a list of statements (not in the functions inside it)
+    keys = set()
+    for s in stmts:
+      k = s[0]
+      if k == "assign":
+        keys.add(self.key_of(self.lookup(s[1],self.cur,s[3],s[4])))
+      elif k == "if":
+        keys |= self.assigned_in(s[2]) | self.assigned_in(s[3])
+      elif k == "while":
+        keys |= self.assigned_in(s[2])
+      elif k == "block":
+        keys |= self.assigned_in(s[1])
+    return keys
+
+  def has_call(self,x):
+    if isinstance(x,tuple):
+      return (len(x) > 0 and x[0] == "call") or any(self.has_call(y) for y in x if isinstance(y,(tuple,list)))
+    if isinstance(x,list):
+      return any(self.has_call(y) for y in x)
+    return False
+
+  def expr(self,e,st):
+    k = e[0]
+    if k in ("num","flt","fnlit","bstr","btext"):
+      return
+    if k == "var":
+      self.read(e,st)
+    elif k == "call":
+      self.expr(e[1],st)
+      for x in e[2]:
+        self.expr(x,st)
+      self.calls[self.cur].append(set(st.must))
+      st.may |= self.ext_own()            # the called code may assign variables of this scope
+    elif k == "bin":
+      self.expr(e[2],st)
+      self.expr(e[3],st)
+    elif k == "cmp":
+      for x in e[2]:
+        self.expr(x,st)
+    elif k == "cond":
+      for x in e[1:4]:
+        self.expr(x,st)
+    elif k in ("and","or"):
+      self.expr(e[1],st)
+      self.expr(e[2],st)
+    else:                                 # neg, not, bnot, rand
+      self.expr(e[1],st)
+
+  def read(self,e,st):
+    name,line,mode = e[1],e[2],e[3]
+    key = self.key_of(self.lookup(name,self.cur,line,mode))
+    if key in st.must:
+      return
+    if self.owner(key) is self.cur:
+      if key in st.may:
+        self.check_reads.add(id(e))
+        self.flagged.add(key)
+        return
+      if self.cur is self.g:
+        self.err(line,f"variable '{name}' used before assignment")
+      self.err(line,f"variable '{name}' is local to function '{self.cur.name}' and used before "
+                    f"assignment (use '^{name}' to refer to the global one)")
+    self.deferred.append((e,key))
+
+
 # ---- BEGIN FLOAT_RT (generated by tools/build_float_rt.py from tools/float_rt.asm; do not edit by hand)
 FLOAT_RT = {
   "rt_fmod": bytes.fromhex(
@@ -1494,7 +1687,10 @@ FLOAT_RT = {
 
 
 class CodeGen(Resolver):
-  def __init__(self, gscope, strings, byte_strings, text_strings, fn_globals, types):
+  def __init__(self, gscope, strings, byte_strings, text_strings, fn_globals, types, init):
+    self.check_reads = init.check_reads if CHECK_INIT else set()     # reads that check the hidden flag of a variable
+    self.flagged = init.flagged if CHECK_INIT else set()             # variables that have a hidden flag
+    self.uninit_stubs = {}
     self.types = types                  # id(expression node) -> Ty, from the Checker
     self.a = Asm()
     self.g = gscope
@@ -1570,55 +1766,99 @@ class CodeGen(Resolver):
       self.analyze(e[1].body, e[1])
 
   # -- variable access
-  def check_defined(self, name, line):
-    sc = self.scope
-    if name in sc.defined or (sc.parent is None and name in self.fn_globals):
-      return
-    if sc.parent is None:
-      self.err(line, f"variable '{name}' used before assignment")
-    self.err(line, f"variable '{name}' is local to function '{sc.name}' and used before "
-                   f"assignment (use '^{name}' to refer to the global one)")
-
   def free_box(self, owner, name):                         # rdx = box pointer of a captured variable
     a, i = self.a, self.scope.free[(owner, name)]
     a.emit(0x48, 0x8B, 0x55, 0x10)                       # mov rdx,[rbp+16]   (closure)
     a.emit(0x48, 0x8B, 0x92, struct.pack("<i", 16 + 8 * i))   # mov rdx,[rdx+16+8i]
 
-  def var_load(self, name, line, mode=None):
+  # -- hidden "assigned" flags of the variables that InitCheck could not prove assigned at every read
+  def key_of(self,r):
+    return ("g",r[1]) if r[0] == "g" else (r[1],r[2])
+
+  def alloc_flags(self):
+    for key in sorted(self.flagged,key=lambda k: ("" if k[0] == "g" else k[0].label,k[1])):
+      name = key[1]
+      if key[0] == "g":                                  # a global: one more data slot
+        self.g.slots["?init:" + name] = len(self.g.slots)
+      elif name not in key[0].boxed:                     # a local: one more frame slot (a captured variable keeps its flag in its box)
+        key[0].nlocals += 1
+        key[0].slots["?init:" + name] = -8 * key[0].nlocals
+
+  def stub_label(self,name):                             # where a failed check jumps to
+    if name not in self.uninit_stubs:
+      self.strings.append(f"runtime error: variable '{name}' is not initialized\n".encode())
+      self.uninit_stubs[name] = (self.a.new_label("uninit"),len(self.strings) - 1)
+    return self.uninit_stubs[name][0]
+
+  def emit_uninit_stubs(self):
+    a = self.a
+    for name,(label,idx) in self.uninit_stubs.items():
+      a.label(label)
+      a.rip([0x48,0x8D,0x0D],f"str:{idx}")               # lea rcx,[message]
+      a.emit(0xBA,struct.pack("<I",len(self.strings[idx])))   # mov edx,length
+      a.call("rt_print_str")
+      a.emit(0xB9,1,0,0,0)                               # mov ecx,1
+      self.exit_process()
+
+  def flag_test(self,name):                              # rax = the flag
+    a = self.a
+    a.emit(0x48,0x85,0xC0)                               # test rax,rax
+    a.jcc(4,self.stub_label(name))                       # jz: the variable was never assigned
+
+  def var_load(self, name, line, mode=None, check=False):
     a, sc = self.a, self.scope
-    r = self.lookup(name, sc, line, mode)
+    r = self.lookup(name,sc,line,mode)
+    check = check and CHECK_INIT
     if r[0] == "g":
-      if sc.parent is None:
-        self.check_defined(name, line)
-      a.rip([0x48, 0x8B, 0x05], "var:" + name)         # mov rax,[var]
+      if check:
+        a.rip([0x48,0x8B,0x05],"var:?init:" + name)      # mov rax,[flag]
+        self.flag_test(name)
+      a.rip([0x48,0x8B,0x05],"var:" + name)              # mov rax,[var]
     elif r[0] == "l":
-      self.check_defined(name, line)
       off = sc.slots[name]
       if name in sc.boxed:
-        a.emit(0x48, 0x8B, 0x95, struct.pack("<i", off))   # mov rdx,[rbp+off]  (box)
-        a.emit(0x48, 0x8B, 0x02)                           # mov rax,[rdx]
+        a.emit(0x48,0x8B,0x95,struct.pack("<i",off))     # mov rdx,[rbp+off]  (box)
+        if check:
+          a.emit(0x48,0x8B,0x42,0x08)                    # mov rax,[rdx+8]    (flag)
+          self.flag_test(name)
+        a.emit(0x48,0x8B,0x02)                           # mov rax,[rdx]
       else:
-        a.emit(0x48, 0x8B, 0x85, struct.pack("<i", off))   # mov rax,[rbp+off]
+        if check:
+          a.emit(0x48,0x8B,0x85,struct.pack("<i",sc.slots["?init:" + name]))   # mov rax,[rbp+flag]
+          self.flag_test(name)
+        a.emit(0x48,0x8B,0x85,struct.pack("<i",off))     # mov rax,[rbp+off]
     else:
-      self.free_box(r[1], name)
-      a.emit(0x48, 0x8B, 0x02)                         # mov rax,[rdx]
+      self.free_box(r[1],name)
+      if check:
+        a.emit(0x48,0x8B,0x42,0x08)                      # mov rax,[rdx+8]    (flag)
+        self.flag_test(name)
+      a.emit(0x48,0x8B,0x02)                             # mov rax,[rdx]
 
   def var_store(self, name, line, mode=None):              # value in rax
     a, sc = self.a, self.scope
-    r = self.lookup(name, sc, line, mode)
+    r = self.lookup(name,sc,line,mode)
+    flag = CHECK_INIT and self.key_of(r) in self.flagged
     if r[0] == "g":
-      a.rip([0x48, 0x89, 0x05], "var:" + name)         # mov [var],rax
+      a.rip([0x48,0x89,0x05],"var:" + name)              # mov [var],rax
+      if flag:
+        a.emit(0xB9,1,0,0,0)                             # mov ecx,1
+        a.rip([0x48,0x89,0x0D],"var:?init:" + name)      # mov [flag],rcx
     elif r[0] == "l":
       off = sc.slots[name]
       if name in sc.boxed:
-        a.emit(0x48, 0x8B, 0x95, struct.pack("<i", off))   # mov rdx,[rbp+off]
-        a.emit(0x48, 0x89, 0x02)                           # mov [rdx],rax
+        a.emit(0x48,0x8B,0x95,struct.pack("<i",off))     # mov rdx,[rbp+off]
+        a.emit(0x48,0x89,0x02)                           # mov [rdx],rax
+        if flag:
+          a.emit(0x48,0xC7,0x42,0x08,struct.pack("<I",1))   # mov qword [rdx+8],1
       else:
-        a.emit(0x48, 0x89, 0x85, struct.pack("<i", off))   # mov [rbp+off],rax
+        a.emit(0x48,0x89,0x85,struct.pack("<i",off))     # mov [rbp+off],rax
+        if flag:
+          a.emit(0x48,0xC7,0x85,struct.pack("<i",sc.slots["?init:" + name]),struct.pack("<I",1))   # mov qword [rbp+flag],1
     else:
-      self.free_box(r[1], name)
-      a.emit(0x48, 0x89, 0x02)                         # mov [rdx],rax
-    sc.defined.add(name)
+      self.free_box(r[1],name)
+      a.emit(0x48,0x89,0x02)                             # mov [rdx],rax
+      if flag:
+        a.emit(0x48,0xC7,0x42,0x08,struct.pack("<I",1))  # mov qword [rdx+8],1
 
   # -- closures and functions
   def make_closure(self, f):
@@ -1654,7 +1894,6 @@ class CodeGen(Resolver):
 
   def hoist(self, sc):
     """create the closures of all `fn name` definitions of a scope on entry"""
-    sc.defined.update(f.name for f in sc.named_fns)
     for f in sc.named_fns:
       self.make_closure(f)
       self.var_store(f.name, 0)
@@ -1672,24 +1911,20 @@ class CodeGen(Resolver):
       a.emit(0x6A, 0x00)                               # push 0  (zeroed local)
     for name, off in f.slots.items():                    # move captured variables into heap boxes
       if name in f.boxed:
-        a.emit(0xB9, struct.pack("<I", 8))
+        a.emit(0xB9, struct.pack("<I", 16 if (f, name) in self.flagged else 8))
         a.call("rt_alloc")
         if name in f.params:
           a.emit(0x48, 0x8B, 0x95, struct.pack("<i", off))   # mov rdx,[rbp+off]
           a.emit(0x48, 0x89, 0x10)                           # mov [rax],rdx
         a.emit(0x48, 0x89, 0x85, struct.pack("<i", off))       # mov [rbp+off],rax
     self.hoist(f)
-    for s in f.body:                                     # the constants of this function are created first
-      if s[0] == "assign" and len(s) > 5:
-        self.expr(s[2])
-        self.var_store(s[1], s[3], s[4])
     self.stmts(f.body)
     a.emit(0x31, 0xC0)                                   # xor eax,eax  (default result 0)
     self.epilogue()
 
   # -- types in the generated code: values are always 64 bits; a float is the bit pattern of a double
   def tk(self, e):
-    """'int', 'float', 'str', 'text' or 'fn' (an undetermined type counts as int)."""
+    """'int', 'float', 'str', 'text' or 'fn' (a type that was never determined counts as int)"""
     t = prune(self.types.get(id(e), INT))
     return t.kind if t.kind in ("float", "fn", "str", "text") else "int"
 
@@ -1741,20 +1976,14 @@ class CodeGen(Resolver):
       self.mov_rax_imm(e[1])
     elif k == "flt":
       self.mov_rax_imm(struct.unpack("<q", struct.pack("<d", e[1]))[0])
-    elif k == "bstr":
-      data = self.strings_b[e[1]]
+    elif k in ("bstr", "btext"):                         # address of the static object; the empty string is 0
+      data = (self.strings_b if k == "bstr" else self.strings_t)[e[1]]
       if data:
-        a.rip([0x48, 0x8D, 0x05], f"bstr:{e[1]}")
+        a.rip([0x48, 0x8D, 0x05], f"{k}:{e[1]}")         # lea rax,[object]
       else:
-        a.emit(0x31, 0xC0)                           # empty string = null pointer
-    elif k == "btext":
-      data = self.strings_t[e[1]]
-      if data:
-        a.rip([0x48, 0x8D, 0x05], f"btext:{e[1]}")
-      else:
-        a.emit(0x31, 0xC0)                           # empty text = null pointer
+        a.emit(0x31, 0xC0)                               # xor eax,eax
     elif k == "var":
-      self.var_load(e[1], e[2], e[3])
+      self.var_load(e[1], e[2], e[3], id(e) in self.check_reads)
     elif k == "fnlit":
       self.make_closure(e[1])
     elif k == "call":
@@ -1790,10 +2019,10 @@ class CodeGen(Resolver):
         a.emit(0x48, 0x89, 0xC2)                     # mov rdx,rax
         a.emit(0x48, 0x8B, 0x0C, 0x24)               # mov rcx,[rsp]
         if tys[i] == tys[i + 1] and tys[i] in ("str", "text"):
-          a.emit(0x48, 0x89, 0x14, 0x24)             # save current operand for the next link
-          a.emit(0x48, 0x89, 0xC8)                   # mov rax,rcx (previous string)
-          a.emit(0x48, 0x89, 0xD1)                   # mov rcx,rdx (current string)
-          a.call("rt_textcmp" if tys[i] == "text" else "rt_strcmp")
+          a.emit(0x48, 0x89, 0x14, 0x24)             # mov [rsp],rdx   (the helper clobbers rdx; this operand is the next "previous")
+          a.emit(0x48, 0x89, 0xC8)                   # mov rax,rcx     (previous string)
+          a.emit(0x48, 0x89, 0xD1)                   # mov rcx,rdx     (this string)
+          a.call("rt_textcmp" if tys[i] == "text" else "rt_strcmp")   # rax = -1, 0 or 1
           a.emit(0x48, 0x83, 0xF8, 0x00)             # cmp rax,0
           a.jcc(FAIL_CC[op], lf)
         elif "float" in (tys[i], tys[i + 1]):
@@ -1804,7 +2033,7 @@ class CodeGen(Resolver):
           a.emit(0x48, 0x39, 0xD1)                   # cmp rcx,rdx
           a.jcc(FAIL_CC[op], lf)                     # stop at the first false link
         if i < len(ops) - 1 and not (tys[i] == tys[i + 1] and tys[i] in ("str", "text")):
-          a.emit(0x48, 0x89, 0x14, 0x24)           # mov [rsp],rdx; string case saved it before the helper call
+          a.emit(0x48, 0x89, 0x14, 0x24)           # mov [rsp],rdx
       a.emit(0xB8, 1, 0, 0, 0)                         # mov eax,1
       a.jmp(le)
       a.label(lf)
@@ -1863,10 +2092,10 @@ class CodeGen(Resolver):
       a.emit(0x58)                                     # pop rax
       tl, tr = self.tk(e[2]), self.tk(e[3])
       if op == "+" and tl == tr and tl in ("str", "text"):
-        a.call("rt_textcat" if tl == "text" else "rt_strcat")  # new immutable concatenation
+        a.call("rt_textcat" if tl == "text" else "rt_strcat")   # a new string: [length][contents]; empty = 0
       elif op in CMP_SETCC and tl == tr and tl in ("str", "text"):
-        a.call("rt_textcmp" if tl == "text" else "rt_strcmp")
-        a.emit(0x48, 0x83, 0xF8, 0x00)               # cmp rax,0  (-1, 0 or 1)
+        a.call("rt_textcmp" if tl == "text" else "rt_strcmp")   # rax = -1, 0 or 1
+        a.emit(0x48, 0x83, 0xF8, 0x00)               # cmp rax,0
         a.emit(0x0F, CMP_SETCC[op], 0xC0, 0x0F, 0xB6, 0xC0)  # setcc al; movzx eax,al
       elif (op in ARITH_OPS or op == "/") and self.tk(e) == "float":   # float arithmetic; an int operand is converted
         self.load_xmm(0, 0, tl)                      # left  (rax) -> xmm0
@@ -2003,8 +2232,6 @@ class CodeGen(Resolver):
   def stmt(self, s):
     a, k = self.a, s[0]
     if k == "assign":
-      if len(s) > 5:
-        return                                         # a constant: already set at program start
       self.expr(s[2])
       self.var_store(s[1], s[3], s[4])
     elif k == "fn":
@@ -2029,12 +2256,8 @@ class CodeGen(Resolver):
           a.call("rt_print_str")
         else:
           self.expr(v)
-          if self.tk(v) == "str":
-            a.call("rt_print_value_str")
-          elif self.tk(v) == "text":
-            a.call("rt_print_value_text")
-          else:
-            a.call("rt_print_float" if self.tk(v) == "float" else "rt_print_int")
+          tv = self.tk(v)
+          a.call({"str": "rt_print_value_str", "text": "rt_print_value_text", "float": "rt_print_float"}.get(tv, "rt_print_int"))
       a.rip([0x48, 0x8D, 0x0D], "str:0")
       a.emit(0xBA, 1, 0, 0, 0)
       a.call("rt_print_str")
@@ -2085,6 +2308,7 @@ class CodeGen(Resolver):
   def program(self, ast):
     a = self.a
     self.analyze(ast, self.g)
+    self.alloc_flags()
     a.label("main")
     a.emit(0x48, 0x83, 0xEC, 0x28)                       # sub rsp,0x28 (align + shadow)
     a.emit(0xB9, struct.pack("<i", -11))                 # mov ecx,STD_OUTPUT_HANDLE
@@ -2095,15 +2319,12 @@ class CodeGen(Resolver):
     a.rip([0xFF, 0x15], "GetProcessHeap")
     a.rip([0x48, 0x89, 0x05], "heap")
     self.hoist(self.g)
-    for s in ast:                                        # constants are created first (their values only need
-      if s[0] == "assign" and len(s) > 5:               # numbers, earlier constants and function literals)
-        self.expr(s[2])
-        self.var_store(s[1], s[3], s[4])
     self.stmts(ast)
     a.emit(0x31, 0xC9)                                   # xor ecx,ecx
     self.exit_process()
     while self.queue:                                    # user functions (may queue nested ones)
       self.gen_function(self.queue.pop(0))
+    self.emit_uninit_stubs()
     self.runtime()
     a.resolve_labels()
     return a
@@ -2135,80 +2356,87 @@ class CodeGen(Resolver):
     a.label(empty)
     a.emit(0xC3)                                         # ret
 
-    # rt_print_value_text: rax = null or [u64 code-point length][u32 code points].
-    # Encode each scalar value as UTF-8 and write it directly; no temporary heap allocation.
+    # rt_print_value_text: rax = null or [u64 code-point count][u32 code points].
+    # The code points are encoded as UTF-8 into a 1024-byte buffer on the stack; the buffer is written with one WriteFile
+    # when it is nearly full and at the end (not one call per character).
+    # Registers: r8 = next code point, r9 = how many are left, r10 = next output byte, r11 = flush limit (buffer + 1020).
+    # Frame: [rsp .. rsp+0x20) shadow space, [rsp+0x20] 5th argument, buffer at rsp+0x30; r8, r9 are saved at [rbp-8], [rbp-16] over WriteFile.
+    t_loop, t_final, t_flush, t_done = (a.new_label(n) for n in ("pt_loop", "pt_final", "pt_flush", "pt_done"))
+    t_one, t_two, t_three = (a.new_label(n) for n in ("pt_one", "pt_two", "pt_three"))
     a.label("rt_print_value_text")
-    text_empty = a.new_label("pt_empty")
-    text_loop = a.new_label("pt_loop")
-    text_done = a.new_label("pt_done")
-    text_two = a.new_label("pt_two")
-    text_three = a.new_label("pt_three")
-    text_four = a.new_label("pt_four")
-    text_emit = a.new_label("pt_emit")
-    text_emit_done = a.new_label("pt_emit_done")
-    # Larger frame than the common runtime prologue: keep locals below the 32-byte Win64 shadow area.
-    a.emit(0x55, 0x48, 0x89, 0xE5, 0x48, 0x83, 0xEC, 0x60, 0x48, 0x83, 0xE4, 0xF0)
-    a.emit(0x48, 0x85, 0xC0)                           # test rax,rax
-    a.jcc(4, text_empty)
-    a.emit(0x48, 0x8B, 0x10)                           # mov rdx,[rax] (code-point count)
-    a.emit(0x48, 0x89, 0x55, 0xF0)                     # mov [rbp-16],rdx
-    a.emit(0x48, 0x8D, 0x50, 0x08)                     # lea rdx,[rax+8]
-    a.emit(0x48, 0x89, 0x55, 0xF8)                     # mov [rbp-8],rdx (code-point pointer)
-    a.label(text_loop)
-    a.emit(0x48, 0x83, 0x7D, 0xF0, 0x00)             # cmp qword [rbp-16],0
-    a.jcc(4, text_done)
-    a.emit(0x48, 0x8B, 0x45, 0xF8)                     # mov rax,[rbp-8]
-    a.emit(0x8B, 0x00)                                 # mov eax,[rax]
-    a.emit(0x48, 0x83, 0x45, 0xF8, 0x04)               # add qword [rbp-8],4
-    a.emit(0x48, 0xFF, 0x4D, 0xF0)                     # dec qword [rbp-16]
-    a.emit(0x89, 0x45, 0xE8)                           # mov [rbp-24],eax (code point)
-    a.emit(0x3D, 0x80, 0x00, 0x00, 0x00)               # cmp eax,0x80
-    a.jcc(2, text_emit)                               # jb: one byte
-    a.emit(0x3D, 0x00, 0x08, 0x00, 0x00)               # cmp eax,0x800
-    a.jcc(2, text_two)
-    a.emit(0x3D, 0x00, 0x00, 0x01, 0x00)               # cmp eax,0x10000
-    a.jcc(2, text_three)
-    a.jmp(text_four)
-    a.label(text_emit)                                 # ASCII: [rbp-32] = AL
-    a.emit(0x88, 0x45, 0xE0)                           # mov [rbp-32],al
-    a.emit(0x41, 0xB8, 1, 0, 0, 0)                     # mov r8d,1
-    a.jmp(text_emit_done)
-    a.label(text_two)
-    a.emit(0x8B, 0x45, 0xE8)                           # mov eax,[rbp-24]
-    a.emit(0x89, 0xC1, 0xC1, 0xE9, 0x06, 0x80, 0xC9, 0xC0)  # ecx=cp>>6; or cl,0xc0
-    a.emit(0x88, 0x4D, 0xE0)                           # mov [rbp-32],cl
-    a.emit(0x8B, 0x45, 0xE8, 0x24, 0x3F, 0x0C, 0x80)  # al=cp&0x3f; or al,0x80
-    a.emit(0x88, 0x45, 0xE1)                           # mov [rbp-31],al
-    a.emit(0x41, 0xB8, 2, 0, 0, 0)                     # mov r8d,2
-    a.jmp(text_emit_done)
-    a.label(text_three)
-    a.emit(0x8B, 0x45, 0xE8, 0x89, 0xC1, 0xC1, 0xE9, 0x0C, 0x80, 0xC9, 0xE0)
-    a.emit(0x88, 0x4D, 0xE0)                           # first byte
-    a.emit(0x8B, 0x45, 0xE8, 0xC1, 0xE8, 0x06, 0x24, 0x3F, 0x0C, 0x80)
-    a.emit(0x88, 0x45, 0xE1)                           # second byte
-    a.emit(0x8B, 0x45, 0xE8, 0x24, 0x3F, 0x0C, 0x80)
-    a.emit(0x88, 0x45, 0xE2)                           # third byte
-    a.emit(0x41, 0xB8, 3, 0, 0, 0)                     # mov r8d,3
-    a.jmp(text_emit_done)
-    a.label(text_four)
-    a.emit(0x8B, 0x45, 0xE8, 0xC1, 0xE8, 0x12, 0x0C, 0xF0)
-    a.emit(0x88, 0x45, 0xE0)                           # first byte
-    a.emit(0x8B, 0x45, 0xE8, 0xC1, 0xE8, 0x0C, 0x24, 0x3F, 0x0C, 0x80)
-    a.emit(0x88, 0x45, 0xE1)                           # second byte
-    a.emit(0x8B, 0x45, 0xE8, 0xC1, 0xE8, 0x06, 0x24, 0x3F, 0x0C, 0x80)
-    a.emit(0x88, 0x45, 0xE2)                           # third byte
-    a.emit(0x8B, 0x45, 0xE8, 0x24, 0x3F, 0x0C, 0x80)
-    a.emit(0x88, 0x45, 0xE3)                           # fourth byte
-    a.emit(0x41, 0xB8, 4, 0, 0, 0)                     # mov r8d,4
-    a.label(text_emit_done)
-    a.rip([0x48, 0x8B, 0x0D], "stdout")                # rcx = stdout handle
-    a.emit(0x48, 0x8D, 0x55, 0xE0)                     # lea rdx,[rbp-32]
-    a.rip([0x4C, 0x8D, 0x0D], "written")               # lea r9,[written]
-    a.emit(0x48, 0xC7, 0x44, 0x24, 0x20, 0, 0, 0, 0)  # fifth arg = null
+    a.emit(0x55, 0x48, 0x89, 0xE5)                       # push rbp; mov rbp,rsp
+    a.emit(0x48, 0x81, 0xEC, struct.pack("<I", 0x460))   # sub rsp,0x460
+    a.emit(0x48, 0x83, 0xE4, 0xF0)                       # and rsp,-16
+    a.emit(0x48, 0x85, 0xC0)                             # test rax,rax
+    a.jcc(4, t_done)                                     # empty text: nothing to print
+    a.emit(0x4C, 0x8B, 0x08)                             # mov r9,[rax]        count
+    a.emit(0x4C, 0x8D, 0x40, 0x08)                       # lea r8,[rax+8]      first code point
+    a.emit(0x4C, 0x8D, 0x54, 0x24, 0x30)                 # lea r10,[rsp+0x30]  buffer
+    a.emit(0x4C, 0x8D, 0x9C, 0x24, struct.pack("<I", 0x30 + 1020))   # lea r11,[rsp+0x30+1020]
+    a.label(t_loop)
+    a.emit(0x4D, 0x85, 0xC9)                             # test r9,r9
+    a.jcc(4, t_final)
+    a.emit(0x4D, 0x39, 0xDA)                             # cmp r10,r11
+    a.jcc(7, t_flush)                                    # ja: no room for 4 more bytes
+    a.emit(0x41, 0x8B, 0x00)                             # mov eax,[r8]
+    a.emit(0x49, 0x83, 0xC0, 0x04)                       # add r8,4
+    a.emit(0x49, 0xFF, 0xC9)                             # dec r9
+    a.emit(0x3D, struct.pack("<I", 0x80))                # cmp eax,0x80
+    a.jcc(2, t_one)                                      # jb
+    a.emit(0x3D, struct.pack("<I", 0x800))               # cmp eax,0x800
+    a.jcc(2, t_two)
+    a.emit(0x3D, struct.pack("<I", 0x10000))             # cmp eax,0x10000
+    a.jcc(2, t_three)
+    a.emit(0x89, 0xC1, 0xC1, 0xE9, 18, 0x80, 0xC9, 0xF0) # four bytes: ecx = cp>>18 | 0xF0
+    a.emit(0x41, 0x88, 0x0A)                             # mov [r10],cl
+    a.emit(0x89, 0xC1, 0xC1, 0xE9, 12, 0x80, 0xE1, 0x3F, 0x80, 0xC9, 0x80)   # cl = (cp>>12)&0x3F | 0x80
+    a.emit(0x41, 0x88, 0x4A, 0x01)                       # mov [r10+1],cl
+    a.emit(0x89, 0xC1, 0xC1, 0xE9, 6, 0x80, 0xE1, 0x3F, 0x80, 0xC9, 0x80)    # cl = (cp>>6)&0x3F | 0x80
+    a.emit(0x41, 0x88, 0x4A, 0x02)                       # mov [r10+2],cl
+    a.emit(0x24, 0x3F, 0x0C, 0x80)                       # al = cp&0x3F | 0x80
+    a.emit(0x41, 0x88, 0x42, 0x03)                       # mov [r10+3],al
+    a.emit(0x49, 0x83, 0xC2, 0x04)                       # add r10,4
+    a.jmp(t_loop)
+    a.label(t_three)
+    a.emit(0x89, 0xC1, 0xC1, 0xE9, 12, 0x80, 0xC9, 0xE0) # ecx = cp>>12 | 0xE0
+    a.emit(0x41, 0x88, 0x0A)                             # mov [r10],cl
+    a.emit(0x89, 0xC1, 0xC1, 0xE9, 6, 0x80, 0xE1, 0x3F, 0x80, 0xC9, 0x80)    # cl = (cp>>6)&0x3F | 0x80
+    a.emit(0x41, 0x88, 0x4A, 0x01)                       # mov [r10+1],cl
+    a.emit(0x24, 0x3F, 0x0C, 0x80)                       # al = cp&0x3F | 0x80
+    a.emit(0x41, 0x88, 0x42, 0x02)                       # mov [r10+2],al
+    a.emit(0x49, 0x83, 0xC2, 0x03)                       # add r10,3
+    a.jmp(t_loop)
+    a.label(t_two)
+    a.emit(0x89, 0xC1, 0xC1, 0xE9, 6, 0x80, 0xC9, 0xC0)  # ecx = cp>>6 | 0xC0
+    a.emit(0x41, 0x88, 0x0A)                             # mov [r10],cl
+    a.emit(0x24, 0x3F, 0x0C, 0x80)                       # al = cp&0x3F | 0x80
+    a.emit(0x41, 0x88, 0x42, 0x01)                       # mov [r10+1],al
+    a.emit(0x49, 0x83, 0xC2, 0x02)                       # add r10,2
+    a.jmp(t_loop)
+    a.label(t_one)
+    a.emit(0x41, 0x88, 0x02)                             # mov [r10],al
+    a.emit(0x49, 0xFF, 0xC2)                             # inc r10
+    a.jmp(t_loop)
+    a.label(t_final)
+    a.emit(0x48, 0x8D, 0x54, 0x24, 0x30)                 # lea rdx,[rsp+0x30]
+    a.emit(0x49, 0x39, 0xD2)                             # cmp r10,rdx
+    a.jcc(4, t_done)                                     # nothing left in the buffer
+    a.label(t_flush)                                     # write the buffer, then go on (back to t_loop; at the end t_final finds it empty)
+    a.emit(0x4C, 0x89, 0x45, 0xF8)                       # mov [rbp-8],r8
+    a.emit(0x4C, 0x89, 0x4D, 0xF0)                       # mov [rbp-16],r9
+    a.emit(0x48, 0x8D, 0x54, 0x24, 0x30)                 # lea rdx,[rsp+0x30]   buffer
+    a.emit(0x4D, 0x89, 0xD0)                             # mov r8,r10
+    a.emit(0x49, 0x29, 0xD0)                             # sub r8,rdx           number of bytes
+    a.rip([0x48, 0x8B, 0x0D], "stdout")                  # mov rcx,[stdout]
+    a.rip([0x4C, 0x8D, 0x0D], "written")                 # lea r9,[written]
+    a.emit(0x48, 0xC7, 0x44, 0x24, 0x20, 0, 0, 0, 0)     # mov qword [rsp+0x20],0
     a.rip([0xFF, 0x15], "WriteFile")
-    a.jmp(text_loop)
-    a.label(text_done)
-    a.label(text_empty)
+    a.emit(0x4C, 0x8B, 0x45, 0xF8)                       # mov r8,[rbp-8]
+    a.emit(0x4C, 0x8B, 0x4D, 0xF0)                       # mov r9,[rbp-16]
+    a.emit(0x4C, 0x8D, 0x54, 0x24, 0x30)                 # lea r10,[rsp+0x30]
+    a.emit(0x4C, 0x8D, 0x9C, 0x24, struct.pack("<I", 0x30 + 1020))   # lea r11,[rsp+0x30+1020]
+    a.jmp(t_loop)
+    a.label(t_done)
     a.emit(epilogue)
 
     # rt_print_int: rax = signed value
@@ -2256,12 +2484,14 @@ class CodeGen(Resolver):
     a.emit(0x48,0xC1,0xE9,31)                            # shr rcx,31
     a.emit(0x48,0x31,0xC8)                               # xor rax,rcx          return z ^ (z >> 31)
     a.emit(0xC3)                                         # ret
-    # rt_rand_int: rax = n  ->  n > 0: next % n;  n = 0: the next 64 bits;  n < 0: state = -n, result 0
+    # rt_rand_int: rax = n  ->  n > 1: next % n;  n = 0: the next 64 bits;  n < 0: state = -n, result 0;  n = 1: error
     a.label("rt_rand_int")
     raw,seed = a.new_label("rnd_raw"),a.new_label("rnd_seed")
     a.emit(0x48,0x85,0xC0)                               # test rax,rax
     a.jcc(4,raw)                                         # jz
     a.jcc(8,seed)                                        # js
+    a.emit(0x48,0x83,0xF8,0x01)                          # cmp rax,1
+    a.jcc(4,"rt_badrand")                                # je   (?1 is not defined)
     a.emit(0x49,0x89,0xC0)                               # mov r8,rax           n
     a.call("rt_next_u64")
     a.emit(0x31,0xD2)                                    # xor edx,edx
@@ -2276,29 +2506,26 @@ class CodeGen(Resolver):
     a.rip([0x48,0x89,0x05],"state")                      # mov [state],rax
     a.emit(0x31,0xC0)                                    # xor eax,eax
     a.emit(0xC3)
-    # rt_rand_float: rax = bits of x  ->  bits of a double in [0, x), x > 0.0 (like the C function rand_float64)
+    # rt_rand_float: rax = bits of x  ->  bits of a double in [0, x); x must be > 0.0 (like the C function rand_float64)
     a.label("rt_rand_float")
-    ok,zero = a.new_label("rf_ok"),a.new_label("rf_zero")
+    ok = a.new_label("rf_ok")
     a.emit(0x49,0x89,0xC0)                               # mov r8,rax           x
+    a.emit(0x66,0x49,0x0F,0x6E,0xC0)                     # movq xmm0,r8
+    a.emit(0x66,0x0F,0x57,0xDB)                          # xorpd xmm3,xmm3
+    a.emit(0x66,0x0F,0x2E,0xC3)                          # ucomisd xmm0,xmm3
+    a.jcc(6,"rt_badrand")                                # jbe  (x <= 0.0 or nan)
     a.call("rt_next_u64")
     a.emit(0x48,0xC1,0xE8,11)                            # shr rax,11           53 random bits
     a.emit(0xF2,0x48,0x0F,0x2A,0xC8)                     # cvtsi2sd xmm1,rax    (exact)
     a.emit(0x48,0xB9,struct.pack("<Q",0x3CA0000000000000))   # mov rcx,2^-53
     a.emit(0x66,0x48,0x0F,0x6E,0xD1)                     # movq xmm2,rcx
     a.emit(0xF2,0x0F,0x59,0xCA)                          # mulsd xmm1,xmm2      unit in [0,1)
-    a.emit(0x66,0x49,0x0F,0x6E,0xC0)                     # movq xmm0,r8         x
     a.emit(0xF2,0x0F,0x59,0xC8)                          # mulsd xmm1,xmm0      result = unit * x
     a.emit(0x66,0x0F,0x2E,0xC8)                          # ucomisd xmm1,xmm0
-    a.jcc(0xA,ok)                                        # jp   (x is nan)
+    a.jcc(0xA,ok)                                        # jp   (not possible for x > 0.0, but harmless)
     a.jcc(2,ok)                                          # jb   (result < x: fine)
-    a.emit(0x4C,0x89,0xC1)                               # mov rcx,r8           result >= x (rounding): result = nextafter(x,0.0)
-    a.emit(0x48,0xD1,0xE1)                               # shl rcx,1
-    a.jcc(4,zero)                                        # jz   (x is 0.0: the result is 0.0)
-    a.emit(0x49,0xFF,0xC8)                               # dec r8               the next smaller number toward 0
+    a.emit(0x49,0xFF,0xC8)                               # dec r8               result >= x (rounding): the next smaller number
     a.emit(0x66,0x49,0x0F,0x6E,0xC8)                     # movq xmm1,r8
-    a.jmp(ok)
-    a.label(zero)
-    a.emit(0x66,0x0F,0x57,0xC9)                          # xorpd xmm1,xmm1
     a.label(ok)
     a.emit(0x66,0x48,0x0F,0x7E,0xC8)                     # movq rax,xmm1
     a.emit(0xC3)
@@ -2315,7 +2542,7 @@ class CodeGen(Resolver):
     a.emit(epilogue)
 
     # runtime errors: print message, exit code 1
-    for label, idx in (("rt_divzero", 1), ("rt_notfn", 2), ("rt_negexp", 3), ("rt_badpow", 4)):
+    for label, idx in (("rt_divzero", 1), ("rt_notfn", 2), ("rt_negexp", 3), ("rt_badpow", 4), ("rt_badrand", 5), ("rt_nomem", 6)):
       a.label(label)
       a.rip([0x48, 0x8D, 0x0D], f"str:{idx}")
       a.emit(0xBA, struct.pack("<I", len(self.strings[idx])))
@@ -2579,6 +2806,8 @@ class CodeGen(Resolver):
     a.rip([0x48, 0x8B, 0x0D], "heap")                    # mov rcx,[heap]
     a.emit(0xBA, 8, 0, 0, 0)                             # mov edx,HEAP_ZERO_MEMORY
     a.rip([0xFF, 0x15], "HeapAlloc")
+    a.emit(0x48, 0x85, 0xC0)                             # test rax,rax
+    a.jcc(4, "rt_nomem")                                 # HeapAlloc failed: runtime error, exit code 1
     a.emit(epilogue)
 
     for name, blob in FLOAT_RT.items():                   # rt_fmt_float, rt_fpow, rt_fmod: machine code from tools/float_rt.asm
@@ -2634,23 +2863,20 @@ def build_pe(asm, vars_, strings, byte_strings, text_strings):
     off += 16
   data = bytearray(off)
   data[0x40:0x48] = struct.pack("<Q",0x123456789ABCDEF0)       # the state of the random generator at the start of every program
-  for i, s in enumerate(byte_strings):
-    if not s:
-      continue                                  # empty string is represented by a null pointer
-    while len(data) % 8:
-      data.append(0)
-    sym[f"bstr:{i}"] = len(data)
-    data += struct.pack("<Q", len(s)) + s
-  for i, chars in enumerate(text_strings):
-    if not chars:
-      continue                                  # empty text is represented by a null pointer
-    while len(data) % 8:
-      data.append(0)
-    sym[f"btext:{i}"] = len(data)
-    data += struct.pack("<Q", len(chars)) + struct.pack("<" + "I" * len(chars), *chars)
   for i, s in enumerate(strings):
     sym[f"str:{i}"] = len(data)
     data += s + b"\0"
+  for tag, objs in (("bstr", byte_strings), ("btext", text_strings)):   # static string objects, 8-aligned
+    for i, s in enumerate(objs):
+      if not s:
+        continue                                  # the empty string is 0: no object
+      while len(data) % 8:
+        data.append(0)
+      sym[f"{tag}:{i}"] = len(data)
+      if tag == "bstr":
+        data += struct.pack("<Q", len(s)) + s
+      else:
+        data += struct.pack("<Q", len(s)) + struct.pack("<" + "I" * len(s), *s)
   data_vsize = len(data)
 
   # ---- .idata layout
@@ -2740,7 +2966,10 @@ def compile_source(src, warnings=None):
   checker.run(ast)
   if warnings is not None:
     warnings.extend(parser.warnings)
-  asm = CodeGen(parser.global_scope, parser.strings, parser.byte_strings, parser.text_strings, parser.fn_globals, checker.types).program(ast)
+  init = InitCheck(parser.global_scope)
+  init.run(ast)
+  asm = CodeGen(parser.global_scope, parser.strings, parser.byte_strings, parser.text_strings, parser.fn_globals,
+                checker.types, init).program(ast)
   return build_pe(asm, parser.vars, parser.strings, parser.byte_strings, parser.text_strings)
 
 

@@ -8,13 +8,12 @@ print ?0                              -- => 2454886589211414944  (the first numb
 print ?0                              -- => 2454886589211414944  (the same number again)
 ?-7
 print ?10, " ", ?10, " ", ?10, " ", ?10, " ", ?10, " ", ?10 -- => 7 4 6 3 4 5  (?n is in 0..n-1)
-print ?1, " ", ?1, " ", ?1                                  -- => 0 0 0  (the range 0..0)
-print ?100, " ", ?1000000007, " ", ?9223372036854775807     -- => 25 587864266 8483179396677329709  (bigger ranges)
+print ?100, " ", ?1000000007, " ", ?9223372036854775807     -- => 98 319755975 2476628477891077985  (bigger ranges)
 ?(-9223372036854775807 - 1)           -- the smallest int: the state becomes 2^63 (its negation is itself)
 print ?0                              -- => 5196802822362493915
 ?-2024
 print ?1.0, " ", ?1.0, " ", ?100.0    -- => 0.62276553664611 0.0972319084876927 29.8576161113358  (a float argument gives a float in [0,x))
-print ?0.0, " ", ?5e-324, " ", ?5e-324   -- => 0.0 0.0 0.0  (the result is always below x: with the smallest x only 0.0 is possible)
+print ?5e-324, " ", ?5e-324   -- => 0.0 0.0  (the result is always below x: with the smallest x only 0.0 is possible)
 x = ?10                               -- x is an int
 y = ?2.5                              -- y is a float
 

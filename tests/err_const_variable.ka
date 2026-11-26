@@ -1,2 +1,0 @@
-a = 1
-X = a  -- ERROR: it uses the variable 'a'

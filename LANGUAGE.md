@@ -25,18 +25,16 @@ This file defines the language; the reasons behind the decisions are in IMPLEMEN
 - **Float literals** (64-bit): `digits.digits`, `digits[.digits]e|E[sign]digits`; digits are 0-9 with optional `_` between digits:
   `1.5`, `1_000.25`, `6.02e23`, `1E-9`, `5e3` (the float 5000.0).
   No `.5`, no `1.`, no infinity or NaN literal (yet). Too large for a double is an error, too small gives 0.0 or a denormal.
-- **String literals:** `'...'` is a byte string (`str`), `"..."` a Unicode string (`text`). Both are immutable values. A string cannot contain a raw newline.
+- **String literals:** `'...'` is a byte string (`str`), `"..."` a unicode string (`text`). A string cannot contain a raw newline.
   - Escape character `^`: `^n` newline, `^t` TAB, `^r` CR, `^^` caret, `^"` quote, `^'` apostrophe (both quotes in both kinds).
-  - `^XX` (two hex digits, `^e9`, `^E9`, `^00`): the byte XX in a byte string; the character U+00XX in a Unicode string.
+  - `^XX` (two hex digits, `^e9`, `^E9`, `^00`): the byte XX in a byte string; the character U+00XX in a unicode string.
   - `^uXXXX` (4 hex digits), `^UXXXXXX` (6 hex digits): a Unicode character (to 10FFFF, no surrogates); in a byte string its UTF-8 bytes.
-  - Other characters stand for themselves; non-ASCII source text is encoded as UTF-8 for `str` and stored as its Unicode code point for `text`. Any other escape is an error.
-  - `str` may contain byte 0; `text` may contain U+0000.
+  - Other characters stand for themselves; non-ASCII source text becomes UTF-8 bytes in a `str`, code points in a `text`. Any other escape is an error.
+  - A string may contain the byte 0 (a `text` may contain U+0000).
   - String literals written one after another are joined: `'a' 'b' 'c'`. A string over several lines is written in parentheses
     (`print ("one" NEWLINE "two")`) or with a line ending in `,`. `'...'` and `"..."` cannot be joined.
-  - Both types support content-based `==`, `!=`, `<`, `<=`, `>`, `>=` comparisons and `+` concatenation; `+=` concatenates and reassigns. `str` ordering compares unsigned bytes; `text` ordering compares Unicode code points.
-  - Concatenation creates a new immutable string object. Text printing encodes code points as UTF-8 without allocating a temporary string.
-  - `str` and `text` cannot be mixed in assignments, arguments, returns, concatenation, or comparisons. Explicit conversions may be added later.
-  - Output is written as UTF-8 bytes; the program sets the console code page to UTF-8 at start.
+  - A literal is a value: `s = 'abc'`, `NAME = "text"`, `f('x')`. `''` and `""` are the empty string.
+  - Output is written as UTF-8 bytes (a `str` as it is, a `text` encoded); the program sets the console code page to UTF-8 at start.
 - **Compatibility forms:** `# ` comments and `0x` hex literals exist only to ease the migration of existing sources and programs from other languages, and for the
   ease of copying code and constants between them. They are not Ka style and are discouraged in new programs: write `--` comments and `#ff` / `2#...` literals.
 - **Operators / punctuation:** `+ - * / \ % ^ & | ~ << >> +> <* *> == != < <= > >= && || ! ? = ( ) { } ; , : @`
@@ -46,8 +44,8 @@ This file defines the language; the reasons behind the decisions are in IMPLEMEN
 Five types:
 - **int** - 64-bit signed integer (two's complement, arithmetic wraps);
 - **float** - 64-bit IEEE 754 number;
-- **str** - immutable byte string; the value is a pointer to `[u64 byte length][bytes]` (null for empty);
-- **text** - immutable Unicode string; the value is a pointer to `[u64 code-point length][u32 code points]` (null for empty);
+- **str** - immutable byte string; the value is a 64-bit address of `[u64 length in bytes][bytes]` (no terminator), 0 for the empty string;
+- **text** - immutable Unicode string; the value is an address of `[u64 length in characters][u32 code points]`, 0 for the empty string;
 - **function** - a closure; written `fn(T1,T2)->R` in compiler messages.
 
 Types are checked at compile time, never written, and inferred:
@@ -59,15 +57,18 @@ Types are checked at compile time, never written, and inferred:
 - Calls check the number and types of the arguments. Calling a number is an error.
 - Function types may refer to themselves (`function f(a): return a(a)` with `d = f(q)`, `function q(x): return x`).
 - **Numbers** (int, float) are accepted by `+ - * / \ % ^`, unary `-` `?`, `< <= > >= == !=`, `&& || !`, conditions of `if`, `while`, `?!`, and `print`.
-  **Strings** (`str` and `text`) are accepted by `+`, `+=`, and all six comparisons, but the two types cannot be mixed. `str` ordering is lexicographical by unsigned byte values; `text` ordering is lexicographical by Unicode code points; equality compares contents.
   **Ints only** are accepted by `& | ~ << >> +> <* *>`, unary `~` and `exit`.
   Functions are accepted by `==` and `!=` (equal if they are the same function; same signature).
-- **Int and float mix inside operators:** `+ - * % ^` give a float if either side is a float (the other side is converted), else an int. `+` also concatenates two values of the same string type and returns that type.
+- **Strings** (`str`, `text`) are accepted by `+` (concatenation), `+=`, `== != < <= > >=` (by contents; `str` by unsigned bytes, `text` by code points; chains work too),
+  `&& || !`, conditions of `if`, `while`, `?!`, and `print`. Both operands must have the same string type: `str` and `text` do not mix and do not convert.
+  Assignment, passing, returning and closures copy the address; strings are never changed, `+` makes a new one. Memory is not freed.
+- **Int and float mix inside operators:** `+ - * % ^` give a float if either side is a float (the other side is converted), else an int.
   `/` always gives a float, `\` always an int. A comparison with a float operand is done on floats.
   `1 + 0.5` is 1.5, `7 / 2` is 3.5, `7 \ 2` is 3, `1 == 1.0` is 1.
-- There is no implicit conversion between types: assigning, passing or returning a float where an int is expected is an error, and vice versa; `str` and `text` do not convert to each other or to numbers (`x = 0` then `x = 0.5` is an error; `f(1)` and `f(1.5)` cannot both be called).
+- There is no other implicit conversion: assigning, passing or returning a float where an int is expected is an error, and vice versa
+  (`x = 0` then `x = 0.5` is an error; `f(1)` and `f(1.5)` cannot both be called).
 - The branches of `c ? a ! b` have the same type, int and float mix as in an operator; `str` and `text` branches must match exactly.
-- Truth: `0`, `0.0` and `-0.0` are false, any other number (also NaN) is true. Comparisons and logical operators give the int `0` or `1`.
+- Truth: `0`, `0.0` and `-0.0` are false, any other number (also NaN) is true; the empty string is false, any other string is true. Comparisons and logical operators give the int `0` or `1`.
 
 ## 3. Statements and lines
 - A statement ends at the end of the line, at `;`, at a closing `)` or `}`, at `else`/`elif`, or where another statement starts with a
@@ -76,14 +77,13 @@ Types are checked at compile time, never written, and inferred:
 - A statement continues on the next line if the line ends with `+ - * / \ % ^ & | ~ << >> +> <* *> ! ? == != < <= > >= && || = ,` or an `op=` form,
   or while a `(` is open (newlines inside parentheses are ignored; inside `{ }` they count again).
 - Blank lines and comment-only lines are ignored.
-- An expression statement that is not a call gives the warning `the value of this expression is not used`.
 
 ## 4. Blocks
 A block follows `if cond`, `elif cond`, `else`, `while cond`, `function name(...)`, `function(...)`. Three forms:
 1. **Braces** `{ ... }`; layout is free; the `{` may be on the next line. These blocks are mainly for usage in one line.
 2. **Indented:** (like Python) `:` at the end of the line and more-indented lines. The block ends when the indentation returns. Extra indentation
    after a line not ending in `:` and a dedent to an unknown column are errors.
-3. **One-line:** `:` followed by statements on the same line, up to the end of the line or to a closing `)`, `}` or `,` of an enclosing construct.
+3. **One-line:** `:` followed by statements on the same line, up to the end of the line or to the end of the construct around it: a closing `)`, `}` or `,`, or the `!` of `c ? a ! b` when the body is in its middle part.
    `if a: b; c` is `if a {b; c}`. `else` and `elif` may follow on the same line. One-line bodies nest:
    `if a: b; while c: d; if e: g else: h; i` is `if a {b; while c {d; if e {g} else {h; i}}}`.
    `(\(a): if a: =2*a; else: =0)(1)` and `apply(\x: =x*2, 5)` end the body at `)` / `,`.
@@ -133,11 +133,10 @@ Precedence, highest to lowest; binary operators are left-associative except `^`:
   For `<< >> +>` a count of 64 or more shifts everything out (result 0; `+>` gives 0 or -1 by the sign).
   A negative count shifts the other way: `x >> -n` is `x << n`, `x << -n` is `x >> n`, `x +> -n` is `x << n`.
   A rotate takes the count modulo 64: `x <* -n` is `x *> n`, `x *> -n` is `x <* n`.
-- **Random numbers**, unary `?x`: for an int `n > 0`, `?n` is an int in `0 .. n-1`; `?0` is the next raw 64 bits as an int;
-  for an int `m < 0`, `?m` sets the state of the generator to `-m` (for the smallest int: to itself) and gives 0;
-  for a float `x > 0.0`, `?x` is a float in `[0, x)` (for other floats the result is not defined). `?x` has the type of `x`.
-- **Conditional** `c ? a ! b`: `c` is evaluated, then only `a` or only `b`. A function literal with a one-line body inside it needs parentheses:
-  `c ? (\x:=x+1) ! (\x:=x-1)`. A line may end with `?` or `!` (expression continues on the next line).
+- **Random numbers**, unary `?x`: for an int `n > 1`, `?n` is an int in `0 .. n-1`; `?0` is the next raw 64 bits as an int; for an int `m < 0`, `?m` sets the state of the
+  generator to `-m` and gives 0; for a float `x > 0.0`, `?x` is a float in `[0, x)`. `?1`, `?0.0`, a negative float and NaN are runtime errors. `?x` has the type of `x`.
+- **Conditional** `c ? a ! b`: `c` is evaluated, then only `a` or only `b`. A one-line function body in the middle part ends at the `!`: `c ? \x:=x+1 ! \x:=x-1`.
+  A line may end with `?` or `!` (expression continues on the next line).
 - **Chained comparisons:** `a < b <= c` is `a < b && b <= c` with `b` evaluated once; evaluation stops at the first false link.
   Chains form within `== !=` or within `< <= > >=`; `a < b == c` is `(a < b) == c`.
 
@@ -146,7 +145,7 @@ Precedence, highest to lowest; binary operators are left-associative except `^`:
 |---|---|
 | `name = expr`, `^name = expr`, `@name = expr` | assign, creates a variable / a global / an enclosing function's variable (see 7) |
 | `name op= expr` | `name = name op expr` for `+ - * / \ % ^ & \| ~ && \|\| << >> +> <* *>`; `&&=` and `\|\|=` short-circuit; also `^name op= expr`, `@name op= expr` |
-| `print a, b, "text", ...` | print the items one after another, then a newline; `print` alone prints an empty line. Items are numbers, `str`/`text` values, or string literals |
+| `print a, b, "text", ...` | print the items one after another, then a newline; `print` alone prints an empty line. Items are numbers or strings |
 | `if cond block [elif cond block]... [else block]` | conditional (`else if` also works) |
 | `while cond block` | loop |
 | `break`, `continue` | only inside a `while` of the same function |
@@ -179,39 +178,49 @@ print (\(a,b):=a*b)(6,7)
 ```
 - A function returns only through `return` / `=`; there are no expression bodies and no implicit result. `return` or the end of the body gives 0.
 - Any expression can be called: `f(x)`, `f(x)(y)`, `(\a:=a)(1)`. Arguments are evaluated left to right, then the callee. At most 20 parameters or arguments.
-- `function name` definitions of a scope are created when the scope is entered, so they can be used before the definition. A definition inside an
-  `if` or loop still belongs to the enclosing scope and is not conditional. A named function is a variable holding a function value (reassignable
-  to a function of the same signature). Defining a name twice with `function` in one scope is an error. `function ^name` does not exist.
+- `function name` definitions of a scope are created when the scope is entered (hoisting), so they can be used before the definition. A definition inside an
+  `if` or loop still belongs to the enclosing scope and is not conditional. A name defined with `function` is a constant: it is defined once in its scope
+  and cannot be assigned (`f = ...`, `^f = ...`, `f += ...` are errors); the function can be passed around and assigned to other variables.
+  `function ^name` does not exist.
 - Recursion works, also mutual and through variables holding literals.
 
 ### Scope
 - Outside functions variables are global. Inside a function, parameters and every name assigned by a plain `name = ...` are local for the whole body.
-- A function reads globals and variables of the functions around it by plain name. Using a local name before its first assignment is an error.
+- A function reads globals and variables of the functions around it by plain name.
 - `^name` is the global variable `name`, mainly for assignment: `^name = e` assigns it (creating it), `^name` reads it; at the top level it equals `name`.
   Once `^name` is used in a function, the plain `name` there is the global too. A name cannot be both local (or parameter) and `^name` in one function.
 - `@name` (draft, like `nonlocal` in Python) is the variable `name` of the nearest enclosing function that has it as local or parameter: `@name = e` assigns, `@name` reads; the plain
   name then means the same. A name cannot be both local and `@name` in one function; without such a variable it is an error.
-- Every variable starts as 0 (yet to decide). A variable assigned only on a path not taken stays 0. A function variable that is 0 is unset; calling it is a runtime error.
 - A function value shares the variables it uses with its creator and other closures, also after the creator has returned. Captured variables and closures are never freed.
-- Top-level code that reads a global before assigning it is an error unless some function assigns it with `^var`.
+- **A variable must be assigned before it is read.** Variables and constants exist from the moment execution reaches their assignment; only `function name`
+  definitions exist from the start of their scope. A read that no assignment can precede is a compile error. A read that every path prepares needs nothing.
+  In the unclear cases the variable gets a hidden flag that its assignments set; the read checks it and stops the program with a runtime error
+  `variable 'x' is not initialized` if the variable was never assigned. The unclear cases are:
+  - an assignment only on some paths (one branch of an `if`, the body of a loop, which may not run);
+  - after a call, a variable that some function can assign (`^x`, `@x`);
+  - a global read in a function, unless it is assigned before every call in the top-level code;
+  - a variable of an enclosing function read in a nested function, unless it is assigned before every call in the enclosing function and at every exit of it.
+
+  Parameters are assigned when the function starts.
 
 ### Constants
 A name of capital letters, digits and `_` with at least one letter (`MAX_SPEED`, `X2`, `_N`) is a constant; a name with a lowercase letter is a variable.
-- A constant is defined by `NAME = expr` or `function NAME(...)` directly in the statements of the program or of a function body: not inside `if`, `elif`,
-  `else`, a loop or a `{ }` block. Its scope is the program or that function (also the functions nested in it). A function may define a constant of the
-  same name as a global one. A constant cannot be written as `^NAME` or `@NAME` inside a function. Parameters cannot have such names.
-- It is defined once: any second assignment (`NAME = ...`, `NAME += ...`) is an error.
-- The value must be a constant expression: numbers, constants defined above (in this scope or around it), operators (also `?!`), function literals.
-  Variables and calls are not allowed (`WIDTH = 80`, `AREA = WIDTH * HEIGHT`, `FLAG_B = FLAG_A << 1`, `FACT = \n: =n < 2 ? 1 ! n * FACT(n-1)`).
-- The constants of a scope are created first, in the order written, when the scope is entered (program start, function entry); they can be read
-  anywhere in the scope, also above the definition.
+- A constant is a variable that is assigned once: by `NAME = expr` directly in the statements of the program or of a function body (not inside `if`, `elif`, `else`,
+  a loop or a `{ }` block), and nowhere else. The value may be any expression: `WIDTH = 80`, `AREA = WIDTH * HEIGHT`, `SIZE = f(3)`, `SEED = ?100`.
+  It exists from the line where it is assigned; reading it earlier is an error, as for every variable.
+- Its scope is the program or that function (also the functions nested in it). A function may define a constant of the same name as a global one.
+  A constant cannot be written as `^NAME` or `@NAME` inside a function. Parameters cannot have such names.
+- Any second assignment (`NAME = ...`, `NAME += ...`) is an error.
 
 ## 8. Runtime errors
 Written to standard output, exit code 1:
 `runtime error: division by zero` (`/ \ %` with a zero divisor, `0.0 ^ negative`),
 `runtime error: negative exponent` (int `^`),
 `runtime error: power of a negative number with a fractional exponent`,
-`runtime error: call of an unset function`.
+`runtime error: bad argument of '?'` (`?1`, `?0.0`, a float that is not above 0.0, NaN),
+`runtime error: variable 'x' is not initialized` (see 7),
+`runtime error: call of an unset function` (a function that ended without a result),
+`runtime error: out of memory` (`HeapAlloc` failed: a closure or a string could not be allocated).
 Very deep recursion overflows the 1 MB stack and crashes.
 
 ## 9. Compile errors and warnings
@@ -221,49 +230,50 @@ Very deep recursion overflows the 1 MB stack and crashes.
   `bad number '1.5abc...'`, `a float needs digits after the dot` / `before the dot`, `float literal too large`, `integer literal too large`.
 - *layout / syntax:* `unexpected indentation`, `inconsistent indentation`, `expected an indented block after ':'`, `'(' is never closed`, `'{' is never closed`,
   `unmatched '}'`, `unmatched ')'`, `expected end of statement, found ...`, `unexpected end of line in expression`, `unexpected 'else'`,
-  `expected '{' or ':' after the parameters`, `expected '(' or a parameter name`, `expected '!'`, `cannot mix text and str`,
+  `expected '{' or ':' after the parameters`, `expected '(' or a parameter name`, `expected '!'`,
   `'break' outside of a loop`, `'return' outside of a function`, `'=' (return) needs a value`, `duplicate parameter 'a'`,
   `too many parameters (at most 20)`, `function 'f' is already defined in this scope`.
 - *names:* `undefined variable 'x'`, `undefined global variable 'x'`, `variable 'x' used before assignment`,
   `variable 'x' is local to function 'f' and used before assignment (use '^x' ...)`, `'x' is already local to 'f', it cannot also be used as '^x'`,
-  `'x' is used as '^x' in 'f', so it cannot also be a local variable there`, `'@x' needs an enclosing function`, `'@x': no variable 'x' in an enclosing function`.
+  `'x' is used as '^x' in 'f', so it cannot also be a local variable there`, `'@x' needs an enclosing function`, `'@x': no variable 'x' in an enclosing function`, `'f' is a function (defined with 'function') and cannot be assigned`.
 - *constants:* `constant 'X' can only be defined directly at the top level of the program or of a function (not inside an 'if', a loop or another block)`,
   `constant 'X' cannot be written as ^X (a constant belongs to the scope where it is defined)`, `constant 'X' is already defined (line N)`,
   `constant 'X' cannot be changed`, `'@X': a constant cannot be an enclosing function's variable`, `parameter 'N' looks like a constant`,
-  `the value of constant 'X' must be a constant expression (...): it uses the variable 'a'` (or `it calls a function`, `it uses 'B', which is defined later`).
 - *types:* `type mismatch <where>: expected T, found U` (`in assignment to 'x'`, `in argument 2 of the call`, `in left operand of '+'`,
   `in the condition of 'if'`, `in 'print' (only numbers, str and text can be printed)`, `in 'return' (all returns of a function must agree)`, ...),
   `the result is float, expected int`, `wrong number of arguments: the function takes N, called with M`, `an int is not a function` (or `a float ...`),
-  `expected a number, found fn()`, `in '?!' (both branches must have the same type, or both be numbers)`, `in the condition of '?'`.
-- *warning:* `the value of this expression is not used`.
+  `expected a number, found fn()`, `cannot mix text and str`, `cannot compare str and int`, `in '?!' (both branches must have the same type, or both be numbers)`, `in the condition of '?'`.
 
 
 ## 10. Characters (JFYI)
 | char | usage |
 |---|---|
 | ' | byte string `str` |
-| " | Unicode string `text` |
+| " | unicode string `text` |
 | # | hex literal `#ff`, binary literal `2#101`; `# ` comment |
-| ! | unary not, conditional `c ? a ! b`, `!=` - not equal |
+| ! | unary not, conditional `c ? a ! b`, != - not equal |
 | ? | unary random, conditional `c ? a ! b` |
-| / | unary - nothing, float division; `/=` |
-| % | unary - nothing, modulo (floored); `%=` |
-| & | unary - nothing, bitwise and, `&&` - logical and; `&=` `&&=` |
-| \| | unary - nothing, bitwise or, \|\| - logical or; `\|=` `\|\|=` |
-| ~ | unary bitwise not, xor; `~=` |
-| * | unary - nothing (scatter?), multiply; `\*=` `<*` `*>` rotate `<*=` `*>=` |
-| + | identity, plus, concatenate; `+=` ; `+>` arithmetic shift right `+>=`|
-| - | negative, minus; `-=` |
-| < | unary - nothing, less; `<=` - le; `<<` shift left `<<=`, see `<*` |
-| > | unary - nothing, greater; `>=` - ge; `>>` shift right `>>=`, see `+>` `*>` |
-| = | return, assignment, `==` - equal |
+| / | unary - nothing, float division; /= |
+| % | unary - nothing, modulo (floored); %= |
+| & | unary - nothing, bitwise and, && - logical and; &= &&= |
+| \| | unary - nothing, bitwise or, \|\| - logical or; \|= \|\|= |
+| ~ | unary bitwise not, xor; ~= |
+| * | unary - nothing (scatter?), multiply; \*= ; `<*` `*>` rotate |
+| + | identity, plus; += ; `+>` arithmetic shift right |
+| - | negative, minus; -= |
+| < | unary - nothing, less; <= - le; `<<` shift left, `<*` rotate left |
+| > | unary - nothing, greater; >= - ge; `>>` shift right, `+>` `*>` |
+| = | return, assignment, == - equal |
 | , | separate parameters, arguments |
 | : | start block, unary - nothing |
 | ; | separate statements, unary - nothing |
-| \\ | function (looks like λ); integer division; `\\=` |
+| \\ | function (synonym of `function`) where an operand or statement is expected; integer division (binary); \\= |
 | ^ | global variable (prefix), power (binary); ^= |
 | _ | 'blank' in ids and numbers, ids can start/end with it |
-| @ | upper-level variable; binary - nothing |
+| @ | upper-level variable |
 | () | expressions, parameters, arguments |
 | {} | block |
-
+| [] | - |
+| . | - |
+| ` | - |
+| $ | - |

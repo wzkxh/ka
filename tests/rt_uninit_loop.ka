@@ -1,0 +1,5 @@
+i = 0
+while i < 2:
+  print s                   -- => runtime error: variable 's' is not initialized (exit code 1)
+  s = i
+  i += 1

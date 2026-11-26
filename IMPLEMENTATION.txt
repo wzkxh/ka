@@ -39,23 +39,18 @@ Numbers: `_` only between digits (user: no `__`, not at the start or end). Hex `
   Only base 2 exists; radix 3..36 (`3#122`, `36#zzz`) is on the wish list. `#'...'` is reserved for hex byte strings.
 Floats: `digits.digits`, `digits.digits e sign digits`, `digits e sign digits` (user's list); no `.5`, no `1.`, no INF/NAN literals.
   `5e3` is a float. Specific error messages for the near-misses (`1.`, `.5`, `1e`, `1.5abc`, `1.5.2`).
-Strings: `'...'` = byte string (`str`), `"..."` = Unicode string (`text`). Both are values. `str` stores bytes as written/escaped; `text` stores Unicode scalar values as 32-bit code points. `^XX` is a raw byte for `str` and U+00XX for `text`; `^uXXXX` / `^UXXXXXX` encode the specified scalar value. Both kinds print as UTF-8. Adjacent literals of one kind join; mixed-kind joining is an error.
-  Non-empty `str` objects are `[u64 byte_length][bytes]`; non-empty `text` objects are `[u64 code_point_length][u32 code points]`. Empty values are null. Variables, parameters, returns and closure boxes carry 64-bit values, so assignment/calls/returns copy only the pointer. Strings are immutable. Literal objects are static; concatenation allocates a new object using `HeapAlloc`, and old objects are not freed. `str` comparison is unsigned-byte lexicographical; `text` comparison is Unicode-code-point lexicographical. `rt_print_value_text` UTF-8-encodes code points directly to `WriteFile` without a temporary heap allocation. The checker rejects mixing `str` and `text`; conversions are future work.
-For now both are stored as UTF-8 bytes and printed as such; they differ only in the meaning
-  of `^XX` (raw byte vs. character U+00XX). Print will then have to encode.
-  Escape char is `^` (not `\`) so that `\` stays free (in strings it's good for Windows paths). `^uXXXX` and `^UXXXXXX` are the user's spelling.
+Strings: `'...'` = byte string `str`, `"..."` = unicode string `text` (user). A `str` keeps the bytes as written (`^XX` is the raw byte, `^uXXXX` its UTF-8);
+  a `text` keeps 32-bit code points (`^XX` is U+00XX). Both print as UTF-8. Gemini implemented them in its 6.4-6.6 (on top of 6.3); version 6.8 is my 6.4 with its string code merged in.
+  Escape char is `^` (not `\`) so that `\` stays free (it became the `function` synonym and integer division). `^uXXXX` and `^UXXXXXX` are the user's spelling.
   Joining of adjacent literals: a newline ends a statement, so `print "a"` NEWLINE `"b"` is two statements; inside parentheses newlines are ignored,
-  so `print ("a" NEWLINE "b")` joins (user's example). Strings are only items of `print` (no string values yet).
-<from LANGUAGE.md - should be here:>
-Both string type values can be assigned to variables, copied, passed as function arguments, returned from functions, captured by closures, and printed. Assignment copies a 64-bit pointer; immutable string data is shared. The empty string is represented by a null pointer. A non-empty `str` points to `[u64 byte length][raw bytes]`. A non-empty `text` points to `[u64 code-point length][u32 Unicode scalar values]`. The `text` length counts Unicode code points, not UTF-8 bytes or grapheme clusters.
-<on string comparison:>  Equal contents compare equal even when addresses differ; pointer identity is only an implementation fast path.
-<on concatenation:> Old objects are not freed yet.
+  so `print ("a" NEWLINE "b")` joins (user's example).
   The generated program calls SetConsoleOutputCP(65001) at start so that UTF-8 shows correctly; the console keeps that code page afterwards
   (restoring it was not worth the code).
 Keywords: `function` with the synonym `\` (user), `skip` (empty statement), `elif`; `fn` is gone. A one-parameter function needs no parentheses
   (`function f x: ...`, `\x: =x+1`): `function name x` is a definition, `function x:` a literal; decided by two tokens of lookahead.
 Operator spelling is the user's: `+>` arithmetic shift right, `<*` / `*>` rotate, `?` and `!` for the conditional (`!` because `:` starts blocks),
   `@x` for variables of the enclosing function (temporary, user expects to redo it).
+
 
 3. Statements and blocks
 ------------------------
@@ -69,6 +64,11 @@ Operator spelling is the user's: `+>` arithmetic shift right, `<*` / `*>` rotate
   a bare expression statement that is not a call gets a warning (typical mistake `{m = 2*n; m}`).
 - After the removal of `let`, `global`, `nonlocal`, `input`: no way to read input for now ("it's ok for now").
 
+- One-line bodies and `?!` (version 6.4): the first rule was "a one-line body runs to the end of the line or to a closing `)`, `}` or `,`", made to ease parsing. The user pointed out that the proper
+  rule is "to the end of the expression the body belongs to", which depends on the context. The contexts that end an expression early are the brackets (`)`, `,`, `}`) and the middle part of
+  `c ? a ! b`, which ends at its `!`. The parser keeps a stack of the open contexts (`ctx`); the middle part pushes `?`, and `end_stmt` / `at_end` accept `!` when it is on top. The else part
+  ends at the end of the line like any other expression, and a `?!` inside the body consumes its own `!`. Parentheses are no longer needed around function literals in the middle part.
+
 
 4. Expressions
 --------------
@@ -80,7 +80,7 @@ Precedence (user wanted few levels, "C programmers always use parentheses"):
   - Unary operators bind tighter than `^`: `-2^2` is 4 (user, version 3). `^` is right-associative (`a^b^c = a^(b^c)`, user).
   - Chained comparisons (`a < b < c`) within `== !=` and within `< <= > >=`, not mixed (user); the middle operand is evaluated once, stops at the first false link.
   - Conditional `c ? a ! b`: lowest precedence, right-associative, only the chosen branch runs. `!` followed by `=` is always `!=`.
-    A function literal with a one-line body inside it needs parentheses (the body would swallow the `!`).
+    (Since 6.4 a one-line function body in the middle part ends at the `!`, see section 3.)
 `^` is power after an operand and the global-variable prefix where an operand is expected (`print a ^b` is a power). Same trick for `\`: function
   where an operand/statement starts, integer division after an operand. Consequence: a function definition can no longer follow a complete statement
   on the same line without `;` (it used to, as `\` was a statement start), see version 6.
@@ -110,7 +110,7 @@ Floored division and modulo (version 6.2, user: "let's do it mathematically"): `
 
 5. Types and the checker
 ------------------------
-- Static, inferred, no annotations: int, float, function. A variable keeps the type of its first value; a parameter gets its type from the body and the calls;
+- Static, inferred, no annotations: int, float, str, text, function. A variable keeps the type of its first value; a parameter gets its type from the body and the calls;
   one signature per function (monomorphic). User: "calling fn f(a){} with an int makes it f(int), so calling it with f(f) is an error".
   Alternative: per-call polymorphism. More work, little gain (all values are one machine word anyway).
 - Recursive function types are allowed (`a(a)`): no occurs check; unification skips pairs it is already comparing; messages cut cycles with `...`.
@@ -127,7 +127,18 @@ Floored division and modulo (version 6.2, user: "let's do it mathematically"): `
   (Checker.step / solve / finish). The code generator needs every expression's type to choose int or float instructions, so Checker.types maps
   id(node) to the type.
 - Runtime arity/not-a-function checks were removed (the checker does it). The null check of a call stays (unset function variable).
-- Truth: numbers only; `0`, `0.0`, `-0.0` false, NaN true.
+- Truth: `0`, `0.0`, `-0.0` false, NaN true; the empty string (address 0) is false, any other string true (user). A string address is a plain non-zero word, so the
+  truth test is the same `test rax,rax` as for an int.
+- Strings (version 6.8): a value is one 64-bit word, the address of `[u64 length][contents]`; the empty string is 0, so it needs no memory and no special case in
+  assignment, calls, returns or closure boxes (only the address is copied; strings are immutable and shared). Literals are static objects in `.data` (8-aligned); `+`
+  allocates a new object with `rt_alloc`; nothing is freed (user). `str` length counts bytes, `text` length counts code points, so indexing a `text` will be simple.
+  `str` and `text` never mix (user: "str + text doesn't work without conversion"); conversions are not there yet. Comparisons (not asked first, Gemini added them) compare contents:
+  `str` by unsigned bytes, `text` by code points, a shorter prefix is smaller (`rt_strcmp`, `rt_textcmp` give -1/0/1). The checker has an `order` constraint
+  (like `eq`) for `< <= > >=`, because two unknown operand types may turn out to be strings. A literal item of `print` is still printed straight from `.data`
+  (one write); any other item is an expression (`rt_print_value_str`, `rt_print_value_text`). The latter encodes the code points as UTF-8 into a 1024-byte buffer on the stack
+  and calls `WriteFile` when the buffer is nearly full and at the end (version 6.8.1; before that one call per character).
+- `rt_alloc` checks the result of `HeapAlloc` (version 6.8): 0 is the runtime error `out of memory`, exit code 1. It covers closures and strings.
+
 
 
 6. Floats
@@ -159,32 +170,31 @@ Floored division and modulo (version 6.2, user: "let's do it mathematically"): `
   shadowed globals ("having ^x for read/write globals and x for locals doesn't seem ok"). `^x` at the top level equals `x`. `function ^name` was refused ("too much").
 - `@x` = variable of the nearest enclosing function (draft, replaced the first spelling `\x`). A first version of the idea was `nonlocal x`. The user expects to
   redo it ("we'll do later"); only one level exists.
-- Named functions are hoisted (created at scope entry) and are ordinary variables: reassignable to a function of the same signature. The user considered a
-  single `f = function...` form instead. Problems seen: no "main code first, helpers below" layout, call-before-definition becomes a runtime error,
-  mutual recursion gets fragile, duplicate definitions are silent. The user rejected it. Open idea: make named functions real constants (no reassignment,
-  direct calls without a closure lookup, a place for polymorphism); not decided. (Capital-named functions already are constants, see 8.)
-- Every variable starts as 0 (frames are zeroed, the data section is zero, heap boxes are zeroed). A function variable that is 0 is "unset".
+- Named functions are hoisted (created at scope entry): they exist from the start of their scope ("main code first, helpers below", mutual recursion). Version 6.4 (user): a name defined with
+  `function` is a constant, "in a compiled language you cannot redefine a function with the same name or write n = 2 after 
+():=1" (Python allows it silently because a session is interpreted).
+  Before 6.4 such a name was an ordinary variable that could be reassigned (test 20 did it); the check is made in Checker.stmt: the target's scope must not have a function of that name.
+  The user also considered a single `f = function...` form instead; rejected (no main-first layout, call-before-definition becomes a runtime error, mutual recursion gets fragile).
+  The names of functions are not special in other ways (no capital-letter rule); direct calls without a closure lookup remain a possible optimisation.
+- Variables do not start as 0 for the program: reading one before its assignment is an error (section 12). The memory is still zeroed.
 - Closures capture by reference through heap boxes; nothing is ever freed (no GC): accepted for now.
 - Calls: own convention (arguments pushed left to right, closure pointer in rax checked for null, callee pops). At most 20 parameters (user: 100 is too many for humans
   and too few for splitting an array).
 
 
-8. Constants (version 4, extended in version 6)
------------------------------------------------
-User's idea: an identifier of capitals (digits, `_`) is a constant: it gets its value when created and cannot be assigned elsewhere; main purpose top-level parameters;
-"how is it usually done?" Languages with constants (C, Go, Rust, Pascal `const`) define them once, unconditionally, with a constant initializer; so:
+8. Constants (version 4; rewritten in version 6.4)
+---------------------------------------------------
+User's idea: an identifier of capitals (digits, `_`) is a constant: it gets its value when created and cannot be assigned elsewhere; main purpose top-level parameters.
+Version 4 made them compile-time-like (a constant expression as the value, created at scope entry like named functions). The user corrected this in 6.4: a constant is
+really a variable that is assigned at run time; it is only not supposed to be changed later, and that is what is checked. So now:
 - Name rule: at least one capital letter, no lowercase letters (`MAX_SPEED`, `X2`, `_N`). Parameters with such names are rejected.
-- Where: directly in the statements of the program or of a function body; not inside if/elif/else/loops/blocks. Version 4 allowed only the top level; version 6
-  (user: "allow them inside functions too, scope = this function") allows function bodies; the scope of a function constant is that function and the ones nested in it.
-  A constant cannot be written `^X` or `@X` inside a function; a function may define a constant with the name of a global one (like any local).
-- Once: any second assignment, also `X += 1`, is an error. Capital-named `function NAME(...)` counts as a constant too.
-- Value: a constant expression: numbers, constants defined above, operators (also ?:), function literals. A constant can be a function that calls itself by name.
-  Variables and calls are not allowed. Alternative for functions (user's hint "just check that it is not set later"): allow any expression, executed in place.
-  Rejected because a nested function that runs early could then see the constant unset; with constant expressions the value does not depend on run time.
-- Timing: the constants of a scope are created first, in order, when the scope is entered (program start, function entry), like named functions. So they can be read
-  anywhere in the scope, also above their definition (`print X` before `X = 5` is legal). This differs slightly from "gets its value when created"; the alternative
-  is a "used before definition" error for top-level reads, but functions would still need hoisting to be safe.
-- Implementation: the assign node gets a sixth element True; the code generator emits these assignments at scope entry and skips them in place.
+- Where: directly in the statements of the program or of a function body; not inside if/elif/else/loops/blocks (a loop would run the same code again, an `if` may not run it).
+  The scope of a function constant is that function and the ones nested in it. A constant cannot be written `^X` or `@X` inside a function; a function may define a constant
+  with the name of a global one (like any local). Any second assignment, also `X += 1`, is an error.
+- Value: any expression, also a call or `?10`; it is computed when the line is reached. Nothing is hoisted any more and there is no constant-expression rule. Reading a constant
+  before its line is the same error as for every variable (section 12), which closed the old problem of a function seeing a half-set constant.
+- `function NAME(...)` is not special: every name defined with `function` is a constant (section 7); the capital-letter rule only concerns assignments.
+- Implementation: the assign node still has a sixth element True, which only marks a definition for the checks in the parser.
 
 
 9. Known issues and limitations
@@ -193,37 +203,61 @@ User's idea: an identifier of capitals (digits, `_`) is a constant: it gets its 
   after versions 3-5 and reported everything passing.
 - The 15th digit of printed floats can be off by one in about 1 case in 10 000. Fractional float powers are only checked against an emulator that is less accurate than the FPU.
 - Float `\` with a quotient outside the int range gives the smallest int silently. `-9223372036854775808 \ -1` raises a hardware exception (not handled).
-- The compiler stops at the first error. The unused-expression warning is deliberately simple (any non-call expression statement).
+- The compiler stops at the first error. The unused-expression warning exists but is off by default (version 6.4, WARN_UNUSED_VALUE in ka.py; the user: "keep in mind that there can be such a warning, but do not issue it now"); it is simple: any non-call expression statement.
 - Falling off the end of a function is not type-checked (see 5). Deep recursion (about 10 000+ levels) overflows the 1 MB stack and crashes.
 - A function definition cannot follow a complete statement on the same line without `;` (version 6, see 4).
-- Memory is never freed.
+- Memory is never freed (closures, strings).
+
+
+12. Variables are assigned before they are read (version 6.4)
+---------------------------------------------------------------
+User's decision: a variable used before an assignment is an error; "if it is clear at compile time, say so then; where it is not clear, use hidden initialization flags";
+globals that are defined at the top of the program and then used in functions "need no flags, it is clear that they are defined". Different modes (flags on or off) are for later,
+chosen by compiler options and pragmas; the code has the constant CHECK_INIT (True) for it. The former rule "every variable starts as 0" is gone: it hid mistakes.
+Three outcomes for every read (class InitCheck, a pass after the type checker, before code generation):
+  assigned on every path        -> nothing is generated;
+  assigned on no path           -> compile error (the old messages: "variable 'x' used before assignment", "variable 'x' is local to function 'f' and used before assignment ...");
+  assigned on some paths only   -> the variable gets a hidden flag; the read checks it; a failed check ends the program: "runtime error: variable 'x' is not initialized" (exit code 1).
+The analysis is the usual definite-assignment one, per scope, in the order of execution, with two sets per point: `must` (assigned on every path) and `may` (on some path):
+- an assignment adds the target to both; `if` joins its branches (must: intersection, may: union; a branch that ends in return/break/continue/exit does not count);
+- `while`: the condition and the body see `may` widened by everything the body assigns (a later iteration may have assigned it); after the loop `must` is the old one;
+- a call: after it, `may` also contains the variables that some other scope assigns (`^x`, `@x`); a call is also recorded as a "call site" with the current `must`;
+- parameters and `function name` definitions are in `must` from the start of the scope; `return` records an "exit" with the current `must`; so does the end of a function body.
+A variable of another scope (a global read in a function, a variable of the enclosing function read by a nested one) is judged afterwards: code of a scope can only run after a call
+(or after the function was left), so the variable needs no flag if it is in `must` at every call site of its owner scope, and for a function also at every exit of it. In the
+typical program the globals are assigned at the top, before the first call: no flags, no cost (the eight programs in performance/ have none). The rule is conservative: a call of an
+unrelated function before the global is assigned makes the flag necessary. A variable that is not provable gets: a data slot (global), a frame slot (local) or the second quadword of its
+16-byte box (captured variable), set to 1 by every assignment, also one made from another scope; the read is `mov rax,[flag]; test rax,rax; jz stub`. One stub per variable name prints
+the message and ends the program. The cost is about three instructions per checked read.
+Alternatives considered: a warning for the unclear cases (rejected by the user in favour of flags); a special "unassigned" value (impossible: every 64-bit value is valid); a flag for every
+variable (slower, and unnecessary).
+Known approximations: any call widens `may`, also one that cannot assign the variable; two assignments in different branches of a loop count as "maybe"; `exit` and `return` end a path.
 
 
 10. Directions and ideas (not decided)
 --------------------------------------
+- More string operations: length, indexing, slices, conversions `str` <-> `text` and to/from numbers.
 - Explicit conversions int <-> float, rounding, floor/ceil; INF/NAN literals; comparison with tolerance (as a pragma?); output format control.
-- Named functions as constants; per-call polymorphism; relaxing the strictness of float/int assignment.
+- Per-call polymorphism; relaxing the strictness of float/int assignment.
 - Radix literals 3..36; `for` loops; arrays; input; modules; overflow checks as pragmas; a garbage collector.
 - Debug options: AST dump, assembler listing, variable dump with types (wish list in LANGUAGE.md section 10).
 
 
 11. Random numbers (version 6.3)
 --------------------------------
-from LANGUAGE (please put it where needed or join with the rest text)
-  The generator is SplitMix64 with the initial state `#123456789ABCDEF0`, set at the start of every program: until a program sets the state itself, its random
-  numbers are always the same. `?n` is the next 64-bit number modulo `n`; the float is `(next >> 11) * 2^-53 * x`, replaced by the next smaller float if it is not below `x`.
-
+- Algorithm and state: SplitMix64 (the user's C code) with the initial state 0x123456789ABCDEF0, set at the start of every program: until a program sets the state itself, its random numbers are always
+  the same. `?n` is the next 64-bit number modulo `n`; the float is `(next >> 11) * 2^-53 * x`, replaced by the next smaller float if it is not below `x`.
 User's design: a unary operator `?x` on numbers; the algorithm is the user's C code (SplitMix64 with next_u64, rand_int64, rand_float64), translated to machine code.
-- `?n` (int n > 0): next_u64 % n (as unsigned numbers), so 0..n-1. The modulo bias is accepted, as in the C code. `?1` is always 0 but still draws a number.
+- `?n` (int n > 1): next_u64 % n (as unsigned numbers), so 0..n-1. The modulo bias is accepted, as in the C code. `?1` is a runtime error (user, 6.4: "?1 is for the future, it can stay unused/rterror";
+  an idea that was not taken: let `?1` repeat the last raw number).
 - `?0`: the next 64 bits as a signed int. `?m` (int m < 0): the state becomes -m and the result is 0: "half the range, not all cases, but it's ok" (a seed is
   a positive 63-bit number; for the smallest int the negation wraps to 2^63, so that case is also a valid state).
 - `?x` (float x > 0.0): ((next >> 11) * 2^-53) * x, which is exact for the 53-bit part; if rounding made the result reach x it becomes nextafter(x, 0.0) (the number below x,
-  i.e. one less in the bit pattern). For x <= 0.0 nothing is checked: the C code is followed literally (x = 0.0 gives 0.0, a negative x gives a number next to x, NaN gives NaN);
-  the reference says "not defined". Alternative: a runtime error, not asked for.
+  i.e. one less in the bit pattern). Version 6.4 (user): `?0.0`, a negative float and NaN are runtime errors ("bad argument of '?'"); before, the C code was followed literally.
 - Determinism (user): the state at the start of every program is the constant 0x123456789ABCDEF0, so a program always gets the same numbers (useful for tests). The user plans a time() later
   and then the seed can come from the clock: "when we implement time(), we'll see". The state is 8 bytes in .data (offset 0x40), its initial value is written into the data image by build_pe.
 - Parsing: after an operand `?` is the conditional operator, where an operand is expected it is the unary random operator (the same trick as for `^` and `\`). It binds like the other unary
   operators (tighter than `^`). `??5` works (the inner number is the argument). Type: the type of the operand (int -> int, float -> float), decided at compile time.
-- My choices where the user said nothing: `?x` as a statement gives no "value not used" warning (it is the way to set the seed); `?` is not allowed in a constant expression (a constant must not
-  depend on a generator); the three routines (rt_next_u64, rt_rand_int, rt_rand_float) are hand-assembled in ka.py like the rest of the runtime, not generated from float_rt.asm.
+- The three routines (rt_next_u64, rt_rand_int, rt_rand_float) are hand-assembled in ka.py like the rest of the runtime, not generated from float_rt.asm. `?x` as a statement is an ordinary expression
+  statement (no warnings are issued by default). `?x` may be used in a constant (user, 6.4: a constant is a variable assigned once at run time).
 - Tests: tests/62_random.ka. The expected numbers come from an independent Python version of the C code, not from the compiler.

@@ -1,0 +1,2 @@
+function f(n): m = 2 * n; m   -- the value of `m` is not used: no warning (the warning is off by default)
+print f(2)                     -- => 0
