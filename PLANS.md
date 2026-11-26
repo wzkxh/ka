@@ -26,6 +26,7 @@
 - print --> put;
 - arrays (lists); literals 1 2 3 \_4, 5.0 6 \_7, [5.0,6,\_7], ["s","tt"];
 - array generator 0$100, 1.0$10, ""$5, 1 2 3$20 (n$data or data$n?);
+- print -0.0 as 0.0;
 - shape $a;
 - dictionaries, sets, tuples;
 - structures; classes;
