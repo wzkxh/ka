@@ -1,28 +1,28 @@
-# NOTES for Claude (working notes on the Ka compiler)
+# NOTES for Claude (working notes on the Kota compiler)
 
-Read this first in every new session, then LANGUAGE.md (the language), then skim `ka.py`.
+Read this first in every new session, then LANGUAGE.md (the language), then skim `kota.py`.
 Reasons behind decisions: IMPLEMENTATION.txt. History and state: RELEASE_NOTES.md. Plans of the owner: PLANS.md; the next tasks are given in the chat.
-(The language was called "Tiny" with extension `.tiny` until version 2, when it became Ka / `.ka`.)
+(The language was called "Tiny" with extension `.tiny` until version 2, when it became Ka / `.ka` (compiler `ka.py`); in version 7.0 it became Kota / `.ko` (compiler `kota.py`).)
 
 ## 0. Working agreement and rules for the files
 - The user designs the language, runs `python rt.py` on real Windows and pastes failures. Claude cannot run Windows; Claude checks code with the
   Unicorn emulator (`tools/emu.py`; `pip install unicorn pefile`, `python rt.py --emu`). Keystone (`pip install keystone-engine`) is only needed to rebuild the float runtime.
 - The compiler stays a single file, pure Python 3, no dependencies, emitting the PE itself.
-- Every language change = `ka.py` + `LANGUAGE.md` + tests, and a line in `RELEASE_NOTES.md`; decisions and their reasons go to `IMPLEMENTATION.txt`.
+- Every language change = `kota.py` + `LANGUAGE.md` + tests, and a line in `RELEASE_NOTES.md`; decisions and their reasons go to `IMPLEMENTATION.txt`.
 - **Document split:** LANGUAGE.md = short exact definition, no "why". IMPLEMENTATION.txt = decisions, reasons, alternatives, issues. NOTES.md = this file, how the
   code works. RELEASE_NOTES.md = versions, newest first, with the current state. PLANS.md = the owner's list of plans and ideas (the user maintains it; the next tasks come in the chat).
   README.md = what the files are and how to run.
-- **Version:** the `VERSION` constant in `ka.py` (no command line option for it, the user asked for none). Bump it for every delivery to the user and add an entry on top of RELEASE_NOTES.md.
-- **Style:** 2 spaces per indentation level in `.py` and `.ka` files (also continuation lines). Tests carry `-- =>` comments with the result of a statement
+- **Version:** the `VERSION` constant in `kota.py` (no command line option for it, the user asked for none). Bump it for every delivery to the user and add an entry on top of RELEASE_NOTES.md.
+- **Style:** 2 spaces per indentation level in `.py` and `.ko` files (also continuation lines). Tests carry `-- =>` comments with the result of a statement
 - **Brackets (user, 6.3):** blanks between arguments -> blanks also after `(` and before `)`: `f( first, second )`; short cases (a few arguments, short names) -> no blanks: `f(a,b)`, `fn(T1,T2)->R`.
   Same for `[]`. Use it in new code and docs; fix old code only when it is free.
   (`python tools/annotate_tests.py [names] [--whole-output]` adds them from the real behaviour, `--check` verifies that the existing ones still tell the truth: run it after a change of behaviour; read the result critically) and `-- ERROR: ...` at the failing line of `err_*` tests.
 - Expected outputs are derived by hand or by an independent reference (Python), not copied from the compiler: a wrong expectation was found several times.
 - The user thinks in small steps, wants "as simple as you can", accepts pragmatic limits and says what may be skipped. Ask before big redesigns; do the whole job of a
   requested feature (parser, checker, codegen, docs, tests). Keep answers short: what changed, notable behaviour/limits, open questions, how it was verified.
-- End of a session: update docs and tests, bump version, zip (`ka.zip`, not 7z), present it.
+- End of a session: update docs and tests, bump version, zip (`kota.zip`, not 7z), present it.
 
-## 1. Pipeline (ka.py)
+## 1. Pipeline (kota.py)
 `strip_comments` -> `tokenize` -> `Parser` (AST of tuples + `Scope` objects) -> `Checker` (static types) -> `InitCheck` (assigned before use) -> `CodeGen.analyze` (captures) -> `CodeGen` (x86-64 bytes via `Asm`)
 -> `build_pe` (PE32+ writer). `compile_source(src, warnings=None)` does it all; `CompileError` carries messages `line N: ...`; warnings are collected, never fatal.
 
@@ -102,9 +102,9 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
   (`stub_label`, `emit_uninit_stubs`) that prints `runtime error: variable 'x' is not initialized`. `CHECK_INIT = False` removes the flags.
 - Random numbers: `("rand", e)` -> `rt_rand_int` / `rt_rand_float` (operand in rax; `rt_next_u64` is SplitMix64 on the 8 bytes at `state`; a float that is not above 0.0 and NaN end in `rt_badrand`; `?1` jumps to `rt_time_us`; a str/text operand calls `rt_time_str`/`rt_time_text`, see Time below); written in `runtime()` with the compact bracket style.
 - Program start: GetStdHandle(stdout), `SetConsoleOutputCP(65001)`, GetProcessHeap.
-- **Float runtime** (`FLOAT_RT` between the BEGIN/END markers in ka.py): machine code generated from `tools/float_rt.asm` by `tools/build_float_rt.py` (Keystone assembles single instructions; the script does labels
+- **Float runtime** (`FLOAT_RT` between the BEGIN/END markers in kota.py): machine code generated from `tools/float_rt.asm` by `tools/build_float_rt.py` (Keystone assembles single instructions; the script does labels
   and rel32 jumps). `rt_fmt_float` (rax = bits, rdx = buffer -> rax = length), `rt_fpow` (xmm0, xmm1 -> xmm0, edx = error code), `rt_fmod` (exact integer algorithm). They set the x87 control word themselves.
-  `rt_print_float` (in `runtime()`) calls `rt_fmt_float` and `rt_print_str`. Edit the .asm, run `python tools/build_float_rt.py` (rewrites ka.py between the markers), then `python tools/fuzz_float.py`.
+  `rt_print_float` (in `runtime()`) calls `rt_fmt_float` and `rt_print_str`. Edit the .asm, run `python tools/build_float_rt.py` (rewrites kota.py between the markers), then `python tools/fuzz_float.py`.
 
 ### PE writer (`build_pe`)
 - Sections `.text` (RX) at 0x1000, `.idata` (RW), `.data` (RW). ImageBase 0x140000000, no relocs, console subsystem, 1 MB stack. kernel32 imports (`IMPORTS`): GetStdHandle, WriteFile, SetConsoleOutputCP,
@@ -113,14 +113,14 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
   inside strings is fine). String objects of the program (`bstr:i`, `btext:i`, 8-aligned, `[u64 length][bytes or u32s]`) follow them; the empty string has no object. Strings 0..6 are reserved for the runtime (newline, division by zero, unset function, negative exponent, bad power, bad `?` argument, out of memory); the "not initialized" messages are appended by the code generator.
 
 ## 2. Testing and tools
-- `python rt.py [-k name] [-v] [--emu] [--keep]`; the programs are `tests/NAME.ka`, what they must give is in `tests/results/` (`NAME.expected/.exit/.warn`, `err_NAME.error`); see the header of rt.py. Output is compared as raw bytes.
+- `python rt.py [-k name] [-v] [--emu] [--keep]`; the programs are `tests/NAME.ko`, what they must give is in `tests/results/` (`NAME.expected/.exit/.warn`, `err_NAME.error`); see the header of rt.py. Output is compared as raw bytes.
 - The emulator fakes kernel32 and asserts 16-byte stack alignment at every API call. It starts with a 64-bit x87 precision (real Windows: 53); QEMU's x87 transcendental functions are only ~4e-15 accurate.
 - When adding a feature add tests for normal use, interaction with blocks/continuation lines, error messages, and a regression for every bug found. Write `-- =>` comments (or run tools/annotate_tests.py).
-- **Time runtime** (`TIME_RT` between its markers in ka.py): `rt_utf8_to_text`, `rt_text_to_utf8`, `rt_time_format` from `tools/time_rt.asm` (same build script, `python tools/build_float_rt.py` does both files);
+- **Time runtime** (`TIME_RT` between its markers in kota.py): `rt_utf8_to_text`, `rt_text_to_utf8`, `rt_time_format` from `tools/time_rt.asm` (same build script, `python tools/build_float_rt.py` does both files);
   `rt_time_us`, `rt_time_text`, `rt_time_str` (Windows calls, allocation) are in `runtime()`. `python tools/fuzz_time.py` checks the formatting at fixed times; `emu.run_pe(..., now=datetime, unix_us=n)` fixes the clock.
 - `tools/fuzz_float.py [count]` checks the float routines; `tools/annotate_tests.py` adds result comments; `tools/build_float_rt.py` rebuilds the float runtime.
 
 ## 3. Session checklist
 1. The user uploads the zip/folder. Unzip; read NOTES.md, RELEASE_NOTES.md, LANGUAGE.md, PLANS.md; `pip install unicorn pefile keystone-engine`; run `python rt.py --emu`.
 2. Implement the requested changes; run all tests; add/adjust tests (with comments) and docs (see 0); bump `VERSION`.
-3. Re-zip (`ka.zip`), present it, summarise what to check on Windows and any open question.
+3. Re-zip (`kota.zip`), present it, summarise what to check on Windows and any open question.

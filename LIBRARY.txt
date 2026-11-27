@@ -1,6 +1,6 @@
-LIBRARY - the runtime of the Ka compiler as readable C code
+LIBRARY - the runtime of the Kota compiler as readable C code
 ============================================================
-The machine code of these routines is written by hand in ka.py (function runtime() and the code generator) or generated from tools/float_rt.asm and tools/time_rt.asm. This file says
+The machine code of these routines is written by hand in kota.py (function runtime() and the code generator) or generated from tools/float_rt.asm and tools/time_rt.asm. This file says
 what every routine does, in C, for people. It is not compiled. When a routine changes, change it here too.
 
 Conventions
@@ -194,7 +194,7 @@ double rt_rand_float(double x)                       // rax = bits of x, result 
 }
 
 
-6a. Time (rt_time_us, rt_time_text, rt_time_str in ka.py; the three others in tools/time_rt.asm)
+6a. Time (rt_time_us, rt_time_text, rt_time_str in kota.py; the three others in tools/time_rt.asm)
 ---------------------------------------------------------------------------------------------------
 int64_t rt_time_us(void)                             // ?1
 {

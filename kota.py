@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-ka - a compiler for the language "Ka" that produces a native Windows x64 console
+kota - a compiler for the language "Kota" that produces a native Windows x64 console
 executable (PE32+) directly. Pure Python 3, no dependencies (the compiler runs on any
 OS; the produced .exe runs on Windows).
 
 Usage:
-    python ka.py program.ka              -> program.exe
-    python ka.py program.ka -o out.exe
+    python kota.py program.ko              -> program.exe
+    python kota.py program.ko -o out.exe
 
 The language is described in LANGUAGE.md. Pipeline:
     strip comments -> tokenize (NEWLINE/INDENT/DEDENT) -> parse to AST (tuples)
@@ -19,7 +19,7 @@ import struct
 import sys
 
 
-VERSION = "6.9"                         # see RELEASE_NOTES.md
+VERSION = "7.0"                         # see RELEASE_NOTES.md
 CHECK_INIT = True                       # runtime checks of variables that are not provably assigned (see InitCheck); a mode to switch off later
 WARN_UNUSED_VALUE = False               # warning for an expression statement that is not a call; off by default
 
@@ -3116,7 +3116,7 @@ def compile_source(src, warnings=None):
 
 
 def main():
-  ap = argparse.ArgumentParser(description="Compile a Ka program to a Windows x64 .exe")
+  ap = argparse.ArgumentParser(description="Compile a Kota program to a Windows x64 .exe")
   ap.add_argument("source")
   ap.add_argument("-o", "--output")
   args = ap.parse_args()

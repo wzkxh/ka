@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dev tool: run the float runtime routines (from ka.py's FLOAT_RT, or from /tmp/blobs.pkl with --pkl) in Unicorn on many values
+"""Dev tool: run the float runtime routines (from kota.py's FLOAT_RT, or from /tmp/blobs.pkl with --pkl) in Unicorn on many values
 and compare with Python. Usage: python tools/fuzz_float.py [count]   (needs unicorn)"""
 import math, os, pickle, random, struct, sys
 from unicorn import Uc, UC_ARCH_X86, UC_MODE_64
@@ -10,8 +10,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 def load_blobs():
   if "--pkl" in sys.argv:
     return pickle.load(open("/tmp/blobs.pkl", "rb"))
-  import ka
-  return ka.FLOAT_RT
+  import kota
+  return kota.FLOAT_RT
 
 CODE, STACK, BUF = 0x10000, 0x200000, 0x300000
 

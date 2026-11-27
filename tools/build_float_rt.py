@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Dev tool: assemble tools/float_rt.asm and tools/time_rt.asm and put the machine code into ka.py between the BEGIN/END FLOAT_RT and TIME_RT markers.
-Needs `pip install keystone-engine`; NOT needed to use the compiler (ka.py already contains the bytes).
+"""Dev tool: assemble tools/float_rt.asm and tools/time_rt.asm and put the machine code into kota.py between the BEGIN/END FLOAT_RT and TIME_RT markers.
+Needs `pip install keystone-engine`; NOT needed to use the compiler (kota.py already contains the bytes).
 Keystone assembles the single instructions; jumps and labels are handled here (every jump is a rel32)."""
 import os, re, struct, sys
 import keystone
@@ -71,14 +71,14 @@ def render(blobs, name, asm_file):
 FILES = (("FLOAT_RT", "float_rt.asm"), ("TIME_RT", "time_rt.asm"))
 
 if __name__ == "__main__":
-  path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ka.py")
+  path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "kota.py")
   text = open(path).read()
   for name, asm_file in FILES:
     blobs = build(asm_file)
     if "--print" in sys.argv:
       print(render(blobs, name, asm_file)); continue
     if f"# ---- BEGIN {name}" not in text:
-      raise SystemExit(f"markers {name} not found in ka.py")
+      raise SystemExit(f"markers {name} not found in kota.py")
     text = re.sub(rf"# ---- BEGIN {name}.*?# ---- END {name}", lambda m: render(blobs, name, asm_file), text, flags=re.S)
     print(name, {k: len(v) for k, v in blobs.items()}, "bytes")
   if "--print" not in sys.argv:

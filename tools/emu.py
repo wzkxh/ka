@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-emu.py - run a Windows x64 console .exe produced by ka.py inside a CPU emulator
+emu.py - run a Windows x64 console .exe produced by kota.py inside a CPU emulator
 (Unicorn), with fake kernel32 functions. Lets the compiler be tested on Linux/macOS
 (or by Claude in its sandbox). Windows itself remains the final word.
 

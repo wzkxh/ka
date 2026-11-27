@@ -2,7 +2,7 @@
 if "%~1"=="" goto run_sequence
 
 REM Executed when an argument is provided
-ka.py %1.ka
+kota.py %1.ko
 timer %1.exe
 del %1.exe
 goto :eof

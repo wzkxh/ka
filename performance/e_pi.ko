@@ -24,8 +24,8 @@ function main():
   e_val = compute_e(20)
   pi_val = compute_pi(iterations)
   print(e_val)  -- 2.7182818284590455 py
-                -- 2.71828182845905   ka
+                -- 2.71828182845905   kota
   print(pi_val) -- 3.1415926335902506 py
-                -- 3.14159263359025   ka
+                -- 3.14159263359025   kota
 
 main() -- 4.746 0.542 (8.7x)

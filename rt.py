@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-rt.py (run tests) - compile every tests/*.ka, run the program, compare with expectations.
+rt.py (run tests) - compile every tests/*.ko, run the program, compare with expectations.
 
     python rt.py              run everything (on Windows: really runs the .exe files)
     python rt.py -k closure   only tests whose name contains "closure"
@@ -10,12 +10,12 @@ rt.py (run tests) - compile every tests/*.ka, run the program, compare with expe
     python rt.py --keep       keep the generated .exe files in ./build
 
 Test files (same base name; the programs are in tests/, everything else in tests/results/):
-    tests/NAME.ka                program
+    tests/NAME.ko                program
     tests/results/NAME.expected  expected stdout            (runtime tests)
     tests/results/NAME.in        stdin to feed              (optional)
     tests/results/NAME.exit      expected exit code         (optional, default 0)
     tests/results/NAME.warn      text that must appear in a compiler warning (optional)
-    tests/err_NAME.ka + tests/results/err_NAME.error : the compiler must FAIL, and its message must
+    tests/err_NAME.ko + tests/results/err_NAME.error : the compiler must FAIL, and its message must
                                      contain the text in the .error file (first line)
 """
 import argparse
@@ -29,7 +29,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "tools"))
-import ka  # noqa: E402
+import kota  # noqa: E402
 
 
 def read(path, mode="r"):
@@ -58,14 +58,14 @@ def run_exe(exe, stdin, emu):
 
 
 def run_one(path, outdir, emu):
-  name = os.path.basename(path)[:-len(".ka")]
+  name = os.path.basename(path)[:-len(".ko")]
   base = os.path.join(os.path.dirname(path), "results", name)      # expectations: tests/results/NAME.*
   src = read(path)
   warnings = []
   try:
-    exe_bytes = ka.compile_source(src, warnings)
+    exe_bytes = kota.compile_source(src, warnings)
     compile_error = None
-  except ka.CompileError as e:
+  except kota.CompileError as e:
     exe_bytes, compile_error = None, str(e)
 
   if name.startswith("err_"):
@@ -109,7 +109,7 @@ def main():
     print("note: not Windows, using --emu automatically")
     args.emu = True
 
-  tests = sorted(p for p in glob.glob(os.path.join(HERE, "tests", "*.ka"))
+  tests = sorted(p for p in glob.glob(os.path.join(HERE, "tests", "*.ko"))
                  if args.k in os.path.basename(p))
   outdir = os.path.join(HERE, "build") if args.keep else tempfile.mkdtemp(prefix="katests_")
   os.makedirs(outdir, exist_ok=True)

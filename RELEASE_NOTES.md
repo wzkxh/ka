@@ -1,12 +1,16 @@
-# Ka - release notes (newest first)
+# Kota - release notes (newest first)
 
-## Current state (version 6.9)
-Ka compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3, no dependencies). The version is the `VERSION` constant in `ka.py`.
+## Current state (version 7.0)
+Kota compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3, no dependencies). The version is the `VERSION` constant in `kota.py`.
 - **Language:** 64-bit ints and floats, first-class functions and closures (shared by reference, never freed), static type inference, constants, byte strings (`str`) and unicode strings (`text`) as values.
   Details: LANGUAGE.md. Reasons: IMPLEMENTATION.txt.
 - **Tests:** 223 programs in `tests/` with their expected results in `tests/results/` (all pass under the emulator on Linux; the user runs them on real Windows). Every test has `-- =>` result comments.
-- **Checked on real Windows by the user:** all 223 tests of version 6.9 passed.
+- **Checked on real Windows by the user:** all 223 tests of version 7.0 passed.
 - **Known limits:** see IMPLEMENTATION.txt section 9 (float printing last digit, fractional float powers checked only in an emulator, strings can only be built by `+` and compared, no input, no GC).
+
+## Version 7.0
+- **The language is called Kota** (was Ka): source files are `.ko` (was `.ka`), the compiler is `kota.py` (was `ka.py`), the Python module is `kota`. Docs, sources, tools, test and benchmark
+  names are renamed; nothing else changed (the 223 tests pass as before). Older entries below keep the names of their time (`ka.py`, `.ka`).
 
 ## Version 6.9
 - **`?1` is the time:** microseconds since 1970-01-01 UTC (`GetSystemTimePreciseAsFileTime`). It was a runtime error.

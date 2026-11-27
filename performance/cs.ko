@@ -1,4 +1,4 @@
--- py 4.979 ka 1.041 (4.8x)
+-- py 4.979 kota 1.041 (4.8x)
 
 function collatz_steps(n):
   steps = 0

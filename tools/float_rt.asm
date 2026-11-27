@@ -1,4 +1,4 @@
-;;; Float runtime of Ka. Intel syntax, assembled with Keystone by tools/build_float_rt.py; the bytes are embedded in ka.py.
+;;; Float runtime of Kota. Intel syntax, assembled with Keystone by tools/build_float_rt.py; the bytes are embedded in kota.py.
 ;;; Each routine is position independent and self-contained (no calls). Only rbp/rsp are preserved: generated code uses
 ;;; nothing but rax, rcx, rdx, rbp, rsp, so the routines may use every other register.
 ;;;

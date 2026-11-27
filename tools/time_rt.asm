@@ -1,6 +1,6 @@
-;;; Time and text runtime of Ka (version 6.9). Intel syntax, assembled with Keystone by tools/build_float_rt.py; the bytes are embedded in ka.py.
+;;; Time and text runtime of Kota (version 6.9). Intel syntax, assembled with Keystone by tools/build_float_rt.py; the bytes are embedded in kota.py.
 ;;; Same rules as float_rt.asm: position independent, self-contained (no calls, no imports), every register except rbp and rsp may be changed.
-;;; The Windows calls and the allocation are in ka.py (rt_time_us, rt_time_text, rt_time_str); these routines only compute, on buffers that exist already.
+;;; The Windows calls and the allocation are in kota.py (rt_time_us, rt_time_text, rt_time_str); these routines only compute, on buffers that exist already.
 ;;;
 ;;; rt_utf8_to_text   in: rsi = bytes, rcx = number of bytes, rdi = u32 buffer, rdx = room (code points)   out: rax = code points written
 ;;;   Decodes UTF-8. A byte that is not part of a valid sequence (a stray continuation byte, a truncated or overlong sequence, a surrogate, above 10FFFF)

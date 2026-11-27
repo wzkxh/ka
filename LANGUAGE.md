@@ -1,7 +1,7 @@
-# Ka - language reference
+# Kota - language reference
 
-Ka is a small imperative language with 64-bit integers and floats, first-class functions and closures, checked by static types.
-`ka.py` compiles a `.ka` source file into a Windows x64 console `.exe` (the version is the `VERSION` constant at the top of `ka.py`).
+Kota is a small imperative language with 64-bit integers and floats, first-class functions and closures, checked by static types.
+`kota.py` compiles a `.ko` source file into a Windows x64 console `.exe` (the version is the `VERSION` constant at the top of `kota.py`).
 This file defines the language; the reasons behind the decisions are in IMPLEMENTATION.txt, the history in RELEASE_NOTES.md.
 
 ## 1. Lexical structure
@@ -36,7 +36,7 @@ This file defines the language; the reasons behind the decisions are in IMPLEMEN
   - A literal is a value: `s = 'abc'`, `NAME = "text"`, `f('x')`. `''` and `""` are the empty string.
   - Output is written as UTF-8 bytes (a `str` as it is, a `text` encoded); the program sets the console code page to UTF-8 at start.
 - **Compatibility forms:** `# ` comments and `0x` hex literals exist only to ease the migration of existing sources and programs from other languages, and for the
-  ease of copying code and constants between them. They are not Ka style and are discouraged in new programs: write `--` comments and `#ff` / `2#...` literals.
+  ease of copying code and constants between them. They are not Kota style and are discouraged in new programs: write `--` comments and `#ff` / `2#...` literals.
 - **Operators / punctuation:** `+ - * / \ % ^ & | ~ << >> +> <* *> == != < <= > >= && || ! ? = ( ) { } ; , : @`
   and the assignment forms `= += -= *= /= \= %= ^= &= |= ~= &&= ||= <<= >>= +>= <*= *>=`.
 
@@ -241,7 +241,7 @@ Written to standard output, exit code 1:
 Very deep recursion overflows the 1 MB stack and crashes.
 
 ## 9. Compile errors and warnings
-`file: error: line N: message`, `file: warning: line N: message`. The texts are fixed by `tests/err_*.ka` and their `tests/results/err_*.error` files (`.warn` for warnings).
+`file: error: line N: message`, `file: warning: line N: message`. The texts are fixed by `tests/err_*.ko` and their `tests/results/err_*.error` files (`.warn` for warnings).
 - *lexical:* `unexpected character '\t'`, `string is not closed`, `bad escape ^q`, `bad unicode escape`, `cannot join '...' and "..." strings`,
   `comment '--[[' is never closed`, `bad number '12ab'` (with a hint for `1__0` and `0b101`), `bad hex literal` (`#` and `0x` forms), `hex literal too large`, `bad binary literal`, `binary literal too large`,
   `bad number '1.5abc...'`, `a float needs digits after the dot` / `before the dot`, `float literal too large`, `integer literal too large`.

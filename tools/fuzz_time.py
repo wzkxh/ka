@@ -4,7 +4,7 @@ Needs `pip install unicorn pefile`. Usage: python tools/fuzz_time.py [number of 
 import datetime, os, random, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import ka, emu
+import kota, emu
 
 NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
@@ -43,7 +43,7 @@ def main():
   src = ""
   for f in fmts:
     src += f"print ?'{f}'\nprint ?\"{f}\"\n"
-  open("/tmp/fuzz_time.exe", "wb").write(ka.compile_source(src))
+  open("/tmp/fuzz_time.exe", "wb").write(kota.compile_source(src))
   times = [datetime.datetime(2026, 11, 26, 23, 35, 58, 296000), datetime.datetime(2027, 1, 1, 0, 0, 0, 5000),
            datetime.datetime(2099, 12, 31, 9, 7, 5, 999000), datetime.datetime(2026, 11, 29, 12, 1, 2, 70000),
            datetime.datetime(2030, 2, 4, 4, 4, 4, 4000), datetime.datetime(2026, 11, 30, 0, 59, 0, 100000)]

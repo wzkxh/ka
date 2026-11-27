@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Dev tool: add result comments to the test programs (tests/*.ka), taken from what the compiled program really does.
+"""Dev tool: add result comments to the test programs (tests/*.ko), taken from what the compiled program really does.
   python tools/annotate_tests.py [name ...] [--whole-output]
   python tools/annotate_tests.py --check [name ...]      only check that every `-- =>` comment tells what the program really prints
 - a `print ...` statement at the start of a line gets `-- => <its output>` (when it prints exactly one line);
-- a `err_*.ka` test gets `-- ERROR: <expected message>` on the line where the compiler reports the error;
+- a `err_*.ko` test gets `-- ERROR: <expected message>` on the line where the compiler reports the error;
 - an `exit N` line of a test with an .exit file gets `-- => exit code N`;
 - with --whole-output, a test with output that no comment explains gets the whole output as a comment block at the end.
 Lines that already have a `=>` / `ERROR:` note are left alone, so it can be run again after adding tests. Needs unicorn (emulator)."""
@@ -12,7 +12,7 @@ import glob, os, re, sys, tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
-import ka, emu
+import kota, emu
 
 TESTS = os.path.join(HERE, "..", "tests") + os.sep
 RESULTS = TESTS + "results" + os.sep                   # .expected / .exit / .error files
@@ -61,7 +61,7 @@ def has_semicolon(code):
 def run_src(src):
   with tempfile.TemporaryDirectory() as d:
     exe = os.path.join(d, "t.exe")
-    open(exe, "wb").write(ka.compile_source(src))
+    open(exe, "wb").write(kota.compile_source(src))
     return emu.run_pe(exe)
 
 
@@ -79,9 +79,9 @@ def print_lines(lines, stripped):
 
 
 def annotate_runtime_test(name, whole_output, wrong=None):
-  path = TESTS + name + ".ka"
+  path = TESTS + name + ".ko"
   lines = open(path, newline="").read().split("\n")
-  stripped = ka.strip_comments("\n".join(lines)).split("\n")
+  stripped = kota.strip_comments("\n".join(lines)).split("\n")
   cands = list(print_lines(lines, stripped))
   inst = list(lines)
   for n, (i, code) in enumerate(cands):                  # mark every candidate print with a unique marker in the output
@@ -115,7 +115,7 @@ def annotate_runtime_test(name, whole_output, wrong=None):
         said = re.split(r"\s+\((?!exit code)", old.split("=>", 1)[1].strip(), 1)[0].strip()   # the value, without a parenthesised explanation
         shown = text + (f" (exit code {exit_code})" if text.startswith("runtime error") and exit_code else "")
         if said != shown:
-          wrong.append(f"{name}.ka:{i + 1}: the comment says `{said}`, the program prints `{shown}`")
+          wrong.append(f"{name}.ko:{i + 1}: the comment says `{said}`, the program prints `{shown}`")
       continue
     if idx >= 0 and ("=>" in old or text in old):          # already said (by a person or an earlier run)
       continue
@@ -140,15 +140,15 @@ def annotate_runtime_test(name, whole_output, wrong=None):
 
 
 def annotate_error_test(name):
-  path = TESTS + name + ".ka"
+  path = TESTS + name + ".ko"
   src = open(path, newline="").read()
   if "ERROR:" in src:
     return None
   want = open(RESULTS + name + ".error").read().strip()
   try:
-    ka.compile_source(src)
+    kota.compile_source(src)
     return None
-  except ka.CompileError as e:
+  except kota.CompileError as e:
     msg = str(e)
   m = re.match(r"line (\d+): ", msg)
   lines = src.split("\n")
@@ -161,9 +161,9 @@ def annotate_error_test(name):
   new = list(lines)
   new[n] = (lines[n].rstrip() if idx < 0 else lines[n][:idx]) + ("  " if idx < 0 else "") + note
   try:
-    ka.compile_source("\n".join(new))
+    kota.compile_source("\n".join(new))
     return None
-  except ka.CompileError as e:
+  except kota.CompileError as e:
     if str(e) != msg:                                     # the comment itself changes the error: leave it to a human
       print("  the note would change the error, do it by hand:", name)
       return None
@@ -172,7 +172,7 @@ def annotate_error_test(name):
 
 def main():
   args = [a for a in sys.argv[1:] if not a.startswith("--")]
-  names = args or sorted(os.path.basename(p)[:-3] for p in glob.glob(TESTS + "*.ka"))
+  names = args or sorted(os.path.basename(p)[:-3] for p in glob.glob(TESTS + "*.ko"))
   if "--check" in sys.argv:
     wrong = []
     for name in names:
@@ -184,7 +184,7 @@ def main():
   for name in names:
     res = annotate_error_test(name) if name.startswith("err_") else annotate_runtime_test(name, "--whole-output" in sys.argv)
     if res and res[0] != res[1]:
-      open(TESTS + name + ".ka", "w", newline="").write("\n".join(res[0]))
+      open(TESTS + name + ".ko", "w", newline="").write("\n".join(res[0]))
       changed += 1
   print("changed", changed, "tests")
 
