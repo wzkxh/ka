@@ -24,7 +24,7 @@ import tempfile
 import time
 
 
-VERSION = "7.2"                         # see RELEASE_NOTES.md
+VERSION = "7.3"                         # see RELEASE_NOTES.md
 CHECK_INIT = True                       # runtime checks of variables that are not provably assigned (see InitCheck); a mode to switch off later
 WARN_UNUSED_VALUE = False               # warning for an expression statement that is not a call; off by default
 CHECK_ASSERTS = True                    # `assert` statements are checked at run time; False: they are parsed and dropped (no code, nothing evaluated)
@@ -306,7 +306,7 @@ def tokenize(src):
 #     ("fn", Scope)  ("block", stmts)  ("skip",)  ("break",)  ("continue",)
 #   expressions:
 #     ("num", n) ("flt", x) ("var", name, line, mode) ("fnlit", Scope) ("call", callee, args, line)
-#     ("bin", op, l, r) ("cmp", ops, operands) ("and"/"or", l, r) ("neg"/"not"/"bnot", e)
+#     ("bin", op, l, r) ("cmp", ops, operands) ("and"/"or", l, r) ("neg"/"not"/"bnot"/"rand"/"abs", e)
 #   mode: None = plain name, "^" = global (^x), "@" = variable of an enclosing function (@x)
 # ----------------------------------------------------------------------------
 INT_MAX = 2 ** 63 - 1
@@ -731,7 +731,7 @@ class Parser:
         self.i += 2
         return self.assign(t1[1], v)
       return self.expr_stmt()
-    if k in ("num", "hex", "flt") or (k == "op" and v in ("(", "-", "!", "~", "?")):
+    if k in ("num", "hex", "flt") or (k == "op" and v in ("(", "-", "!", "~", "?", "|")):
       return self.expr_stmt()
     self.err(f"unexpected {describe(self.peek())}")
 
@@ -915,6 +915,8 @@ class Parser:
       return ("bnot", self.unary())
     if self.accept("?"):                            # a random number; after an operand `?` is the conditional
       return ("rand", self.unary())
+    if self.accept("|"):                            # |x: the absolute value of a number, the length of a str or a text (after an operand `|` is bitwise or)
+      return ("abs", self.unary())
     return self.postfix()
 
   def postfix(self):                                  # calls:  f(x)  f(x)(y)  (\\a: =a)(1)
@@ -1175,6 +1177,15 @@ class Checker(Resolver):
         return False
       self.need_num(t, c[2], c[3], len(c) > 4 and c[4])
       return True
+    if kind == "abs":
+      _, res, t, line = c
+      t = prune(t)
+      if t.kind == "var":
+        return False
+      if t.kind == "fn":
+        self.err(line, f"type mismatch in operand of '|': expected a number or a string, found {show(t)}")
+      self.unify(res, FLOAT if t.kind == "float" else INT, line, "")
+      return True
     if kind == "order":                 # numbers (any mix) or two strings of the same kind
       _, a, b, line, op = c
       a, b = prune(a), prune(b)
@@ -1403,6 +1414,10 @@ class Checker(Resolver):
     if k == "bnot":
       self.operand(e[1], sc, line, "operand of '~'")
       return INT
+    if k == "abs":                      # |x: int -> int, float -> float, str or text -> int (the length)
+      res = Ty("var")
+      self.constrain(("abs", res, self.expr(e[1], sc, line), line))
+      return res
     raise AssertionError(k)
 
 
@@ -1857,7 +1872,7 @@ class CodeGen(Resolver):
     elif k == "cond":
       for x in e[1:]:
         self.a_expr(x, sc)
-    elif k in ("neg", "not", "bnot", "rand"):
+    elif k in ("neg", "not", "bnot", "rand", "abs"):
       self.a_expr(e[1], sc)
     elif k == "fnlit":
       self.analyze(e[1].body, e[1])
@@ -2102,6 +2117,20 @@ class CodeGen(Resolver):
     elif k == "bnot":
       self.expr(e[1])
       a.emit(0x48, 0xF7, 0xD0)                         # not rax
+    elif k == "abs":                                     # |x
+      self.expr(e[1])
+      tx = self.tk(e[1])
+      if tx == "float":
+        a.emit(0x48, 0x0F, 0xBA, 0xF0, 0x3F)           # btr rax,63   (clear the sign bit)
+      elif tx in ("str", "text"):                        # the length is the first word of the object; the empty string is 0
+        a.emit(0x48, 0x85, 0xC0)                       # test rax,rax
+        a.emit(0x74, 0x03)                             # jz  +3
+        a.emit(0x48, 0x8B, 0x00)                       # mov rax,[rax]
+      else:
+        a.emit(0x48, 0x89, 0xC1)                       # mov rcx,rax
+        a.emit(0x48, 0xC1, 0xF9, 0x3F)                 # sar rcx,63   (all ones if negative)
+        a.emit(0x48, 0x31, 0xC8)                       # xor rax,rcx
+        a.emit(0x48, 0x29, 0xC8)                       # sub rax,rcx
     elif k == "rand":                                    # ?x
       self.expr(e[1])
       a.call({"float": "rt_rand_float", "str": "rt_time_str", "text": "rt_time_text"}.get(self.tk(e[1]), "rt_rand_int"))

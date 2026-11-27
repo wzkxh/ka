@@ -1,0 +1,7 @@
+function f(s):
+  print s+'!'
+function g(s):
+  print s+'!'
+
+f('aa')
+g("aa")  -- ERROR: in argument 1 of the call: expected str, found text

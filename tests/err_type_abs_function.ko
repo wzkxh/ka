@@ -1,0 +1,2 @@
+f = \x: x
+n = |f  -- ERROR: in operand of '|'

@@ -212,3 +212,48 @@ tests-72.zip: the new tests and their expected results, at their project paths: 
 
 ---
 
+Three tasks. First I'm looking at how unary operators are parsed, typed and walked (for C), and checking which type-mismatch tests exist (for A).
+
+Status: the unary |, the type-mismatch cases and the counter example all behave as expected. I'm now writing the test files for A, B and C.
+
+249 tests pass and the comment check agrees. Now the docs: finding the operator/precedence sections.
+
+All three are done and delivered as version 7.3 (you didn't give a number). All 249 tests pass in the emulator; I haven't run it on Windows.
+
+A) Type-mismatch tests: there was none for str vs text, so I added 14 err_type_arg_* tests.
+
+Your example: it is included verbatim as err_type_arg_str_then_text. The error is line 7: type mismatch in argument 1 of the call: expected str, found text, which is exactly what you quoted.
+Other pairs: text then str, and both orders of every pair among int, float, str and text.
+Extras: a mismatch in the second parameter, and the same one-argument case with a twice function.
+
+B) Counter example: 73_oop_counter is your code as written, printing 4 and 50. I changed your -- 4 comments to -- => 4 so the comment checker reads them. I added a last case showing that each Counter() call has its own state.
+
+C) Unary |:
+
+Numbers: an int or float gives its absolute value, with the same type. The smallest int stays negative because arithmetic wraps. |-0.0 is 0.0, and the sign of NaN is cleared.
+Strings: a str gives its length in bytes and a text its length in characters, both as an int. The empty string is 0.
+Precedence: it is a prefix operator at the same level as - and !, so |x + 1 means (|x) + 1.
+No closing bar: a difference needs parentheses, |(a - b), because a closing bar would clash with bitwise or.
+Two bars in a row: ||x can't be written, since || is the logical-or token; write |(|x).
+Parameters: a function parameter that is only used as |x gets its type from the call: |"añ€" gives 3, and |-1.5 stays a float.
+Function operand: this is a compile error that names '|'.
+
+Files: the five changed files are kota.py (with VERSION = "7.3"), LANGUAGE.md, NOTES.md, IMPLEMENTATION.txt (new section 15) and RELEASE_NOTES.md. The 17 new test programs and their expected results are in tests-73.zip; unzip it in the project root.
+
+---
+
+Version 7.4. Please add prime test, for int only. Unary operator '*'
+Implementation is like this
+def is_prime(n): # int64 -> int64 (0|1)
+  if n < 66:
+    if n < 2: return 0
+    return (0x28208A20A08A28AD >> (n - 2)) & 1
+  if (n & 1) == 0 or (n % 3) == 0: return 0
+  i = 5
+  while i * i <= n:
+    if (n % i) == 0 or (n % (i + 2)) == 0: return 0
+    i += 6
+  return 1
+Please check that it's correct for numbers -2 .. 100. Add test file with these numbers too.
+
+

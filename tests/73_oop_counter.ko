@@ -1,0 +1,26 @@
+-- an "object" is a closure over private variables; the returned function is its method dispatcher
+function Counter()
+{
+  count = 0;
+
+  return function(action,value):
+    if action=='get': return count
+    if action=='set': @count = value
+    if action=='increment': @count += value
+}
+
+counter = Counter()
+
+counter('increment',1)
+counter('increment',3)
+
+print counter('get',0)    -- => 4
+
+counter('set',50)
+
+print counter('get',0)    -- => 50
+
+-- every call of Counter() makes its own object
+other = Counter()
+other('increment',7)
+print counter('get',0), ' ', other('get',0)    -- => 50 7

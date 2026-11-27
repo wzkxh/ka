@@ -16,6 +16,8 @@ Reasons behind decisions: IMPLEMENTATION.txt. History and state: RELEASE_NOTES.m
   `python tools/test_cli.py` replaces it by the emulator.
 - `assert` (version 7.2) is desugared in `Parser.stmt` to `("if", ("not", cond, "in 'assert'"), [print, exit 1], [], line)`: nothing else knows it. The third item of `"not"` is the text the checker uses in its message. `render_tokens()` makes the condition text from the tokens.
   `CHECK_ASSERTS = False` makes the parser return `("skip",)` (the expressions are parsed, neither type-checked nor compiled).
+- Unary `|x` (version 7.3) is the node `("abs", x)`: the checker has a constraint `abs` (result `res`, operand type): int -> int, float -> float, str/text -> int, a still unknown operand makes both default to int in `finish`; the code generator
+  emits `sar/xor/sub` for ints, `btr rax,63` for floats and `[rax]` (0 if rax is 0) for str/text.
 - **Version:** the `VERSION` constant in `kota.py` (no command line option for it, the user asked for none). Bump it for every delivery to the user and add an entry on top of RELEASE_NOTES.md.
 - **Style:** 2 spaces per indentation level in `.py` and `.ko` files (also continuation lines). Tests carry `-- =>` comments with the result of a statement
 - **Brackets (user, 6.3):** blanks between arguments -> blanks also after `(` and before `)`: `f( first, second )`; short cases (a few arguments, short names) -> no blanks: `f(a,b)`, `fn(T1,T2)->R`.
@@ -151,3 +153,13 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
 - `assert` is a keyword now: it cannot be a variable or function name any more (no test used it).
 - Tests: `72_assert` (passing asserts, report not evaluated, one-line body, continued lines), `rt_assert_*` (message, condition text, int and float reports, empty text, in a function), `err_type_assert_function`.
   The flag `CHECK_ASSERTS = False` was tried by hand (a failing assert is dropped, nothing runs), there is no test for it: it is a compiler constant.
+
+15. Unary | (version 7.3)
+- `|x` (user): the absolute value of numbers, the length of a str or a text. It is a prefix operator at the level of the other unary operators (`|x + 1` is `(|x) + 1`); there is no closing bar (`|a - b|` would be ambiguous with bitwise or),
+  so a difference needs parentheses: `|(a - b)`. After an operand `|` is bitwise or as before, so `6 | |-1` is `6 | (|-1)`. `||` is one token (logical or): two bars in a row, `|(|x)`, need a space or a bracket.
+- Result type: int -> int, float -> float, str and text -> int. The type of the operand may be unknown while a function body is checked (a parameter), so this is a constraint like `+` (`abs` in `Checker.step`): it is settled when the
+  parameter gets its type from a call; if it never does, int.
+- Int: `(x ^ (x >> 63)) - (x >> 63)` (arithmetic shift); the smallest int has no positive counterpart and stays negative (arithmetic wraps everywhere in the language). Float: the sign bit is cleared, so `|-0.0` is `0.0` and a NaN stays a NaN.
+- Length: the first 8 bytes of the object (section 5 of this file): the number of bytes for a str, of code points for a text; the empty string is the address 0 and has the length 0, so one test and one load, no call.
+- Tests: `74_abs_length`, `err_type_abs_function`. Also in 7.3 (user's request, same delivery): `err_type_arg_*` (a function has one signature, so the same function called with a str and then a text, an int and a str, and so on is an error:
+  both orders of every pair of int, float, str, text, with the message `in argument N of the call: expected X, found Y`), and `73_oop_counter` (an object as a closure with private state).

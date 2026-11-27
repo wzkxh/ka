@@ -1,0 +1,3 @@
+function twice(s): return s + s
+a = twice('ab')
+b = twice("é")  -- ERROR: in argument 1 of the call: expected str, found text

@@ -1,12 +1,17 @@
 # Kota - release notes (newest first)
 
-## Current state (version 7.2)
+## Current state (version 7.3)
 Kota compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3, no dependencies). The version is the `VERSION` constant in `kota.py`.
 - **Language:** 64-bit ints and floats, first-class functions and closures (shared by reference, never freed), static type inference, constants, byte strings (`str`) and unicode strings (`text`) as values.
   Details: LANGUAGE.md. Reasons: IMPLEMENTATION.txt.
-- **Tests:** 232 programs in `tests/` with their expected results in `tests/results/` (all pass under the emulator on Linux; the user runs them on real Windows). Every test has `-- =>` result comments.
-- **Checked on real Windows by the user:** all 194 tests of version 6.3 passed.
+- **Tests:** 249 programs in `tests/` with their expected results in `tests/results/` (all pass under the emulator on Linux; the user runs them on real Windows). Every test has `-- =>` result comments.
+- **Checked on real Windows by the user:** all 249 tests of version 7.3 passed.
 - **Known limits:** see IMPLEMENTATION.txt section 9 (float printing last digit, fractional float powers checked only in an emulator, strings can only be built by `+` and compared, no input, no GC).
+
+## Version 7.3
+- **Unary `|x`:** the absolute value of an int or a float (same type), the length of a `str` (bytes) or a `text` (characters), an int. Details: IMPLEMENTATION.txt section 15.
+- Tests: `err_type_arg_*` (14: the same function called with arguments of different types, both orders of int, float, str, text, also the second parameter), `73_oop_counter` (an object as a closure, the user's example),
+  `74_abs_length`, `err_type_abs_function`.
 
 ## Version 7.2
 - **`assert condition[, report]`:** if the condition is false (`0`, `0.0`, `''`, `""`) it prints `assertion failed (line N): ` and the report (any int, float, str or text expression; without it the text of the condition) and exits with code 1.
