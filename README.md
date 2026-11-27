@@ -4,7 +4,7 @@
 kota.py program.ko           # -> program.exe
 kota.py program.ko -o p.exe  # -> p.exe
 kota.py -e program.ko        # compile, run the .exe, delete it (Windows); -e -k keeps the .exe
-kota.py -c "print 1+2"       # compile the text, run, delete; -c ... -k keeps yyyymmdd_HHMMSS.exe
+kota.py -c "print 1+2"       # compile the text, run & delete .exe; -c … -k keeps yyyymmdd_HHMMSS.exe
 
 rt.py                # on Windows: compiles and RUNS every test
 rt.py -k closure -v  # subset, verbose
