@@ -1,5 +1,4 @@
 ## Not in the language (yet)
-- strings - '' and "" mean false in conditions;
 - options -e: compile, execute and delete exe; -E: as -e, leave exe;
 - option -c "...": compile string as temp file, execute, delete exe;
 - `assert` expr [, str] -- if expr is false, print str and exit w/RC 1; use it in tests;
@@ -10,7 +9,7 @@
 - multi-value assignment (a,b=x,y); returns;
 - multi-value with split (a,b,\*c = x,y,p,q,r);
 - void; fns returning void; warning about calls whose value is not used;
-- a garbage collector;
+- a garbage collector (GC); or rather reference counter;
 - str/text repetition `x*n` `n*x`;
 - float literals: #i #n #p #t #inf -#inf #nan #pi #tau (or like in J?);
 - fns floor/ceil; or <x >x;

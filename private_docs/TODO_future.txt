@@ -1,3 +1,5 @@
+split ka.py into several files?
+
 
 maybe add pragmas and options to the compiler?
 comp.tolerance, output.precision, int.overflow, assert.check
