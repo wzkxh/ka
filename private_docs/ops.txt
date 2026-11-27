@@ -32,3 +32,19 @@ maybe
 @1 - literal π, @2 - 2*π etc, or even τ
 
 () expressions  {} statements  [] index
+
+
+[e] [e:e] index or [e..e] or @e..e but bad for assignment
+1 2 _3 4           array literal
+'' 'a' 'bb' 'ccc'  string literal
+'/a/bb/ccc'%'/'    better for such case         s ~ '/ab/cde/opts' replace
+
+(,,,)
+[,,,]   array
+#()     tuple
+#[]     dict
+#{}     set
+#<>
+
+.[e] .[e:e] substring
+

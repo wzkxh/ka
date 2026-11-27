@@ -1,6 +1,6 @@
 # Kota - language reference
 
-Kota is a small imperative language with 64-bit integers and floats, first-class functions and closures, checked by static types.
+Kota is a small imperative language with 64-bit integers and floats, byte strings and unicode strings, first-class functions and closures, checked by static types.
 `kota.py` compiles a `.ko` source file into a Windows x64 console `.exe` (the version is the `VERSION` constant at the top of `kota.py`).
 This file defines the language; the reasons behind the decisions are in IMPLEMENTATION.txt, the history in RELEASE_NOTES.md.
 
@@ -34,7 +34,7 @@ This file defines the language; the reasons behind the decisions are in IMPLEMEN
   - String literals written one after another are joined: `'a' 'b' 'c'`. A string over several lines is written in parentheses
     (`print ("one" NEWLINE "two")`) or with a line ending in `,`. `'...'` and `"..."` cannot be joined.
   - A literal is a value: `s = 'abc'`, `NAME = "text"`, `f('x')`. `''` and `""` are the empty string.
-  - Output is written as UTF-8 bytes (a `str` as it is, a `text` encoded); the program sets the console code page to UTF-8 at start.
+  - Output is UTF-8: a `str` is written as it is, a `text` is encoded.
 - **Compatibility forms:** `# ` comments and `0x` hex literals exist only to ease the migration of existing sources and programs from other languages, and for the
   ease of copying code and constants between them. They are not Kota style and are discouraged in new programs: write `--` comments and `#ff` / `2#...` literals.
 - **Operators / punctuation:** `+ - * / \ % ^ & | ~ << >> +> <* *> == != < <= > >= && || ! ? = ( ) { } ; , : @`
@@ -44,8 +44,8 @@ This file defines the language; the reasons behind the decisions are in IMPLEMEN
 Five types:
 - **int** - 64-bit signed integer (two's complement, arithmetic wraps);
 - **float** - 64-bit IEEE 754 number;
-- **str** - immutable byte string; the value is a 64-bit address of `[u64 length in bytes][bytes]` (no terminator), 0 for the empty string;
-- **text** - immutable Unicode string; the value is an address of `[u64 length in characters][u32 code points]`, 0 for the empty string;
+- **str** - immutable byte string (a sequence of bytes, a zero byte is allowed); its length counts bytes;
+- **text** - immutable Unicode string (a sequence of characters, code points); its length counts characters;
 - **function** - a closure; written `fn(T1,T2)->R` in compiler messages.
 
 Types are checked at compile time, never written, and inferred:
@@ -59,9 +59,9 @@ Types are checked at compile time, never written, and inferred:
 - **Numbers** (int, float) are accepted by `+ - * / \ % ^`, unary `-` `?` `|`, `< <= > >= == !=`, `&& || !`, conditions of `if`, `while`, `?!`, and `print`.
   **Ints only** are accepted by `& | ~ << >> +> <* *>`, unary `~` `*` and `exit`.
   Functions are accepted by `==` and `!=` (equal if they are the same function; same signature).
-- **Strings** (`str`, `text`) are accepted by unary `|` (the length), `+` (concatenation), `+=`, `== != < <= > >=` (by contents; `str` by unsigned bytes, `text` by code points; chains work too),
+- **Strings** (`str`, `text`) are accepted by unary `|` (the length), unary `?` (the time), `+` (concatenation), `+=`, `== != < <= > >=` (by contents; `str` by unsigned bytes, `text` by code points; chains work too),
   `&& || !`, conditions of `if`, `while`, `?!`, and `print`. Both operands must have the same string type: `str` and `text` do not mix and do not convert.
-  Assignment, passing, returning and closures copy the address; strings are never changed, `+` makes a new one. Memory is not freed.
+  Assignment, passing, returning and closures share the string; strings never change, `+` makes a new one. The memory of strings is not freed.
 - **Int and float mix inside operators:** `+ - * % ^` give a float if either side is a float (the other side is converted), else an int.
   `/` always gives a float, `\` always an int. A comparison with a float operand is done on floats.
   `1 + 0.5` is 1.5, `7 / 2` is 3.5, `7 \ 2` is 3, `1 == 1.0` is 1.
@@ -139,8 +139,8 @@ Precedence, highest to lowest; binary operators are left-associative except `^`:
 - **Random numbers**, unary `?x`: for an int `n > 1`, `?n` is an int in `0 .. n-1`; `?0` is the next raw 64 bits as an int; for an int `m < 0`, `?m` sets the state of the
   generator to `-m` and gives 0; for a float `x > 0.0`, `?x` is a float in `[0, x)`. `?1` is the current time (below). `?0.0`, a negative float and NaN are runtime errors.
   `?x` has the type of `x`; the operand may be any int, float, str or text expression.
-- **Time**, `?1`: the current UTC time as an int, in microseconds since 1970-01-01 (`GetSystemTimePreciseAsFileTime`).
-  `?'format'` and `?"format"`: the current local time (`GetLocalTime`) as a `str` or as a `text`, made by the format. A format code is a letter and a digit; any other character,
+- **Time**, `?1`: the current UTC time as an int, in microseconds since 1970-01-01 (Windows 8 or newer).
+  `?'format'` and `?"format"`: the current local time as a `str` or as a `text`, made by the format. A format code is a letter and a digit; any other character,
   also an unknown code such as `y3`, is copied as it is (a `str` format: byte by byte, also bytes that are not UTF-8).
 
   | code | result |
@@ -170,7 +170,7 @@ Precedence, highest to lowest; binary operators are left-associative except `^`:
 | `while cond block` | loop |
 | `break`, `continue` | only inside a `while` of the same function |
 | `exit expr` | end the program with that exit code (the end of the file exits with 0) |
-| `assert cond[, report]` | if `cond` is false (`0`, `0.0`, `''`, `""`; any int, float, str or text expression) print `assertion failed (line N): ` and the report, and exit with code 1. The report is one item as in `print` (evaluated only on failure); without it the text of the condition is printed. The compiler constant `CHECK_ASSERTS = False` removes all asserts |
+| `assert cond[, report]` | if `cond` (any int, float, str or text expression) is false (`0`, `0.0`, `''`, `""`) print `assertion failed (line N): ` and the report (one item as in `print`, evaluated only on failure; without it the text of the condition) and exit with code 1. The compiler constant `CHECK_ASSERTS` in kota.py (True by default) set to False removes all asserts |
 | `return [expr]`, `= expr` | only inside a function; `=` needs a value |
 | `function name(params) body`, `\name(params) body` | named function definition; one parameter needs no parentheses: `function name p body` |
 | `skip` | the empty statement |
@@ -215,7 +215,7 @@ print (\(a,b):=a*b)(6,7)
 - A function value shares the variables it uses with its creator and other closures, also after the creator has returned. Captured variables and closures are never freed.
 - **A variable must be assigned before it is read.** Variables and constants exist from the moment execution reaches their assignment; only `function name`
   definitions exist from the start of their scope. A read that no assignment can precede is a compile error. A read that every path prepares needs nothing.
-  In the unclear cases the variable gets a hidden flag that its assignments set; the read checks it and stops the program with a runtime error
+  In the unclear cases the check is made when the variable is read: the program stops with a runtime error
   `variable 'x' is not initialized` if the variable was never assigned. The unclear cases are:
   - an assignment only on some paths (one branch of an `if`, the body of a loop, which may not run);
   - after a call, a variable that some function can assign (`^x`, `@x`);
@@ -241,7 +241,7 @@ Written to standard output, exit code 1:
 `runtime error: bad argument of '?'` (`?0.0`, a float that is not above 0.0, NaN),
 `runtime error: variable 'x' is not initialized` (see 7),
 `runtime error: call of an unset function` (a function that ended without a result),
-`runtime error: out of memory` (`HeapAlloc` failed: a closure or a string could not be allocated).
+`runtime error: out of memory` (a closure or a string could not be allocated).
 A failed `assert` prints `assertion failed (line N): ...` (not a runtime error, same exit code 1).
 Very deep recursion overflows the 1 MB stack and crashes.
 
@@ -264,7 +264,8 @@ Very deep recursion overflows the 1 MB stack and crashes.
 - *types:* `type mismatch <where>: expected T, found U` (`in assignment to 'x'`, `in argument 2 of the call`, `in left operand of '+'`,
   `in the condition of 'if'`, `in 'print' (only numbers, str and text can be printed)`, `in 'return' (all returns of a function must agree)`, ...),
   `the result is float, expected int`, `wrong number of arguments: the function takes N, called with M`, `an int is not a function` (or `a float ...`),
-  `expected a number, found fn()`, `cannot mix text and str`, `cannot compare str and int`, `in '?!' (both branches must have the same type, or both be numbers)`, `in the condition of '?'`.
+  `expected a number, found fn()`, `expected int, found float` (the operand of `~`, `*`), `cannot mix text and str`, `cannot compare str and int`,
+  `in operand of '|'`, `in operand of '*'`, `in 'assert'`, `in '?!' (both branches must have the same type, or both be numbers)`, `in the condition of '?'`.
 
 
 ## 10. Characters (JFYI)

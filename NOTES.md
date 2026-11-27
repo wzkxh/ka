@@ -6,29 +6,27 @@ Reasons behind decisions: IMPLEMENTATION.txt. History and state: RELEASE_NOTES.m
 
 ## 0. Working agreement and rules for the files
 - The user designs the language, runs `python rt.py` on real Windows and pastes failures. Claude cannot run Windows; Claude checks code with the
-  Unicorn emulator (`tools/emu.py`; `pip install unicorn pefile`, `python rt.py --emu`). Keystone (`pip install keystone-engine`) is only needed to rebuild the float runtime.
+  Unicorn emulator (`tools/emu.py`; `pip install unicorn pefile`, `python rt.py --emu`). Keystone (`pip install keystone-engine`) is only needed to rebuild the machine-code blocks of the runtime (`tools/*.asm`).
 - The compiler stays a single file, pure Python 3, no dependencies, emitting the PE itself.
 - Every language change = `kota.py` + `LANGUAGE.md` + tests, and a line in `RELEASE_NOTES.md`; decisions and their reasons go to `IMPLEMENTATION.txt`.
-- **Document split:** LANGUAGE.md = short exact definition, no "why". IMPLEMENTATION.txt = decisions, reasons, alternatives, issues. NOTES.md = this file, how the
-  code works. RELEASE_NOTES.md = versions, newest first, with the current state. PLANS.md = the owner's list of plans and ideas (the user maintains it; the next tasks come in the chat).
-  README.md = what the files are and how to run.
-- **Command line** (`main()` in `kota.py`): `source [-o out.exe]`; `-e` run the .exe and delete it; `-k` (with `-e` or `-c`) keep it; `-c TEXT` source text instead of a file (implies running). `run_exe()` is the one place that starts a program (Windows only);
-  `python tools/test_cli.py` replaces it by the emulator.
-- `assert` (version 7.2) is desugared in `Parser.stmt` to `("if", ("not", cond, "in 'assert'"), [print, exit 1], [], line)`: nothing else knows it. The third item of `"not"` is the text the checker uses in its message. `render_tokens()` makes the condition text from the tokens.
-  `CHECK_ASSERTS = False` makes the parser return `("skip",)` (the expressions are parsed, neither type-checked nor compiled).
-- Unary `|x` (version 7.3) is the node `("abs", x)`: the checker has a constraint `abs` (result `res`, operand type): int -> int, float -> float, str/text -> int, a still unknown operand makes both default to int in `finish`; the code generator
-  emits `sar/xor/sub` for ints, `btr rax,63` for floats and `[rax]` (0 if rax is 0) for str/text.
-- Unary `*n` (version 7.4) is the node `("prime", n)`: int only (`operand()`), the result is an int; the code generator calls `rt_isprime` (INT_RT from `tools/int_rt.asm`, built by the same script).
-  `python tools/fuzz_prime.py` checks it against a Python Miller-Rabin in the emulator.
+- **Document split (the owner's rules):** LANGUAGE.md = the language as its user sees it: short but complete, no implementation details. IMPLEMENTATION.txt = the details of all internal things worth knowing
+  (decisions, reasons, alternatives, memory layouts, algorithms, issues); it completes LANGUAGE.md and has numbered sections that other files refer to: after a renumbering check every "section N" in all files.
+  RELEASE_NOTES.md = no details, a list of what changed per version, newest first, with the current state on top; old entries are history and keep the names of their time (old file and test names).
+  LIBRARY.txt = the runtime routines as C (add every new routine). NOTES.md = this file, only for me. README.md = what the files are and how to run. PLANS.md = the owner's private list of plans.
+- Rules of the owner: do only what was asked, his time is limited (do not start changes or run commands that were not asked for). If the language definition has conflicts or unclear cases, ask before implementing;
+  simple solutions are fine, he says what may be skipped. PLANS.md is private: do not raise or ask about its items until he asks. Do not suggest documenting facts that follow directly from the grammar (noise).
+  Printing of -0.0 is on his todo list: leave it. Prime test: never run it on big numbers (10^12 and larger) in tests, fuzz tools or by hand.
+- Delivery: a zip of the project (not 7z); for a small change only the changed files (`kota.py` and the documents) are welcome.
 - **Version:** the `VERSION` constant in `kota.py` (no command line option for it, the user asked for none). Bump it for every delivery to the user and add an entry on top of RELEASE_NOTES.md.
 - **Style:** 2 spaces per indentation level in `.py` and `.ko` files (also continuation lines). Tests carry `-- =>` comments with the result of a statement
+  (`python tools/annotate_tests.py [names] [--whole-output]` adds them from the real behaviour, `--check` verifies that the existing ones still tell the truth: run it after a change of behaviour; read the result critically)
+  and `-- ERROR: ...` at the failing line of `err_*` tests.
 - **Brackets (user, 6.3):** blanks between arguments -> blanks also after `(` and before `)`: `f( first, second )`; short cases (a few arguments, short names) -> no blanks: `f(a,b)`, `fn(T1,T2)->R`.
   Same for `[]`. Use it in new code and docs; fix old code only when it is free.
-  (`python tools/annotate_tests.py [names] [--whole-output]` adds them from the real behaviour, `--check` verifies that the existing ones still tell the truth: run it after a change of behaviour; read the result critically) and `-- ERROR: ...` at the failing line of `err_*` tests.
 - Expected outputs are derived by hand or by an independent reference (Python), not copied from the compiler: a wrong expectation was found several times.
 - The user thinks in small steps, wants "as simple as you can", accepts pragmatic limits and says what may be skipped. Ask before big redesigns; do the whole job of a
   requested feature (parser, checker, codegen, docs, tests). Keep answers short: what changed, notable behaviour/limits, open questions, how it was verified.
-- End of a session: update docs and tests, bump version, zip (`kota.zip`, not 7z), present it.
+- End of a session: update docs and tests, bump version, zip, present it.
 
 ## 1. Pipeline (kota.py)
 `strip_comments` -> `tokenize` -> `Parser` (AST of tuples + `Scope` objects) -> `Checker` (static types) -> `InitCheck` (assigned before use) -> `CodeGen.analyze` (captures) -> `CodeGen` (x86-64 bytes via `Asm`)
@@ -56,13 +54,17 @@ Reasons behind decisions: IMPLEMENTATION.txt. History and state: RELEASE_NOTES.m
 - `=` at statement start is `return`. `skip` is the empty statement. Compound assignment: `assign()` takes `=` or an `op=` and desugars `x op= e` to `x = x op e` (`&&=`/`||=` -> and/or nodes).
 - Functions: `function`/`\` + `name (` or `name param` = definition (`fn_def`, two tokens of lookahead in `stmt()`), else a literal. Parameters `(a, b)` or one bare name (`parse_function`).
   `parse_function` saves and resets `self.nblock` (a function body starts counting again).
+- `assert c[, r]` is rewritten in `Parser.stmt` to `("if", ("not", c, "in 'assert'"), [print, exit 1], [], line)`: nothing after the parser knows it (the third item of `"not"` is the text of the checker's message).
+  `render_tokens()` rebuilds the condition text for the report from the tokens; `print_item()` parses one item of `print` and the report. `CHECK_ASSERTS = False` makes the parser return `("skip",)`.
 - Expression levels low to high: `cond` `or_` `and_` `eq` `cmp` `bor` `bxor` `band` `shift` `add` `mul` (`* / % \`) `power` `unary` `postfix`. `chain()` builds `("cmp", ops, operands)` for 2+
-  comparisons of one level. `power()` = `unary ['^' power]`; `-5`/`-1.5` are folded into literals.
+  comparisons of one level. `power()` = `unary ['^' power]`; `-5`/`-1.5` are folded into literals. `unary()` takes the prefix operators `- ~ ! ? | *`; `?x`, `|x` and `*x` become `("rand", e)`, `("abs", e)`, `("prime", e)`
+  (after an operand `?`, `|` and `*` are the conditional, bitwise or and multiplication; `|` and `*` also start an expression statement).
 - Print items: `string_item()` collects adjacent literals or a parenthesised group of them; if more follows (`'a' + 'b'`) the parser goes back and parses an expression. A string literal elsewhere is a value:
   `("bstr", i)` / `("btext", i)` indexing `Parser.byte_strings` (bytes) / `Parser.text_strings` (lists of code points); adjacent literals are joined in `primary`.
 - AST (line last): statements `("assign",name,expr,line,mode[,True])` (6th element = constant definition) `("print",items,line) ("if",c,then,else,line) ("while",c,body,line) ("exit",e,line)
   ("exprstmt",e,line) ("return",e|None,line) ("fn",Scope) ("block",stmts) ("skip",) ("break",) ("continue",)`; expressions `("num",n) ("flt",x) ("var",name,line,mode) ("call",callee,args,line)
-  ("fnlit",Scope) ("bin",op,l,r) ("cmp",ops,xs) ("cond",c,a,b) ("and"|"or",l,r) ("neg"|"not"|"bnot",e)`. `mode`: None, `^` (global), `@` (enclosing function).
+  ("fnlit",Scope) ("bin",op,l,r) ("cmp",ops,xs) ("cond",c,a,b) ("and"|"or",l,r) ("neg"|"not"|"bnot"|"rand"|"abs"|"prime",e) ("bstr"|"btext",i)`;
+  `("not",e,text)` may carry the text of the type error message (`assert`). `mode`: None, `^` (global), `@` (enclosing function).
 - Scopes: `Scope` per function plus the global scope (`parent is None`). `declare(name, mode, line)` registers assigned names; `globals_decl` / `nonlocal_decl` record names used as `^x` / `@x`
   (a name cannot be both local and marked). `^x` in a function also creates the global slot and adds it to `fn_globals`.
 - **Constants:** `is_const_name` (capitals/digits/`_`, one capital). `assign()` calls `define_const()`: allowed when `self.nblock == 0` at program level or `== 1` in a function body (the body is one block),
@@ -78,11 +80,12 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
 - Monomorphic unification. `Ty` kinds `int`, `float`, `str`, `text`, `fn(params, ret)`, `var`. Variables keyed `("g",name)` or `(scope,name)`; every function has a type with a fresh variable per parameter and result (`fn_ty`);
   bodies are checked once (`check_body`). No occurs check; `unify_raw` skips pairs already being compared; `show()` cuts cycles.
 - Operators whose result type depends on operand types that may be unknown yet (`+ - * % ^`, `== !=`, `?:`) are constraints (`arith`, `eq`, `order`, `cond`, `num` in `Checker.pending`), settled by `step()` /
-  `solve()`; `finish()` makes what is still unknown int. `/` (float result) and `\` (int result) only need numeric operands (`need_num`; `need_num(..., True)` also accepts `str`/`text`: truth values and `print`). `+` on strings is in `arith`, string comparisons in `eq`/`order` (both sides the same string type, `same_string`). Assignments, arguments, returns use plain `unify` (strict).
+  `solve()`; `finish()` makes what is still unknown int. `abs` (`|x`: int -> int, float -> float, str/text -> int; the result is a fresh variable until the operand type is known) is a constraint too; `prime` (`*n`) just needs an int (`operand()`).
+  `/` (float result) and `\` (int result) only need numeric operands (`need_num`; `need_num(..., True)` also accepts `str`/`text`: truth values and `print`). `+` on strings is in `arith`, string comparisons in `eq`/`order` (both sides the same string type, `same_string`). Assignments, arguments, returns use plain `unify` (strict).
 - `Checker.types` maps `id(expression node)` to its `Ty` (the AST must stay alive; `compile_source` keeps it). Bare `return` / falling off the end are not unified.
 
 ### Assignment before use (`InitCheck`) and function names
-- `InitCheck` (after the Checker, before the code generator) is the definite-assignment analysis described in IMPLEMENTATION.txt section 12: phase 1 collects the scopes and `ext` (keys assigned from another scope),
+- `InitCheck` (after the Checker, before the code generator) is the definite-assignment analysis described in IMPLEMENTATION.txt section 10: phase 1 collects the scopes and `ext` (keys assigned from another scope),
   phase 2 walks every scope in execution order with `InitState(must, may)` (None = unreachable) and records call sites and exits; reads of variables of other scopes are decided at the end (`deferred`).
   Results: `check_reads` (ids of var nodes whose read must check the flag) and `flagged` (keys of the variables that need a flag). A read that is certainly wrong is a compile error with the old messages.
   Keys are `("g", name)` for globals and `(scope, name)` otherwise, as in `Checker.key`.
@@ -91,7 +94,7 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
 ### Code generation
 - Values are 64-bit words; a float is a double's bit pattern. Expression result in **rax**. Binary ops: eval left, `push rax`, eval right, `mov rcx,rax`, `pop rax`. Generated code uses only rax/rcx/rdx as
   scratch (xmm0-xmm2 for floats); runtime routines may clobber rcx, rdx, r8-r11, rsi, rdi, rbx, r12-r15, rax, xmm0-xmm3 and preserve rbp/rsp. No value stays in a register across a call.
-- `CodeGen.tk(e)` gives the type of a node (`int`/`float`/`fn`; unknown = int). Float arithmetic: `load_xmm` (movq for floats, cvtsi2sd for ints), `addsd` ... ; `/` and `%` and `\` check the divisor bits
+- `CodeGen.tk(e)` gives the type of a node (`int`/`float`/`str`/`text`/`fn`; unknown = int). Float arithmetic: `load_xmm` (movq for floats, cvtsi2sd for ints), `addsd` ... ; `/` and `%` and `\` check the divisor bits
   (`shl 1` ignores the sign) and jump to `rt_divzero`. `fcmp_false(op, label)` compares with `ucomisd` (nan-correct); `test_rax(kind)` is the truth test (floats: `shl rcx,1`).
   Int `\` and `%` are floored: `cqo; idiv`, then if the remainder is not 0 and its sign differs from the divisor's (`xor` of the two, `jns`), `dec rax` (for `\`) or `add rdx,rcx` (for `%`).
   Float `%`: `call rt_fmodfloor` (in `runtime()`: calls `rt_fmod`, then adds `y` if the remainder is not 0 and its sign differs from `y`'s; a zero becomes +0.0; returns the plain fmod in xmm4 and a 0/1
@@ -99,7 +102,9 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
   13276.999999999998), so it is rounded to nearest (`cvtsd2si`), not truncated.
 - Shifts: count `< 0` -> negate and use the opposite shift; `> 63` (unsigned compare) -> 0 (`+>`: sign fill; negative: 0); rotates: `rol/ror rax,cl` (count modulo 64 by the hardware).
 - Chained comparison: the previous operand lives at `[rsp]`; each link jumps to a fail label (`FAIL_CC`, or `fcmp_false` for floats). Int power: square-and-multiply loop inline.
-- Runtime routines (`rt_print_str`, `rt_print_int`, `rt_print_float`, `rt_alloc`, `rt_divzero`, `rt_notfn`, `rt_negexp`, `rt_badpow`) set up their own aligned frame; `exit_process` aligns too.
+- Runtime routines (`rt_print_str`, `rt_print_int`, `rt_print_float`, `rt_print_value_str/text`, `rt_alloc`, `rt_strcat/textcat/strcmp/textcmp`, `rt_time_*`, `rt_divzero`, `rt_notfn`, `rt_nomem`, ...; the list is LIBRARY.txt) set up their own aligned frame; `exit_process` aligns too.
+- Strings: a literal is `lea rax,[bstr:i]` / `[btext:i]` (a static object in `.data`; the empty one is `xor eax,eax`); `+` and the comparisons of strings call the routines above (`CodeGen.expr`, kinds `str`/`text` in the `bin` and `cmp` cases).
+- `|x`: `sar/xor/sub` for ints, `btr rax,63` for floats, `test rax,rax / jz / mov rax,[rax]` for str/text. `*n`: `call rt_isprime`. `assert`: nothing (see the parser).
 - `Asm.rip(opcode_bytes, symbol)`: instruction whose last 4 bytes are the rip-relative disp32. `call/jmp/jcc` take labels (rel32). `lea rax,[rip+label]` = `48 8D 05` + `_ref`.
 - **Calling convention (own):** caller pushes arguments left to right, evaluates the callee (closure pointer) into rax, null check (`rt_notfn`), `push rax`, `call [rax]`. Callee: `push rbp; mov rbp,rsp;
   push 0 * nlocals`, `ret 8*(nparams+1)`. Frame: `[rbp+16]` closure pointer, params above, locals below.
@@ -108,74 +113,35 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
 - **Scope entry:** `hoist(scope)` creates the closures of all `named_fns`. Constants and variables are assigned where their statements are. `alloc_flags()` gives every variable in `InitCheck.flagged` a hidden flag
   (a data slot for a global, a frame slot for a local, the second quadword of its 16-byte box for a captured variable); `var_store` sets it, `var_load(check=True)` tests it and jumps to a per-name stub
   (`stub_label`, `emit_uninit_stubs`) that prints `runtime error: variable 'x' is not initialized`. `CHECK_INIT = False` removes the flags.
-- Random numbers: `("rand", e)` -> `rt_rand_int` / `rt_rand_float` (operand in rax; `rt_next_u64` is SplitMix64 on the 8 bytes at `state`; a float that is not above 0.0 and NaN end in `rt_badrand`; `?1` jumps to `rt_time_us`; a str/text operand calls `rt_time_str`/`rt_time_text`, see Time below); written in `runtime()` with the compact bracket style.
+- Random numbers: `("rand", e)` -> `rt_rand_int` / `rt_rand_float` (operand in rax; `rt_next_u64` is SplitMix64 on the 8 bytes at `state`; a float that is not above 0.0 and NaN end in `rt_badrand`; `?1` jumps to `rt_time_us`; a str/text operand calls `rt_time_str`/`rt_time_text`); written in `runtime()` with the compact bracket style.
 - Program start: GetStdHandle(stdout), `SetConsoleOutputCP(65001)`, GetProcessHeap.
-- **Float runtime** (`FLOAT_RT` between the BEGIN/END markers in kota.py): machine code generated from `tools/float_rt.asm` by `tools/build_float_rt.py` (Keystone assembles single instructions; the script does labels
-  and rel32 jumps). `rt_fmt_float` (rax = bits, rdx = buffer -> rax = length), `rt_fpow` (xmm0, xmm1 -> xmm0, edx = error code), `rt_fmod` (exact integer algorithm). They set the x87 control word themselves.
-  `rt_print_float` (in `runtime()`) calls `rt_fmt_float` and `rt_print_str`. Edit the .asm, run `python tools/build_float_rt.py` (rewrites kota.py between the markers), then `python tools/fuzz_float.py`.
+- **Machine-code blocks** (`FLOAT_RT`, `TIME_RT`, `INT_RT` between their BEGIN/END markers in kota.py): generated from `tools/float_rt.asm`, `tools/time_rt.asm`, `tools/int_rt.asm` by `tools/build_float_rt.py`
+  (Keystone assembles single instructions; the script does labels, rel32 jumps and calls of `jo`.. `jb`, `db` bytes and `lea rax,[rip+label]`). Edit an .asm, run `python tools/build_float_rt.py` (rewrites kota.py between the markers),
+  then the fuzz tool of the block. The blocks are position independent and self-contained; the routines that call Windows or allocate are written in `runtime()`.
+  - Float: `rt_fmt_float` (rax = bits, rdx = buffer -> rax = length), `rt_fpow` (xmm0, xmm1 -> xmm0, edx = error code), `rt_fmod` (exact integer algorithm); they set the x87 control word themselves.
+    `rt_print_float` (in `runtime()`) calls `rt_fmt_float` and `rt_print_str`.
+  - Time: `rt_utf8_to_text`, `rt_text_to_utf8`, `rt_time_format` (registers in the header of the .asm); `rt_time_us`, `rt_time_text`, `rt_time_str` are in `runtime()`.
+  - Int: `rt_isprime` (rax = n -> rax = 0/1).
 
 ### PE writer (`build_pe`)
 - Sections `.text` (RX) at 0x1000, `.idata` (RW), `.data` (RW). ImageBase 0x140000000, no relocs, console subsystem, 1 MB stack. kernel32 imports (`IMPORTS`): GetStdHandle, WriteFile, SetConsoleOutputCP,
-  ExitProcess, GetProcessHeap, HeapAlloc.
+  ExitProcess, GetProcessHeap, HeapAlloc, GetSystemTimePreciseAsFileTime, GetLocalTime.
 - `.data`: 0 stdout handle, 8 unused, 0x10 `written`, 0x18 heap handle, 0x20..0x40 number buffer, 0x40 random generator state (the initial value is written by `build_pe`), 0x48..0x80 unused, then globals (8 bytes each), static closures (16 each), then the print/error strings (lengths are explicit; NUL
   inside strings is fine). String objects of the program (`bstr:i`, `btext:i`, 8-aligned, `[u64 length][bytes or u32s]`) follow them; the empty string has no object. Strings 0..6 are reserved for the runtime (newline, division by zero, unset function, negative exponent, bad power, bad `?` argument, out of memory); the "not initialized" messages are appended by the code generator.
+
+### Command line (`main()`)
+`kota.py source [-o out.exe]`; `-e` compiles, runs the .exe and deletes it (the exit code is the program's); `-k` (with `-e` or `-c`) keeps it; `-c TEXT` takes the source from the command line (implies running). `run_exe()` is the one place
+that starts a program (Windows only); `python tools/test_cli.py` replaces it by the emulator. Decisions: IMPLEMENTATION.txt section 15. The compile-time constants `CHECK_INIT`, `WARN_UNUSED_VALUE`, `CHECK_ASSERTS` are at the top of kota.py.
 
 ## 2. Testing and tools
 - `python rt.py [-k name] [-v] [--emu] [--keep]`; the programs are `tests/NAME.ko`, what they must give is in `tests/results/` (`NAME.expected/.exit/.warn`, `err_NAME.error`); see the header of rt.py. Output is compared as raw bytes.
 - The emulator fakes kernel32 and asserts 16-byte stack alignment at every API call. It starts with a 64-bit x87 precision (real Windows: 53); QEMU's x87 transcendental functions are only ~4e-15 accurate.
 - When adding a feature add tests for normal use, interaction with blocks/continuation lines, error messages, and a regression for every bug found. Write `-- =>` comments (or run tools/annotate_tests.py).
-- **Time runtime** (`TIME_RT` between its markers in kota.py): `rt_utf8_to_text`, `rt_text_to_utf8`, `rt_time_format` from `tools/time_rt.asm` (same build script, `python tools/build_float_rt.py` does both files);
-  `rt_time_us`, `rt_time_text`, `rt_time_str` (Windows calls, allocation) are in `runtime()`. `python tools/fuzz_time.py` checks the formatting at fixed times; `emu.run_pe(..., now=datetime, unix_us=n)` fixes the clock.
-- `tools/fuzz_float.py [count]` checks the float routines; `tools/annotate_tests.py` adds result comments; `tools/build_float_rt.py` rebuilds the float runtime.
+- Tools (`tools/`): `emu.py` (the emulator; `run_pe(path, stdin, max_insns, now=datetime, unix_us=n)` also fixes the clock), `annotate_tests.py`, `build_float_rt.py` (rebuilds the three machine-code blocks), `fuzz_float.py [count]`,
+  `fuzz_time.py [count] [seed]` (formatting at fixed times against a Python reference), `fuzz_prime.py [count] [seed]` (numbers stay below 10^9), `test_cli.py` (`-e -k -c` with the emulator).
+- Test numbers: the numbered tests run 01..78 without gaps or duplicates; a new numbered test takes the next number. The test directory is the owner's to renumber.
 
 ## 3. Session checklist
-1. The user uploads the zip/folder. Unzip; read NOTES.md, RELEASE_NOTES.md, LANGUAGE.md, PLANS.md; `pip install unicorn pefile keystone-engine`; run `python rt.py --emu`.
+1. The user uploads the zip/folder. Unzip; read NOTES.md, RELEASE_NOTES.md, LANGUAGE.md; `pip install unicorn pefile keystone-engine`; run `python rt.py --emu` (`78_primes` needs more than the emulator's instruction limit; it passes on Windows).
 2. Implement the requested changes; run all tests; add/adjust tests (with comments) and docs (see 0); bump `VERSION`.
-3. Re-zip (`kota.zip`), present it, summarise what to check on Windows and any open question.
-
-13. Command line: -e, -k, -c (version 7.1)
-- `-e`: compile, run the .exe, delete it (user). The exit code of `kota.py` is the exit code of the program, so it can be used in scripts. `-k` keeps the .exe and says `kept NAME` on stderr (the program's own output stays alone on stdout).
-  `-k` without `-e` or `-c` is a usage error. `-c TEXT` works like Python's: the source is the text, nothing is read; it implies running. A source file together with `-c` is a usage error.
-- `-c` is done internally (user offered "a temp file or all internally"): no `.ko` file is made. Errors and warnings are named `<command>` (line numbers count the lines of the text).
-- Where the .exe goes: with `-e` or `-c` and neither `-k` nor `-o`, a file in the system's temp directory, which is deleted after the run, so an existing `program.exe` next to the source is never overwritten or deleted.
-  With `-k` the usual place: next to the source, or `yyyymmdd_HHMMSS.exe` in the current directory for `-c` (user's example name). `-o NAME` names it in every case; without `-k` it is deleted after the run all the same.
-- A compile error runs nothing and leaves no file. The .exe is also deleted when running it fails. Running is only possible on Windows: elsewhere the message `cannot run a Windows .exe on this system` and exit code 1 (Wine was not tried, nobody asked).
-- The compile message `wrote NAME (N bytes)` is printed only when nothing is run.
-
-14. assert (version 7.2)
-- `assert condition[, report]` (user): the condition is any expression, false is `0`, `0.0`, `''`, `""` (the same truth rule as `if`); the report is shown if there is one, else the condition; exit code 1. The user's wording: "report the
-  second expr if provided, if not provided just say that the condition failed (maybe also print the condition)".
-- Output (my choice, easy to change): to standard output like the runtime errors, one line `assertion failed (line N): REPORT`; the report is printed like a `print` item (any int, float, str or text; a function is a type error);
-  without a report the condition is printed, rebuilt from the tokens (`render_tokens`: spaces normalised, numbers in decimal, so `0xFF` shows as `255`; no text if the condition is not on one line, then only the first part).
-  The line is the line where the `assert` keyword stands. The report is evaluated only when the assert fails.
-- Done by a rewrite in the parser, not as a new statement: `assert c, r` is `if !c: print "assertion failed (line N): ", r; exit 1`. So the checker, the initialisation analysis and the code generator needed no change; type errors of the
-  condition say `in 'assert'` (the `not` node carries that text). The report is checked as a `print` item (its errors say `in 'print'`).
-- `CHECK_ASSERTS` (a constant at the top of kota.py, user: "a global var at the beginning like CHECK_ASSERTS"): True by default. False: the statement is parsed (syntax errors are still found, names are still resolved) and dropped, so the condition
-  and the report are neither type-checked nor evaluated, like Python's `-O`. A program may therefore compile with the flag on and fail to compile with it off only through a type error inside an assert.
-- `assert` is a keyword now: it cannot be a variable or function name any more (no test used it).
-- Tests: `72_assert` (passing asserts, report not evaluated, one-line body, continued lines), `rt_assert_*` (message, condition text, int and float reports, empty text, in a function), `err_type_assert_function`.
-  The flag `CHECK_ASSERTS = False` was tried by hand (a failing assert is dropped, nothing runs), there is no test for it: it is a compiler constant.
-
-15. Unary | (version 7.3)
-- `|x` (user): the absolute value of numbers, the length of a str or a text. It is a prefix operator at the level of the other unary operators (`|x + 1` is `(|x) + 1`); there is no closing bar (`|a - b|` would be ambiguous with bitwise or),
-  so a difference needs parentheses: `|(a - b)`. After an operand `|` is bitwise or as before, so `6 | |-1` is `6 | (|-1)`. `||` is one token (logical or): two bars in a row, `|(|x)`, need a space or a bracket.
-- Result type: int -> int, float -> float, str and text -> int. The type of the operand may be unknown while a function body is checked (a parameter), so this is a constraint like `+` (`abs` in `Checker.step`): it is settled when the
-  parameter gets its type from a call; if it never does, int.
-- Int: `(x ^ (x >> 63)) - (x >> 63)` (arithmetic shift); the smallest int has no positive counterpart and stays negative (arithmetic wraps everywhere in the language). Float: the sign bit is cleared, so `|-0.0` is `0.0` and a NaN stays a NaN.
-- Length: the first 8 bytes of the object (section 5 of this file): the number of bytes for a str, of code points for a text; the empty string is the address 0 and has the length 0, so one test and one load, no call.
-- Tests: `74_abs_length`, `err_type_abs_function`. Also in 7.3 (user's request, same delivery): `err_type_arg_*` (a function has one signature, so the same function called with a str and then a text, an int and a str, and so on is an error:
-  both orders of every pair of int, float, str, text, with the message `in argument N of the call: expected X, found Y`), and `73_oop_counter` (an object as a closure with private state).
-
-16. Unary * - the prime test (version 7.4)
-- `*n` (user): 1 if the int n is prime, else 0; for ints only (a float or a string is a compile error naming `'*'`). It is a prefix operator at the level of the other unary operators; after an operand `*` is multiplication as before,
-  so `3 * *5` is 3 and `**7` is `*(*7)` = 0 (the token `**` does not exist).
-- The algorithm is the user's (a 64-bit table for n < 66, then 2 and 3, then trial division by i and i + 2 for i = 5, 11, 17, ...) in machine code (`rt_isprime`, tools/int_rt.asm, section 6b of LIBRARY.txt).
-- The user asked to check it for -2..100 first. The constant of the first version, 0x28208A20A08A28AD, was wrong for the lookup `(mask >> (n - 2)) & 1`: it has the bit for each prime p at position p (and a stray bit 0), that is the right mask for
-  `mask >> n`, shifted by two plus one bit; with it 4, 9, 15, 21, ... were prime. The mask for `(n - 2)` is 0x0A08228828228A2B (bit k set iff k + 2 is a prime, 18 bits). With that constant the function agrees with a sieve for -100 .. 300000
-  (Python) and with a Miller-Rabin test on the numbers of `tools/fuzz_prime.py` (also in the emulator, through the compiled operator).
-- One change to the user's code: `i * i <= n` is checked for signed overflow. The largest i of the form 6k - 1 below the root of INT_MAX is 3037000499 and the next one, 3037000505, squares to more than INT_MAX; with wrapping arithmetic that square
-  is negative, the loop would go on and for the primes in [3037000499^2, INT_MAX] (the largest is 9223372036854775783) it would run for roughly 4 * 10^8 more steps before the wrapped square gets large again.
-  The overflow flag of `imul` ends the loop at once (the answer is "prime" then).
-- Speed: about sqrt(n) / 3 steps with two 64-bit divisions each. A prime near 2^63 needs 5 * 10^8 steps, several seconds on a real machine. Only worth speeding up if the user needs it (a Miller-Rabin test for 64 bits would be about a thousand times faster).
-- Tests: `75_prime` (the numbers -2..100 one by one, the primes below 100000 counted, comparison with a trial division written in Kota, large primes), `err_type_prime_float`, `err_type_prime_text`. The tests avoid primes above 1e14 (the emulator is slow);
-  the case near 2^63 was run once by hand (see RELEASE_NOTES.md).
+3. Re-zip, present it, summarise what to check on Windows and any open question.

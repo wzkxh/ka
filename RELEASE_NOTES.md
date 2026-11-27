@@ -1,128 +1,92 @@
 # Kota - release notes (newest first)
+What changed in which version; the reasons and details are in IMPLEMENTATION.txt. Old entries are history: they keep the names of their time (`ka.py`, `.ka`, old test numbers).
 
 ## Current state (version 7.4)
-Kota compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3, no dependencies). The version is the `VERSION` constant in `kota.py`.
-- **Language:** 64-bit ints and floats, first-class functions and closures (shared by reference, never freed), static type inference, constants, byte strings (`str`) and unicode strings (`text`) as values.
-  Details: LANGUAGE.md. Reasons: IMPLEMENTATION.txt.
-- **Tests:** 253 programs in `tests/` with their expected results in `tests/results/` (all pass under the emulator on Linux; the user runs them on real Windows). Every test has `-- =>` result comments.
-- **Checked on real Windows by the user:** all 253 tests of version 7.4 passed.
-- **Known limits:** see IMPLEMENTATION.txt section 9 (float printing last digit, fractional float powers checked only in an emulator, strings can only be built by `+` and compared, no input, no GC).
+- Kota compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3, no dependencies). The version is the `VERSION` constant in `kota.py`.
+- Language: 64-bit ints and floats, byte strings (`str`) and unicode strings (`text`), first-class functions and closures, static type inference, constants, `assert`, time, random numbers. Definition: LANGUAGE.md.
+- Tests: 253 programs in `tests/`, expected results in `tests/results/`. All pass on real Windows (the user's run of 7.4). Under the emulator on Linux all pass except `78_primes` (it needs more instructions than the emulator's limit).
+- Known limits: IMPLEMENTATION.txt section 16.
 
 ## Version 7.4
-- **Unary `*n`, the prime test:** 1 if the int `n` is prime, else 0; ints only.
-- Tests: `77_prime`, `78_primes`, `err_type_prime_float`, `err_type_prime_text`; LIBRARY.txt also got the in-place operations `|x` and `assert`.
-- Test files 63..75 are renamed - or rather their enumeration is fixed.
+- Unary `*n`: the prime test (1 or 0, ints only).
+- Tests: `77_prime`, `78_primes`, `err_type_prime_float`, `err_type_prime_text`; tools `tools/int_rt.asm`, `tools/fuzz_prime.py`.
+- Test numbers 63..75 renumbered (65..77), no duplicates.
+- Documents reorganised: LANGUAGE.md only for the language user, IMPLEMENTATION.txt sections renumbered 1-16 and holding all decisions, LIBRARY.txt completed (strings, time, prime test, memory errors), NOTES.md and this file shortened.
 
 ## Version 7.3
-- **Unary `|x`:** the absolute value of an int or a float (same type), the length of a `str` (bytes) or a `text` (characters), an int. Details: IMPLEMENTATION.txt section 15.
-- Tests: `err_type_arg_*` (14: the same function called with arguments of different types, both orders of int, float, str, text, also the second parameter), `73_oop_counter` (an object as a closure, the user's example),
-  `74_abs_length`, `err_type_abs_function`.
+- Unary `|x`: absolute value of an int or float, length of a `str` (bytes) or a `text` (characters).
+- Tests: `err_type_arg_*` (one function called with arguments of different types), `73_oop_counter`, `74_abs_length`, `err_type_abs_function`.
 
 ## Version 7.2
-- **`assert condition[, report]`:** if the condition is false (`0`, `0.0`, `''`, `""`) it prints `assertion failed (line N): ` and the report (any int, float, str or text expression; without it the text of the condition) and exits with code 1.
-  `CHECK_ASSERTS = False` at the top of `kota.py` drops all asserts. `assert` is a keyword now. 9 new tests (`72_assert`, `rt_assert_*`, `err_type_assert_function`). Details: IMPLEMENTATION.txt section 14.
+- `assert condition[, report]`; compiler constant `CHECK_ASSERTS`; `assert` is a keyword.
+- Tests: `72_assert`, `rt_assert_*`, `err_type_assert_function`.
 
 ## Version 7.1
-- **Command line:** `-e` compiles, runs the .exe and deletes it (the exit code is the program's); `-k` (with `-e` or `-c`) keeps it; `-c "text"` compiles Kota source given on the command line (like `python -c`), runs it and deletes
-  the .exe; with `-k` it is kept as `yyyymmdd_HHMMSS.exe`. Details and the choices: IMPLEMENTATION.txt section 13. New dev test `tools/test_cli.py` (the emulator stands in for Windows).
+- Command line: `-e` (compile, run, delete the .exe), `-k` (keep .exe), `-c "text"` (compile source text from the command line, run & delete .exe).
+- Dev test `tools/test_cli.py`.
 
 ## Version 7.0
-- **The language is called Kota** (was Ka): source files are `.ko` (was `.ka`), the compiler is `kota.py` (was `ka.py`), the Python module is `kota`. Docs, sources, tools, test and benchmark
-  names are renamed; nothing else changed (the 223 tests pass as before). Older entries below keep the names of their time (`ka.py`, `.ka`).
+- The language is renamed Ka -> Kota: files `.ko`, compiler `kota.py`, module `kota`; docs, sources, tools, tests and benchmarks renamed. Nothing else changed.
 
 ## Version 6.9
-- **`?1` is the time:** microseconds since 1970-01-01 UTC (`GetSystemTimePreciseAsFileTime`). It was a runtime error.
-- **`?'format'` and `?"format"`:** the local time (`GetLocalTime`) as a `str` / `text`. Codes `y2 y4 m1 m2 d1 d2 H1 H2 M1 M2 S1 S2 F1 F2 F3 w1 w2 w3`, other characters are copied, at most 64 characters.
-  The operand of `?` may now be a string; `?x` has the type of `x`.
-- Tests: `71_time` (the time cannot be compared, so ranges and shapes); `rt_rand_one` removed. `tools/fuzz_time.py` compares the formatting with a Python reference at fixed times (the emulator got `GetLocalTime`,
-  `GetSystemTimePreciseAsFileTime` and a `now=` parameter).
-- Needs Windows 8 or newer (`GetSystemTimePreciseAsFileTime`).
+- `?1` is the time in microseconds since 1970 (UTC); it was a runtime error in earlier versions.
+- `?'format'` and `?"format"`: the local time as a `str` / `text` (codes `y2 y4 m1 m2 d1 d2 H1 H2 M1 M2 S1 S2 F1 F2 F3 w1 w2 w3`).
+- So `?` accepts strings; `?x` has the type of `x`.
+- Tests: `71_time`; `rt_rand_one` removed. New: `tools/time_rt.asm`, `tools/fuzz_time.py`; the build script handles several asm files.
 
 ## Version 6.8.1
-- Printing a `text` is buffered: `rt_print_value_text` (rewritten) encodes into a 1024-byte stack buffer and calls `WriteFile` once per buffer, not once per character.
-- New test `70_long_text_print` (texts of 1000 to 4000+ bytes with 1-4 byte characters, around the buffer limit).
+- Printing a `text` uses a buffer (one `WriteFile` per buffer, not per character). Test `70_long_text_print`.
 
 ## Version 6.8
-- **Strings are values:** `str` (`'...'`, bytes, address of `[u64 length][bytes]`) and `text` (`"..."`, 32-bit code points, address of `[u64 length][u32 ...]`); the empty string is 0.
-  Assignment, parameters, results, closures, constants, `print`, `+` / `+=` (new string), `== != < <= > >=` (also chained), the empty string is false in conditions. `str` and `text` never mix.
-- Made by Gemini on top of 6.3 (its 6.4-6.6: `str`, comparisons and concatenation, `text`); merged into 6.4 here: parser, `Checker` (new `order` constraint), code generator and the hand-assembled
-  runtime routines (`rt_strcmp`, `rt_strcat`, `rt_textcmp`, `rt_textcat`, `rt_print_value_str`, `rt_print_value_text`) are Gemini's. Everything else of 6.4 stays (variable flags, constants, `?!`, no warning).
-- `rt_alloc` checks `HeapAlloc`: the runtime error `out of memory` (exit code 1), also for closures.
-- `print 'a' + x` works: a print item that is not just a literal is an expression.
-- Tests: 16 new (Gemini's `63`-`68`, its string `err_*`, my `69_string_truth_and_more`); `err_string_value` removed (222 now), the two `err_type_*print*` messages changed. The expected results of tests 21-33 were missing in the zip of 6.4 and were taken from Gemini's.
+- Strings are values: `str` (`'...'`) and `text` (`"..."`): assignment, parameters, results, closures, constants, `print`, `+` / `+=`, comparisons (also chained); the empty string is false in conditions.
+- `rt_alloc` checks `HeapAlloc`: runtime error `out of memory`.
+- `print 'a' + x` works (a print item can be any expression).
+- Strings by Gemini on top of 6.3, merged into 6.4. Tests: Gemini's `63`-`68` and its string `err_*`, `69_string_truth_and_more`; `err_string_value` removed.
 
 ## Version 6.4
-- **A variable must be assigned before it is read.** Certainly wrong: a compile error. Unclear (assigned only on some paths, assigned by a function, ...): a hidden flag and the runtime error
-  `variable 'x' is not initialized`. Variables no longer start as 0. Globals assigned before the first call need no flag.
-- **Constants** are variables assigned once where they are written; any expression (also calls, `?10`); nothing is hoisted any more. Named functions (`function name`) are constants: they cannot be assigned.
-- `!` ends a one-line function body inside `c ? a ! b`: no parentheses needed there.
-- `?1`, `?0.0`, a negative float and NaN are runtime errors. The "value not used" warning is off by default.
-- New `LIBRARY.txt`: C source of the runtime routines. Tests: 13 more (207); the tests that depended on the old rules were changed.
+- A variable must be assigned before it is read: a compile error when certainly wrong, a runtime error `variable 'x' is not initialized` in the unclear cases. Variables do not start as 0.
+- Constants (upper-case letters) are variables assigned once where written (any expression); named functions are constants.
+- `!` ends a one-line function body inside `c ? a ! b`.
+- `?1`, `?0.0`, negative floats and NaN are runtime errors. The "value not used" warning is off by default.
+- New `LIBRARY.txt` (the runtime as C). Tests: 13 more.
 
 ## Version 6.3
-- **Random numbers:** the unary operator `?x`; int/float: `?n -> 0..n-1`, `?x -> [0.0..x)`.
-- `PLANS.md` updated by the user.
-- 3 new tests: `62_random`, `err_const_random`, `err_type_random_function`.
+- Random numbers: unary `?x`. Tests `62_random`, `err_const_random`, `err_type_random_function`.
 
 ## Version 6.2.1 (no change to the compiler)
-- **Tests:** `tests/` holds only the `.ka` programs now; the expected output, exit codes, warnings and expected errors are in `tests/results/` (`rt.py` and `tools/annotate_tests.py` updated).
-- `tools/annotate_tests.py --check`: verifies that every `-- =>` comment tells what the program really prints (the annotator used to skip lines that already had a comment, so a comment could become stale
-  after a change of behaviour: test 48 had one after 6.2, fixed by the user). All comments agree now.
-- `performance/cs.ka` fixed: `n = n / 2` is a float division since version 6 (the program no longer compiled); it is `n \ 2` now, as `//` in the Python version. All eight benchmarks were compared with their
-  Python versions at reduced sizes: same results. The timings in `performance/benchmarks.txt` are older; `%` and `\` on ints cost a few instructions more since 6.2 (floor correction), so `cs` and `prime` may be a little slower.
-- Docs: `PLANS.md` is the owner's list of plans (README, NOTES, IMPLEMENTATION updated; README said `PLANS.txt`); a missing parenthesis in LANGUAGE.md.
+- `tests/` holds only the programs; expected results are in `tests/results/`.
+- `tools/annotate_tests.py --check` verifies the `-- =>` comments.
+- `performance/cs.ka` fixed (`n \ 2`).
 
 ## Version 6.2
-- **Floored division and modulo (incompatible for negative operands):** `a \ b` is floor(a / b) (toward minus infinity) and `a % b` has the sign of `b`, for ints and floats, so `-7 \ 3` is -3,
-  `-7 % 3` is 2, `7 % -3` is -2, and `a \ b * b + a % b == a` holds for ints (for floats up to rounding). Before, both truncated toward zero (`-7 % 3` was -1). A zero float remainder is `+0.0`.
-- **Fixed: float `\` was off by one in rare cases** (the intermediate quotient was truncated instead of rounded; versions 6 and 6.1: `6049232.4789095735 \ 455.61461813570327` gave 13276, the right answer is 13277).
-- `# ` comments and `0x` literals are documented as compatibility forms (for migrating and copying from other languages), discouraged in new programs.
-- `ka.py --version` removed (the `VERSION` constant is enough).
-- 1 new test (191 total); the expectations of 3 tests with negative operands changed (02, 48, 56).
+- Floored division and modulo: `a \ b` is floor(a / b), `a % b` has the sign of `b` (incompatible for negative operands).
+- Fixed: float `\` was off by one in rare cases.
+- `# ` comments and `0x` literals documented as compatibility forms. `--version` removed.
 
 ## Version 6.1
-- **Hex literals `0xFF`** (also `0XFF`, `0xFF_FF`) in addition to `#FF`; 64 bits, wrap to signed (`0xFFFFFFFFFFFFFFFF` is -1).
-- **Comments `# text`** (a hash followed by a space or by the end of the line, not directly after a digit) in addition to `--`. `err_hash_comment` is valid syntax now.
-- **Error message for ill-formed numbers:** `bad number '12ab'` no longer claims that `_` is the problem; the `_` hint appears only when there is a `_`; `0b101` gets a hint (`2#101`);
-  bad `0x` forms give `bad hex literal`.
-- 10 new tests and 1 removed (190 total): 0x literals, hash comments, and the number error messages. (The first draft of the `#` rule made `x = 2#` a valid statement; a test caught it, see IMPLEMENTATION.txt.)
+- Hex literals `0xFF`; comments `# text`; clearer error messages for ill-formed numbers. Tests: 10 more.
 
 ## Version 6
-- **Division:** `/` is now always float division (`7 / 2` is `3.5`); the new `\` is integer division, always an int, also for floats (`7.5 \ 2` is 3); `\=` added. `/=` on an int variable is therefore
-  a type error, use `\=`. **Incompatible change:** old programs that divided ints with `/` must use `\`.
-- **Shifts:** a negative count shifts the other way (`1 >> -3` is 8); rotates by negative counts already rotated the other way.
-- **Constants inside functions:** a capital-named `NAME = constant expression` (or `function NAME`) may be defined directly in a function body; its scope is that function and the functions nested
-  in it; created at function entry; may shadow a global constant. Errors for definitions inside `if`/loops/blocks, `^X`/`@X`, second definitions.
-- `\` is no longer a statement boundary: after a complete statement, `\` is the division operator, so a function definition starting with `\` needs `;` or a new line.
-- `ka.py --version`; `VERSION` in ka.py.
-- **Tests:** 12 new tests (division, negative shift counts, function constants, runtime errors), several migrated to `\`. All tests got `-- =>` comments with the results (and `-- ERROR:` at the failing
-  line of `err_*` tests); the 1-space indents are 2 spaces now. New tool `tools/annotate_tests.py`.
-- **Docs:** split into LANGUAGE.md (short definition), IMPLEMENTATION.txt (decisions, reasons, issues), NOTES.md (for Claude), RELEASE_NOTES.md (this file), README.md.
+- `/` is always float division; `\` is integer division (incompatible: old int divisions must use `\`); `\=` added.
+- A negative shift count shifts the other way.
+- Constants may be defined inside function bodies.
+- `\` is no longer a statement boundary.
+- All tests got `-- =>` comments; `tools/annotate_tests.py`; docs split into LANGUAGE, IMPLEMENTATION, NOTES, RELEASE_NOTES, README.
 
 ## Version 5 - floats
-- 64-bit floats: literals `1.5`, `1_000.25`, `6.02e23`, `1E-9`, `5e3`; no `.5`, `1.`, INF, NAN.
-- Operators `+ - * / % ^` and unary `-` on floats, exact comparisons (also chained), truth values, `?:`; bit operators, shifts and `exit` need ints. Int and float mix inside operators (the int is
-  converted); assignment, arguments and `return` are strict.
-- `print` of floats: 15 significant digits, Python-like layout (`0.1 + 0.2` prints `0.3`, `100.0`, `1e-05`, `inf`, `nan`).
-- Float runtime in machine code (print, power, fmod) built from `tools/float_rt.asm`; `tools/fuzz_float.py` checks it in the emulator. Checker: constraints for operators with mixed types.
-- Float division/modulo by zero is a runtime error; new runtime error for a negative base with a fractional exponent. 36 new tests (169 total).
-- Documented "yet to do": more literals, INF, NAN, comparison tolerance, formatting, explicit conversion.
+- 64-bit floats: literals, `+ - * / % ^`, comparisons, truth values, `?:`, mixing with ints inside operators, `print` with 15 significant digits.
+- Float runtime in machine code (`tools/float_rt.asm`, `tools/fuzz_float.py`). Runtime errors for float division by zero and negative base with a fractional exponent. Tests: 169.
 
 ## Version 4
-- Binary literals `2#0001_1011`.
-- Compound assignment `+= -= *= /= %= ^= &= |= ~= &&= ||=` and the shift forms.
-- Shifts and rotates `<<  >>  +>  <*  *>` (arithmetic left shift = `<<`, no separate operator).
-- Constants: names in capitals, defined once at the top level with a constant expression, created at program start. 133 tests.
+- Binary literals `2#0001_1011`; compound assignments; shifts and rotates `<< >> +> <* *>`; constants (capital names, top level). Tests: 133.
 
 ## Version 3
-- `function` keyword with the synonym `\`; one parameter without parentheses; `@x` for variables of the enclosing function (replaced `\x`); `{ ... }` as an ordinary statement; `skip`;
-  conditional expression `c ? a ! b`; unary operators bind tighter than `^` (`-2^2` is 4); bit operators between `+` and comparisons; TAB no longer special; 2-space indentation in code and tests;
-  `fn` removed; recursive function types allowed; documented that variables start as 0. 107 tests.
+- `function` keyword and synonym `\`; one parameter without parentheses; `@x`; `{ ... }` as a statement; `skip`; conditional `c ? a ! b`; unary operators tighter than `^`; bit operators between `+` and comparisons;
+  2-space indentation. Tests: 107.
 
 ## Version 2 - Ka
-- Rename Tiny -> Ka (`ka.py`, `.ka`). Language reworked by the user: comments `--`, `--[[ ]]--`, `--[[ --]]`; `elif`; removed `let input and or not global nonlocal`; `&& || !`; globals `^x`;
-  strings `'...'` / `"..."` with `^` escapes and joining; `_` in numbers; `#hex`; static types (int, function); bit operators `& | ~`; chained comparisons; `=` as `return`; nested one-line bodies;
-  `\x` for enclosing-function variables (draft); max 20 parameters. Compiler, type checker and tests rebuilt (95 tests).
+- Renamed Tiny -> Ka (`ka.py`, `.ka`); the language reworked by the user (comments `--`, `elif`, `&& || !`, globals `^x`, string literals with `^` escapes, `_` in numbers, `#hex`, static types, bit operators,
+  chained comparisons, `=` as `return`). Tests: 95.
 
 ## Version 1 - Tiny
-- The first language "Tiny" (`.tiny`): `let`, `input`, `global`, `nonlocal`, `and/or/not`, expression-bodied functions, first-class functions with closures, compiled to a PE `.exe` by `tinyc.py`; 49 tests.
+- The first language "Tiny" (`.tiny`), compiled to a PE `.exe` by `tinyc.py`; closures. Tests: 49.

@@ -9,6 +9,15 @@ zerodiv - always. hardware traps it.
 
 
 
+
+PEP 393 — Flexible String Representation.
+Depending on the largest character in a string:
+- 1 byte per character — if all characters fit in Latin-1 (U+0000–U+00FF).
+- 2 bytes per character — if all characters fit in BMP (U+0000–U+FFFF).
+- 4 bytes per character — if any character is above U+FFFF.
+
+
+
 print -0.0 -----> 0.0
 signbit(x)
 
@@ -72,19 +81,4 @@ int64_t rand_int64(int64_t n) // to complex
   }
   return (int64_t)(m >> 64);
 }
-
-
-Prime
-=====
-
-def is_prime(n): # int64 -> int64 (0|1)
-  if n < 66:
-    if n < 2: return 0
-    return (0x28208A20A08A28AD >> (n-2)) & 1
-  if (n&1) == 0 or (n%3) == 0: return 0
-  i = 5
-  while i*i <= n:
-    if (n % i) == 0 or (n % (i+2)) == 0: return 0
-    i += 6
-  return 1
 

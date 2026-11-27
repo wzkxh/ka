@@ -292,4 +292,50 @@ Files: kota.py, LANGUAGE.md, LIBRARY.txt, NOTES.md, IMPLEMENTATION.txt and RELEA
 | ≤ 10¹⁵ | ~ 30–50 ms | Noticeable but ok |
 | ≤ 10¹⁶ | ~ 0.1–0.2 s | Starting to feel slow |
 
+---
+
+7.4.1
+
+Changes by document:
+
+LANGUAGE.md: the implementation details are gone:
+Removed: the memory layouts of str and text, the Windows API names, HeapAlloc, the console code page and the "hidden flag".
+Added: ? for strings, the new error messages, and a short note on CHECK_ASSERTS.
+IMPLEMENTATION.txt: the sections are renumbered 1–16 with no duplicate numbers. The new order is:
+1 General
+2 Lexical
+3 Statements
+4 Expressions
+5 Types
+6 Strings
+7 Floats
+8 Scope
+9 Constants
+10 Assignment before use
+11 |
+12 Prime test
+13 Random numbers
+14 Time
+15 Command line and options
+16 Known issues
+IMPLEMENTATION.txt, moved in: the decisions that had ended up in NOTES.md (command line, assert, |, *), plus a new section for strings. The Time and Prime sections are rewritten cleanly, and the stray (from RELEASE_NOTE - must be here) line is gone.
+IMPLEMENTATION.txt, edited: references to the removed "wish list" now say "does not exist yet".
+NOTES.md: only my own notes remain.
+Fixed: the technical bullets that had landed in the rules section are back in the right sections, and the broken Style bullet is repaired.
+Added: your working rules and the document split.
+Removed: the old sections 13–16, since they are in IMPLEMENTATION now.
+RELEASE_NOTES.md: every entry is now a short list of what changed. The old entries keep their old names.
+LIBRARY.txt: it had no string routines and no out-of-memory error, so I added a Strings section and rt_nomem. It is renumbered 1–10, and every rt_* label in kota.py is now covered.
+README.md: the tool and document rows are updated.
+
+Cross-reference checks:
+
+Section references: every "section N" in all six documents points at the right heading.
+Names: every file, test and routine name mentioned in the current docs exists.
+Error messages: the compile-error texts in LANGUAGE.md match what the compiler says.
+Old names: no ka.py or .ka remains outside the intended history line in NOTES.md.
+
+Your renumbering of tests 65–77 and the removal of "Directions and ideas" are kept. I didn't read PLANS.md or check 78_primes.
+
+One thing for you to decide: I listed the docs reorganisation under 7.4 in the release notes instead of making a 7.4.1, since the code is unchanged.
 

@@ -18,7 +18,7 @@ int main(void)
   stdout = GetStdHandle(STD_OUTPUT_HANDLE);          // -11
   SetConsoleOutputCP(65001);                         // UTF-8; the console keeps this code page after the program
   heap = GetProcessHeap();
-  state = 0x123456789ABCDEF0;                        // the random generator (section 6): the same start every time
+  state = 0x123456789ABCDEF0;                        // the random generator (section 7): the same start every time
   /* ... the program: create the closures of the `function name` definitions, then the statements ... */
   ExitProcess(0);                                    // the end of the program
 }
@@ -53,15 +53,17 @@ void rt_print_float(double x)                        // rax = bits of x; rt_fmt_
   rt_print_str(buf, n);
 }
 
-A `print` statement calls rt_print_str, rt_print_int or rt_print_float for every item, in order, and at the end rt_print_str("\n", 1).
+A `print` statement calls rt_print_str (a literal), rt_print_int, rt_print_float or rt_print_value_str / rt_print_value_text (section 5) for every item, in order, and at the end rt_print_str("\n", 1).
 
 
 3. Memory
 ---------
 void *rt_alloc(int64_t size)                         // rcx = size, result in rax
 {
-  return HeapAlloc(heap, HEAP_ZERO_MEMORY, size);    // the memory is zero: the hidden flags of captured variables rely on it
-}                                                    // closures and the boxes of captured variables are never freed
+  void *p = HeapAlloc(heap, HEAP_ZERO_MEMORY, size); // the memory is zero: the hidden flags of captured variables rely on it
+  if (p == NULL) rt_nomem();                         // runtime error: out of memory (section 4)
+  return p;
+}                                                    // closures, the boxes of captured variables and strings are never freed
 
 
 4. Runtime errors
@@ -73,6 +75,7 @@ rt_notfn      "runtime error: call of an unset function"                        
 rt_negexp     "runtime error: negative exponent"                                 int ^ with a negative exponent
 rt_badpow     "runtime error: power of a negative number with a fractional exponent"
 rt_badrand    "runtime error: bad argument of '?'"                               ?0.0, a float that is not above 0.0, NaN
+rt_nomem      "runtime error: out of memory"                                      HeapAlloc returned 0 (rt_alloc: a closure, a box or a string)
 (per variable name) "runtime error: variable 'x' is not initialized"             one tiny stub per name; a read whose hidden flag is 0 jumps to it:
 
 void uninit_stub_x(void)
@@ -82,8 +85,63 @@ void uninit_stub_x(void)
 }
 
 
-5. Floating point (tools/float_rt.asm; the x87 unit is used in extended precision)
-------------------------------------------------------------------------------------
+5. Strings (rt_strcat, rt_textcat, rt_strcmp, rt_textcmp, rt_print_value_str, rt_print_value_text)
+----------------------------------------------------------------------------------------------------
+A `str` value is 0 (the empty string) or the address of  struct { uint64_t length; uint8_t bytes[]; }  (length in bytes, no terminator, a zero byte is allowed).
+A `text` value is 0 or the address of  struct { uint64_t length; uint32_t chars[]; }  (length in characters = code points). Literals are static objects in the data section; nothing is ever freed.
+
+str *rt_strcat(str *a, str *b)                       // rax = a, rcx = b; the operator + on str
+{
+  uint64_t la = a ? a->length : 0, lb = b ? b->length : 0;
+  if (la + lb == 0) return 0;                        // the empty result is 0
+  str *r = rt_alloc(8 + la + lb);  r->length = la + lb;
+  memcpy(r->bytes, a ? a->bytes : 0, la);  memcpy(r->bytes + la, b ? b->bytes : 0, lb);
+  return r;
+}
+text *rt_textcat(text *a, text *b)                   // the same for text: 4 * length bytes of code points
+{
+  uint64_t la = a ? a->length : 0, lb = b ? b->length : 0;
+  if (la + lb == 0) return 0;
+  text *r = rt_alloc(8 + 4 * (la + lb));  r->length = la + lb;
+  memcpy(r->chars, a ? a->chars : 0, 4 * la);  memcpy(r->chars + la, b ? b->chars : 0, 4 * lb);
+  return r;
+}
+
+int64_t rt_strcmp(str *a, str *b)                    // rax = a, rcx = b; -1, 0 or 1: by unsigned bytes, a shorter prefix is smaller; 0 is the empty string
+{
+  uint64_t la = a ? a->length : 0, lb = b ? b->length : 0, n = la < lb ? la : lb;
+  for (uint64_t i = 0; i < n; i++)
+    if (a->bytes[i] != b->bytes[i]) return a->bytes[i] < b->bytes[i] ? -1 : 1;
+  return la < lb ? -1 : la > lb ? 1 : 0;
+}
+int64_t rt_textcmp(text *a, text *b)                 // the same by unsigned code points
+{
+  uint64_t la = a ? a->length : 0, lb = b ? b->length : 0, n = la < lb ? la : lb;
+  for (uint64_t i = 0; i < n; i++)
+    if (a->chars[i] != b->chars[i]) return a->chars[i] < b->chars[i] ? -1 : 1;
+  return la < lb ? -1 : la > lb ? 1 : 0;
+}
+// The code generator turns the result into 0/1 for == != < <= > >= (cmp rax,0 and setcc); a chain a < b <= c calls it once per link.
+
+void rt_print_value_str(str *p)                      // rax = p: a print item that is not a literal
+{
+  if (p) rt_print_str(p->bytes, p->length);
+}
+void rt_print_value_text(text *p)                    // rax = p: the code points as UTF-8, written in pieces of at most 1024 bytes
+{
+  uint8_t buf[1024], *out = buf;
+  if (!p) return;
+  for (uint64_t i = 0; i < p->length; i++) {
+    if (out > buf + 1020) { rt_print_str(buf, out - buf); out = buf; }   // room for one more character (4 bytes)
+    out = encode_utf8(p->chars[i], out);             // 1 to 4 bytes
+  }
+  if (out > buf) rt_print_str(buf, out - buf);
+}
+A literal item of `print` is not a value: it is written by rt_print_str straight from the data section.
+
+
+6. Floating point (tools/float_rt.asm; the x87 unit is used in extended precision)
+----------------------------------------------------------------------------------
 The routines set the x87 control word to extended precision (64-bit mantissa, round to nearest) themselves: Windows starts a process with 53 bits, which would spoil the digits.
 
 int rt_fmt_float(double x, char *out)                // rax = bits of x, rdx = out (at least 40 bytes), result = length
@@ -164,7 +222,7 @@ double rt_fpow(double x, double y, int *err)         // xmm0 = x, xmm1 = y, resu
 }
 
 
-6. Random numbers (SplitMix64)
+7. Random numbers (SplitMix64)
 ------------------------------
 static uint64_t state = 0x123456789ABCDEF0ULL;       // the 8 bytes at `state`; set at the start of every program
 
@@ -180,7 +238,7 @@ int64_t rt_rand_int(int64_t n)                       // rax = n, result in rax; 
 {
   if (n == 0) return (int64_t)rt_next_u64();         // ?0: the raw 64 bits
   if (n < 0)  { state = 0 - (uint64_t)n; return 0; } // ?m: the new state is -m (for the smallest int: itself)
-  if (n == 1) return rt_time_us();                   // ?1 is the time (section 6a)
+  if (n == 1) return rt_time_us();                   // ?1 is the time (section 8)
   return (int64_t)(rt_next_u64() % (uint64_t)n);     // 0 .. n-1
 }
 
@@ -194,8 +252,8 @@ double rt_rand_float(double x)                       // rax = bits of x, result 
 }
 
 
-6a. Time (rt_time_us, rt_time_text, rt_time_str in kota.py; the three others in tools/time_rt.asm)
----------------------------------------------------------------------------------------------------
+8. Time (rt_time_us, rt_time_text, rt_time_str in kota.py; the three others in tools/time_rt.asm)
+-------------------------------------------------------------------------------------------------
 int64_t rt_time_us(void)                             // ?1
 {
   uint64_t ft;                                       // 100 ns since 1601-01-01
@@ -258,8 +316,8 @@ int rt_time_format(uint32_t *f, int n, SYSTEMTIME *st, uint32_t *out)   // out h
 }
 
 
-6b. Integers (rt_isprime, tools/int_rt.asm; the unary operator *n)
----------------------------------------------------------------------
+9. Integers (rt_isprime, tools/int_rt.asm; the unary operator *n)
+-----------------------------------------------------------------
 int64_t rt_isprime(int64_t n)                        // rax = n  ->  rax = 1 if n is prime, else 0
 {
   if (n < 66) {                                      // the primes 2..65 as bits: bit (n - 2) of 0x0A08228828228A2B
@@ -274,8 +332,9 @@ int64_t rt_isprime(int64_t n)                        // rax = n  ->  rax = 1 if 
   }
 }                                                    // about sqrt(n) / 3 divisions: n near 2^63 takes some 10^9 of them (several seconds)
 
-7. Operations that the code generator writes in place
------------------------------------------------------
+
+10. Operations that the code generator writes in place
+------------------------------------------------------
 These are not routines (no call), but they behave like library functions and are easy to get wrong.
 
 int64_t int_floordiv(int64_t a, int64_t b)           // a \ b for ints; b == 0 -> rt_divzero
