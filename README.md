@@ -1,14 +1,14 @@
 # Kota - a small language compiled to Windows .exe
 
 ```
-python kota.py program.ko           # -> program.exe
-python kota.py program.ko -o p.exe  # -> p.exe
-python kota.py -e program.ko        # compile, run the .exe, delete it (Windows); -e -k keeps the .exe
-python kota.py -c "print 1 + 2"     # like python -c: compile the text, run, delete; -c ... -k keeps yyyymmdd_HHMMSS.exe
+kota.py program.ko           # -> program.exe
+kota.py program.ko -o p.exe  # -> p.exe
+kota.py -e program.ko        # compile, run the .exe, delete it (Windows); -e -k keeps the .exe
+kota.py -c "print 1+2"       # compile the text, run, delete; -c ... -k keeps yyyymmdd_HHMMSS.exe
 
-python rt.py                # on Windows: compiles and RUNS every test
-python rt.py -k closure -v  # subset, verbose
-python rt.py --emu          # Linux/macOS: run tests in an emulator (pip install unicorn pefile)
+rt.py                # on Windows: compiles and RUNS every test
+rt.py -k closure -v  # subset, verbose
+rt.py --emu          # Linux/macOS: run tests in an emulator (pip install unicorn pefile)
 ```
 
 | file | purpose |
@@ -31,11 +31,11 @@ python rt.py --emu          # Linux/macOS: run tests in an emulator (pip install
 | `tools/annotate_tests.py` | adds `-- =>` result comments to the tests from the real behaviour; `--check` verifies the existing ones (dev only) |
 
 ## Resuming work in a new Claude chat
-Upload this folder (or the zip) and write, for example:
+Upload this folder (in a zip) and write, for example:
 
 > We continue the Kota compiler. Read NOTES.md, LANGUAGE.md, IMPLEMENTATION.txt and RELEASE_NOTES.md first,
 > then let's work on: \<what you want\>.
-> At the end update the docs (maybe run the (new) tests (`python rt.py --emu`)) and give me a new zip.
+> At the end update the docs, run the tests (`python rt.py --emu`), and give me a new zip.
 
 After that, run `python rt.py` on Windows and send Claude the failing output (use `-v`).
 
