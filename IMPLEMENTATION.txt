@@ -171,7 +171,7 @@ Floored division and modulo (version 6.2, user: "let's do it mathematically"): `
 - `@x` = variable of the nearest enclosing function (draft, replaced the first spelling `\x`). A first version of the idea was `nonlocal x`. The user expects to
   redo it ("we'll do later"); only one level exists.
 - Named functions are hoisted (created at scope entry): they exist from the start of their scope ("main code first, helpers below", mutual recursion). Version 6.4 (user): a name defined with
-  `function` is a constant, "in a compiled language you cannot redefine a function with the same name or write n = 2 after 
+  `function` is a constant, "in a compiled language you cannot redefine a function with the same name or write n = 2 after
 ():=1" (Python allows it silently because a session is interpreted).
   Before 6.4 such a name was an ordinary variable that could be reassigned (test 20 did it); the check is made in Checker.stmt: the target's scope must not have a function of that name.
   The user also considered a single `f = function...` form instead; rejected (no main-first layout, call-before-definition becomes a runtime error, mutual recursion gets fragile).
@@ -209,7 +209,7 @@ really a variable that is assigned at run time; it is only not supposed to be ch
 - Memory is never freed (closures, strings).
 
 
-12. Variables are assigned before they are read (version 6.4)
+10. Variables are assigned before they are read (version 6.4)
 ---------------------------------------------------------------
 User's decision: a variable used before an assignment is an error; "if it is clear at compile time, say so then; where it is not clear, use hidden initialization flags";
 globals that are defined at the top of the program and then used in functions "need no flags, it is clear that they are defined". Different modes (flags on or off) are for later,
@@ -234,15 +234,6 @@ variable (slower, and unnecessary).
 Known approximations: any call widens `may`, also one that cannot assign the variable; two assignments in different branches of a loop count as "maybe"; `exit` and `return` end a path.
 
 
-10. Directions and ideas (not decided)
---------------------------------------
-- More string operations: length, indexing, slices, conversions `str` <-> `text` and to/from numbers.
-- Explicit conversions int <-> float, rounding, floor/ceil; INF/NAN literals; comparison with tolerance (as a pragma?); output format control.
-- Per-call polymorphism; relaxing the strictness of float/int assignment.
-- Radix literals 3..36; `for` loops; arrays; input; modules; overflow checks as pragmas; a garbage collector.
-- Debug options: AST dump, assembler listing, variable dump with types (wish list in LANGUAGE.md section 10).
-
-
 11. Random numbers (version 6.3)
 --------------------------------
 - Algorithm and state: SplitMix64 (the user's C code) with the initial state 0x123456789ABCDEF0, set at the start of every program: until a program sets the state itself, its random numbers are always
@@ -262,6 +253,7 @@ User's design: a unary operator `?x` on numbers; the algorithm is the user's C c
 - Tests: tests/62_random.ko. The expected numbers come from an independent Python version of the C code, not from the compiler.
 
 12. Time (version 6.9)
+----------------------
 - `?1` is the UTC time in microseconds since 1970 (user): `GetSystemTimePreciseAsFileTime` gives 100 ns units since 1601; minus 116444736000000000, divided by 10 (user). It needs Windows 8 or newer.
 - `?'fmt'` / `?"fmt"` is the local time (`GetLocalTime`, so the milliseconds are all the precision there is: F3 is exact, F1 and F2 are cut, not rounded) as a str / text of the same kind as the
   argument; codes are a letter and a digit, everything else is copied (user). `?` accepts any operand type that `!` accepts, and `?x` has the type of `x`.
@@ -275,3 +267,11 @@ User's design: a unary operator `?x` on numbers; the algorithm is the user's C c
   Windows or allocate are hand-assembled in kota.py. `rt_alloc` is shared with closures and strings (checked, out of memory is a runtime error).
 - Tests: the real clock cannot be compared in a test, so tests/71_time.ko checks ranges, shapes and the parts that do not depend on the time. tools/fuzz_time.py checks the formatting
   exactly against a Python reference at fixed times (the emulator takes the time as a parameter): 300 formats, random and edge cases, str and text, 6 times.
+(from RELEASE_NOTE - must be here)
+- New runtime in `tools/time_rt.asm` (built into `ka.py` like the float runtime): `rt_utf8_to_text`, `rt_text_to_utf8` (conversions between two existing buffers; bytes that are not UTF-8 survive), `rt_time_format`;
+  `rt_time_us`, `rt_time_text`, `rt_time_str` in `ka.py`. The build script handles two asm files now.
+
+13. Prime test
+--------------
+ Machine code in `tools/int_rt.asm` (`rt_isprime`), the build script handles a third file (and `jo`). Details: IMPLEMENTATION.txt section 16, LIBRARY.txt section 6b. the right mask for `(mask >> (n - 2)) & 1` is `0x0A08228828228A2B`. Checked against a sieve for -100 .. 300000 and by `tools/fuzz_prime.py`.
+- The test `i * i <= n` checks for overflow (primes just below 2^63 would run 4 * 10^8 steps too long). The largest prime below 2^63, 9223372036854775783, was run once through the emulator (173 s): 1.

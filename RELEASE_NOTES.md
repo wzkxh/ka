@@ -1,12 +1,16 @@
 # Kota - release notes (newest first)
 
-## Current state (version 7.3)
+## Current state (version 7.4)
 Kota compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3, no dependencies). The version is the `VERSION` constant in `kota.py`.
 - **Language:** 64-bit ints and floats, first-class functions and closures (shared by reference, never freed), static type inference, constants, byte strings (`str`) and unicode strings (`text`) as values.
   Details: LANGUAGE.md. Reasons: IMPLEMENTATION.txt.
-- **Tests:** 249 programs in `tests/` with their expected results in `tests/results/` (all pass under the emulator on Linux; the user runs them on real Windows). Every test has `-- =>` result comments.
-- **Checked on real Windows by the user:** all 249 tests of version 7.3 passed.
+- **Tests:** 253 programs in `tests/` with their expected results in `tests/results/` (all pass under the emulator on Linux; the user runs them on real Windows). Every test has `-- =>` result comments.
+- **Checked on real Windows by the user:** all 253 tests of version 7.4 passed.
 - **Known limits:** see IMPLEMENTATION.txt section 9 (float printing last digit, fractional float powers checked only in an emulator, strings can only be built by `+` and compared, no input, no GC).
+
+## Version 7.4
+- **Unary `\*n`, the prime test:** 1 if the int `n` is prime, else 0; ints only.
+- Tests: `75_prime`, `err_type_prime_float`, `err_type_prime_text`; LIBRARY.txt also got the in-place operations `|x` and `assert`.
 
 ## Version 7.3
 - **Unary `|x`:** the absolute value of an int or a float (same type), the length of a `str` (bytes) or a `text` (characters), an int. Details: IMPLEMENTATION.txt section 15.
@@ -29,8 +33,6 @@ Kota compiles to a Windows x64 console `.exe` (PE written directly, pure Python 
 - **`?1` is the time:** microseconds since 1970-01-01 UTC (`GetSystemTimePreciseAsFileTime`). It was a runtime error.
 - **`?'format'` and `?"format"`:** the local time (`GetLocalTime`) as a `str` / `text`. Codes `y2 y4 m1 m2 d1 d2 H1 H2 M1 M2 S1 S2 F1 F2 F3 w1 w2 w3`, other characters are copied, at most 64 characters.
   The operand of `?` may now be a string; `?x` has the type of `x`.
-- New runtime in `tools/time_rt.asm` (built into `ka.py` like the float runtime): `rt_utf8_to_text`, `rt_text_to_utf8` (conversions between two existing buffers; bytes that are not UTF-8 survive), `rt_time_format`;
-  `rt_time_us`, `rt_time_text`, `rt_time_str` in `ka.py`. The build script handles two asm files now.
 - Tests: `71_time` (the time cannot be compared, so ranges and shapes); `rt_rand_one` removed. `tools/fuzz_time.py` compares the formatting with a Python reference at fixed times (the emulator got `GetLocalTime`,
   `GetSystemTimePreciseAsFileTime` and a `now=` parameter).
 - Needs Windows 8 or newer (`GetSystemTimePreciseAsFileTime`).

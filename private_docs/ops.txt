@@ -1,14 +1,14 @@
 | o | unary            | binary                | others                      |
 |---|------------------|-----------------------|-----------------------------|
 | ! | not              | c?a!b                 | !=                          |
-| ? | random           | c?a!b                 |                             |
+| ? | random & time    | c?a!b                 |                             |
 | \ | function (λ)     | int. div, drop        | \=                          |
 | / | sqrt, strip      | float div, take       | /=                          |
 | % | split_blanks     | modulo, split/join    | %=                          |
 | | | abs, len         | bitwise or, find      | |=  || logical or  ||=      |
 | & |                  | bitwise and, contains | &=  && logical and &&=      |
 | ~ | bitwise not      | bitwise xor, match    | ~=                          |
-| * | scatter?         | multiply, repeat      | *=     *> <* rotate *>= <*= |
+| * | prime, scatter?  | multiply, repeat      | *=     *> <* rotate *>= <*= |
 | + | identity         | plus, concat          | +=     +> arithm.shift +>=  |
 | - | negate, reverse  | minus                 | -=                          |
 | < | floor, lower     | less                  | <=  << shift left  <<=      |

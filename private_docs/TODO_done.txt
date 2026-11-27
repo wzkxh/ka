@@ -247,7 +247,7 @@ Implementation is like this
 def is_prime(n): # int64 -> int64 (0|1)
   if n < 66:
     if n < 2: return 0
-    return (0x28208A20A08A28AD >> (n - 2)) & 1
+    return (0x0A08228828228A2B >> (n - 2)) & 1
   if (n & 1) == 0 or (n % 3) == 0: return 0
   i = 5
   while i * i <= n:

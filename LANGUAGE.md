@@ -57,7 +57,7 @@ Types are checked at compile time, never written, and inferred:
 - Calls check the number and types of the arguments. Calling a number is an error.
 - Function types may refer to themselves (`function f(a): return a(a)` with `d = f(q)`, `function q(x): return x`).
 - **Numbers** (int, float) are accepted by `+ - * / \ % ^`, unary `-` `?` `|`, `< <= > >= == !=`, `&& || !`, conditions of `if`, `while`, `?!`, and `print`.
-  **Ints only** are accepted by `& | ~ << >> +> <* *>`, unary `~` and `exit`.
+  **Ints only** are accepted by `& | ~ << >> +> <* *>`, unary `~` `*` and `exit`.
   Functions are accepted by `==` and `!=` (equal if they are the same function; same signature).
 - **Strings** (`str`, `text`) are accepted by unary `|` (the length), `+` (concatenation), `+=`, `== != < <= > >=` (by contents; `str` by unsigned bytes, `text` by code points; chains work too),
   `&& || !`, conditions of `if`, `while`, `?!`, and `print`. Both operands must have the same string type: `str` and `text` do not mix and do not convert.
@@ -101,7 +101,7 @@ Precedence, highest to lowest; binary operators are left-associative except `^`:
 | level | operators |
 |---|---|
 | 14 | call `f(args)`; primary: number, variable, `(expr)`, function literal |
-| 13 | unary `-` `~` `!` `?` `\|` |
+| 13 | unary `-` `~` `!` `?` `\|` `*` |
 | 12 | `^` power (right-associative) |
 | 11 | `*` `/` `\` `%` |
 | 10 | `+` `-` |
@@ -135,6 +135,7 @@ Precedence, highest to lowest; binary operators are left-associative except `^`:
   A rotate takes the count modulo 64: `x <* -n` is `x *> n`, `x *> -n` is `x <* n`.
 - **Absolute value and length**, unary `|x` (after an operand `|` is bitwise or): for an int or a float the absolute value, of the same type (the smallest int stays as it is, `|-0.0` is `0.0`, the sign of NaN is cleared);
   for a `str` the number of bytes, for a `text` the number of characters, an int (0 for the empty string). `|x + 1` is `(|x) + 1`, `|(a - b)` needs the parentheses. Not for functions.
+- **Prime test**, unary `*n` (after an operand `*` is multiplication): for an int `n` the int 1 if `n` is a prime number, else 0 (`*-3`, `*0`, `*1` are 0, `*2` is 1). Ints only.
 - **Random numbers**, unary `?x`: for an int `n > 1`, `?n` is an int in `0 .. n-1`; `?0` is the next raw 64 bits as an int; for an int `m < 0`, `?m` sets the state of the
   generator to `-m` and gives 0; for a float `x > 0.0`, `?x` is a float in `[0, x)`. `?1` is the current time (below). `?0.0`, a negative float and NaN are runtime errors.
   `?x` has the type of `x`; the operand may be any int, float, str or text expression.
@@ -279,7 +280,7 @@ Very deep recursion overflows the 1 MB stack and crashes.
 | & | unary - nothing, bitwise and, && - logical and; &= &&= |
 | \| | unary absolute value / length, bitwise or, \|\| - logical or; \|= \|\|= |
 | ~ | unary bitwise not, xor; ~= |
-| * | unary - nothing (scatter?), multiply; \*= ; `<*` `*>` rotate |
+| * | unary prime test, multiply; \*= ; `<*` `*>` rotate |
 | + | identity, plus; += ; `+>` arithmetic shift right |
 | - | negative, minus; -= |
 | < | unary - nothing, less; <= - le; `<<` shift left, `<*` rotate left |

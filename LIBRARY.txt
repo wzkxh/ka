@@ -1,6 +1,6 @@
 LIBRARY - the runtime of the Kota compiler as readable C code
 ============================================================
-The machine code of these routines is written by hand in kota.py (function runtime() and the code generator) or generated from tools/float_rt.asm and tools/time_rt.asm. This file says
+The machine code of these routines is written by hand in kota.py (function runtime() and the code generator) or generated from tools/float_rt.asm, tools/time_rt.asm and tools/int_rt.asm. This file says
 what every routine does, in C, for people. It is not compiled. When a routine changes, change it here too.
 
 Conventions
@@ -258,6 +258,22 @@ int rt_time_format(uint32_t *f, int n, SYSTEMTIME *st, uint32_t *out)   // out h
 }
 
 
+6b. Integers (rt_isprime, tools/int_rt.asm; the unary operator *n)
+---------------------------------------------------------------------
+int64_t rt_isprime(int64_t n)                        // rax = n  ->  rax = 1 if n is prime, else 0
+{
+  if (n < 66) {                                      // the primes 2..65 as bits: bit (n - 2) of 0x0A08228828228A2B
+    if (n < 2) return 0;                             // (this is also the answer for every negative n)
+    return (0x0A08228828228A2BULL >> (n - 2)) & 1;
+  }
+  if ((n & 1) == 0 || n % 3 == 0) return 0;
+  for (int64_t i = 5; ; i += 6) {                    // trial division by 5 7 | 11 13 | 17 19 ...
+    int64_t sq;
+    if (__builtin_mul_overflow(i, i, &sq) || sq > n) return 1;    // the overflow check matters near INT64_MAX: the square of the first i
+    if (n % i == 0 || n % (i + 2) == 0) return 0;                 // above the root does not fit and would wrap to a negative number
+  }
+}                                                    // about sqrt(n) / 3 divisions: n near 2^63 takes some 10^9 of them (several seconds)
+
 7. Operations that the code generator writes in place
 -----------------------------------------------------
 These are not routines (no call), but they behave like library functions and are easy to get wrong.
@@ -301,3 +317,9 @@ int64_t shift_left(int64_t x, int64_t n)             // x << n;  >> and +> are t
 
 int truth(int64_t v)      { return v != 0; }                  // for ints (and functions)
 int truth_float(double x) { return (bits(x) << 1) != 0; }     // -0.0 is false; NaN is true
+
+int64_t abs_int(int64_t x)   { int64_t m = x >> 63; return (x ^ m) - m; }     // |x| for an int: the smallest int stays negative
+double  abs_float(double x)  { return bits_to_double(bits(x) & ~(1ULL << 63)); }   // |x| for a float: btr rax,63; -0.0 -> 0.0, NaN stays NaN
+int64_t length(void *s)      { return s ? *(int64_t *)s : 0; }                // |s| for a str (bytes) or a text (characters): the first word of the object
+
+// assert c, r  is rewritten by the parser: if (!c) { print("assertion failed (line N): " r); exit(1); }   (nothing is called)

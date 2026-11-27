@@ -18,6 +18,8 @@ Reasons behind decisions: IMPLEMENTATION.txt. History and state: RELEASE_NOTES.m
   `CHECK_ASSERTS = False` makes the parser return `("skip",)` (the expressions are parsed, neither type-checked nor compiled).
 - Unary `|x` (version 7.3) is the node `("abs", x)`: the checker has a constraint `abs` (result `res`, operand type): int -> int, float -> float, str/text -> int, a still unknown operand makes both default to int in `finish`; the code generator
   emits `sar/xor/sub` for ints, `btr rax,63` for floats and `[rax]` (0 if rax is 0) for str/text.
+- Unary `*n` (version 7.4) is the node `("prime", n)`: int only (`operand()`), the result is an int; the code generator calls `rt_isprime` (INT_RT from `tools/int_rt.asm`, built by the same script).
+  `python tools/fuzz_prime.py` checks it against a Python Miller-Rabin in the emulator.
 - **Version:** the `VERSION` constant in `kota.py` (no command line option for it, the user asked for none). Bump it for every delivery to the user and add an entry on top of RELEASE_NOTES.md.
 - **Style:** 2 spaces per indentation level in `.py` and `.ko` files (also continuation lines). Tests carry `-- =>` comments with the result of a statement
 - **Brackets (user, 6.3):** blanks between arguments -> blanks also after `(` and before `)`: `f( first, second )`; short cases (a few arguments, short names) -> no blanks: `f(a,b)`, `fn(T1,T2)->R`.
@@ -163,3 +165,17 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
 - Length: the first 8 bytes of the object (section 5 of this file): the number of bytes for a str, of code points for a text; the empty string is the address 0 and has the length 0, so one test and one load, no call.
 - Tests: `74_abs_length`, `err_type_abs_function`. Also in 7.3 (user's request, same delivery): `err_type_arg_*` (a function has one signature, so the same function called with a str and then a text, an int and a str, and so on is an error:
   both orders of every pair of int, float, str, text, with the message `in argument N of the call: expected X, found Y`), and `73_oop_counter` (an object as a closure with private state).
+
+16. Unary * - the prime test (version 7.4)
+- `*n` (user): 1 if the int n is prime, else 0; for ints only (a float or a string is a compile error naming `'*'`). It is a prefix operator at the level of the other unary operators; after an operand `*` is multiplication as before,
+  so `3 * *5` is 3 and `**7` is `*(*7)` = 0 (the token `**` does not exist).
+- The algorithm is the user's (a 64-bit table for n < 66, then 2 and 3, then trial division by i and i + 2 for i = 5, 11, 17, ...) in machine code (`rt_isprime`, tools/int_rt.asm, section 6b of LIBRARY.txt).
+- The user asked to check it for -2..100 first. The constant of the first version, 0x28208A20A08A28AD, was wrong for the lookup `(mask >> (n - 2)) & 1`: it has the bit for each prime p at position p (and a stray bit 0), that is the right mask for
+  `mask >> n`, shifted by two plus one bit; with it 4, 9, 15, 21, ... were prime. The mask for `(n - 2)` is 0x0A08228828228A2B (bit k set iff k + 2 is a prime, 18 bits). With that constant the function agrees with a sieve for -100 .. 300000
+  (Python) and with a Miller-Rabin test on the numbers of `tools/fuzz_prime.py` (also in the emulator, through the compiled operator).
+- One change to the user's code: `i * i <= n` is checked for signed overflow. The largest i of the form 6k - 1 below the root of INT_MAX is 3037000499 and the next one, 3037000505, squares to more than INT_MAX; with wrapping arithmetic that square
+  is negative, the loop would go on and for the primes in [3037000499^2, INT_MAX] (the largest is 9223372036854775783) it would run for roughly 4 * 10^8 more steps before the wrapped square gets large again.
+  The overflow flag of `imul` ends the loop at once (the answer is "prime" then).
+- Speed: about sqrt(n) / 3 steps with two 64-bit divisions each. A prime near 2^63 needs 5 * 10^8 steps, several seconds on a real machine. Only worth speeding up if the user needs it (a Miller-Rabin test for 64 bits would be about a thousand times faster).
+- Tests: `75_prime` (the numbers -2..100 one by one, the primes below 100000 counted, comparison with a trial division written in Kota, large primes), `err_type_prime_float`, `err_type_prime_text`. The tests avoid primes above 1e14 (the emulator is slow);
+  the case near 2^63 was run once by hand (see RELEASE_NOTES.md).

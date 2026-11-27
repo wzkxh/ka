@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Dev tool: assemble tools/float_rt.asm and tools/time_rt.asm and put the machine code into kota.py between the BEGIN/END FLOAT_RT and TIME_RT markers.
+"""Dev tool: assemble tools/float_rt.asm, tools/time_rt.asm and tools/int_rt.asm and put the machine code into kota.py between the BEGIN/END FLOAT_RT, TIME_RT and INT_RT markers.
 Needs `pip install keystone-engine`; NOT needed to use the compiler (kota.py already contains the bytes).
 Keystone assembles the single instructions; jumps and labels are handled here (every jump is a rel32)."""
 import os, re, struct, sys
 import keystone
 
 JCC = {"je": 4, "jz": 4, "jne": 5, "jnz": 5, "jl": 0xC, "jge": 0xD, "jle": 0xE, "jg": 0xF, "js": 8, "jns": 9,
-       "jp": 0xA, "jnp": 0xB, "ja": 7, "jae": 3, "jb": 2, "jbe": 6}
+       "jp": 0xA, "jnp": 0xB, "ja": 7, "jae": 3, "jb": 2, "jbe": 6, "jo": 0, "jno": 1}
 ks = keystone.Ks(keystone.KS_ARCH_X86, keystone.KS_MODE_64)
 cache = {}
 
@@ -68,7 +68,7 @@ def render(blobs, name, asm_file):
   return "\n".join(lines)
 
 
-FILES = (("FLOAT_RT", "float_rt.asm"), ("TIME_RT", "time_rt.asm"))
+FILES = (("FLOAT_RT", "float_rt.asm"), ("TIME_RT", "time_rt.asm"), ("INT_RT", "int_rt.asm"))
 
 if __name__ == "__main__":
   path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "kota.py")
