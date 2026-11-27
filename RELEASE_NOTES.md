@@ -9,7 +9,7 @@ Kota compiles to a Windows x64 console `.exe` (PE written directly, pure Python 
 - **Known limits:** see IMPLEMENTATION.txt section 9 (float printing last digit, fractional float powers checked only in an emulator, strings can only be built by `+` and compared, no input, no GC).
 
 ## Version 7.4
-- **Unary `\*n`, the prime test:** 1 if the int `n` is prime, else 0; ints only.
+- **Unary `*n`, the prime test:** 1 if the int `n` is prime, else 0; ints only.
 - Tests: `75_prime`, `err_type_prime_float`, `err_type_prime_text`; LIBRARY.txt also got the in-place operations `|x` and `assert`.
 
 ## Version 7.3
