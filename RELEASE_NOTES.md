@@ -1,12 +1,16 @@
 # Kota - release notes (newest first)
 
-## Current state (version 7.0)
+## Current state (version 7.1)
 Kota compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3, no dependencies). The version is the `VERSION` constant in `kota.py`.
 - **Language:** 64-bit ints and floats, first-class functions and closures (shared by reference, never freed), static type inference, constants, byte strings (`str`) and unicode strings (`text`) as values.
   Details: LANGUAGE.md. Reasons: IMPLEMENTATION.txt.
 - **Tests:** 223 programs in `tests/` with their expected results in `tests/results/` (all pass under the emulator on Linux; the user runs them on real Windows). Every test has `-- =>` result comments.
-- **Checked on real Windows by the user:** all 223 tests of version 7.0 passed.
+- **Checked on real Windows by the user:** all 194 tests of version 6.3 passed.
 - **Known limits:** see IMPLEMENTATION.txt section 9 (float printing last digit, fractional float powers checked only in an emulator, strings can only be built by `+` and compared, no input, no GC).
+
+## Version 7.1
+- **Command line:** `-e` compiles, runs the .exe and deletes it (the exit code is the program's); `-k` (with `-e` or `-c`) keeps it; `-c "text"` compiles Kota source given on the command line (like `python -c`), runs it and deletes
+  the .exe; with `-k` it is kept as `yyyymmdd_HHMMSS.exe`. Details and the choices: IMPLEMENTATION.txt section 13. New dev test `tools/test_cli.py` (the emulator stands in for Windows).
 
 ## Version 7.0
 - **The language is called Kota** (was Ka): source files are `.ko` (was `.ka`), the compiler is `kota.py` (was `ka.py`), the Python module is `kota`. Docs, sources, tools, test and benchmark

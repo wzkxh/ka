@@ -3,6 +3,8 @@
 ```
 python kota.py program.ko           # -> program.exe
 python kota.py program.ko -o p.exe  # -> p.exe
+python kota.py -e program.ko        # compile, run the .exe, delete it (Windows); -e -k keeps the .exe
+python kota.py -c "print 1 + 2"     # like python -c: compile the text, run, delete; -c ... -k keeps yyyymmdd_HHMMSS.exe
 
 python rt.py                # on Windows: compiles and RUNS every test
 python rt.py -k closure -v  # subset, verbose
@@ -24,6 +26,7 @@ python rt.py --emu          # Linux/macOS: run tests in an emulator (pip install
 | `performance/` | some benchmarks vs Python 3.3; 5x to 16x faster |
 | `tools/emu.py` | Unicorn-based `.exe` emulator used for checking without Windows |
 | `tools/float_rt.asm`, `tools/time_rt.asm`, `tools/build_float_rt.py` | source of the float and time runtime machine code embedded in `kota.py` (dev only, needs `keystone-engine`) |
+| `tools/test_cli.py` | test of the command line options `-e -k -c` with the emulator in place of Windows (dev only) |
 | `tools/fuzz_float.py`, `tools/fuzz_time.py` | fuzz tests of the float and time-format routines in Unicorn against Python (dev only) |
 | `tools/annotate_tests.py` | adds `-- =>` result comments to the tests from the real behaviour; `--check` verifies the existing ones (dev only) |
 

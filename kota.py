@@ -7,6 +7,8 @@ OS; the produced .exe runs on Windows).
 Usage:
     python kota.py program.ko              -> program.exe
     python kota.py program.ko -o out.exe
+    python kota.py -e program.ko           compile, run the .exe, delete it   (-k: keep it)
+    python kota.py -c "print 1 + 2"        compile the text, run, delete      (-k: keep it as yyyymmdd_HHMMSS.exe)
 
 The language is described in LANGUAGE.md. Pipeline:
     strip comments -> tokenize (NEWLINE/INDENT/DEDENT) -> parse to AST (tuples)
@@ -16,10 +18,13 @@ import argparse
 import os
 import re
 import struct
+import subprocess
 import sys
+import tempfile
+import time
 
 
-VERSION = "7.0"                         # see RELEASE_NOTES.md
+VERSION = "7.1"                         # see RELEASE_NOTES.md
 CHECK_INIT = True                       # runtime checks of variables that are not provably assigned (see InitCheck); a mode to switch off later
 WARN_UNUSED_VALUE = False               # warning for an expression statement that is not a call; off by default
 
@@ -3115,25 +3120,68 @@ def compile_source(src, warnings=None):
   return build_pe(asm, parser.vars, parser.strings, parser.byte_strings, parser.text_strings)
 
 
+def run_exe(path):
+  """run a compiled program (Windows only) and return its exit code"""
+  if os.name != "nt":
+    print("kota: cannot run a Windows .exe on this system", file=sys.stderr)
+    return 1
+  return subprocess.call([os.path.abspath(path)])
+
+
 def main():
-  ap = argparse.ArgumentParser(description="Compile a Kota program to a Windows x64 .exe")
-  ap.add_argument("source")
-  ap.add_argument("-o", "--output")
+  ap = argparse.ArgumentParser(description="Compile a Kota program to a Windows x64 .exe (and run it with -e or -c)")
+  ap.add_argument("source", nargs="?", help="the Kota source file (.ko)")
+  ap.add_argument("-o", "--output", help="the name of the .exe")
+  ap.add_argument( "-e", "--execute", action="store_true",
+                   help="compile, run the .exe, delete it (the exit code is the one of the program)" )
+  ap.add_argument("-k", "--keep", action="store_true", help="with -e or -c: do not delete the .exe")
+  ap.add_argument( "-c", "--command", metavar="TEXT",
+                   help="Kota source text instead of a file: compile, run, delete (like python -c)" )
   args = ap.parse_args()
-  out = args.output or os.path.splitext(args.source)[0] + ".exe"
+  if args.command is not None and args.source:
+    ap.error("a source file and -c cannot be used together")
+  if args.command is None and not args.source:
+    ap.error("a source file or -c is required")
+  run = args.execute or args.command is not None
+  if args.keep and not run:
+    ap.error("-k is used together with -e or -c")
+  name = args.source if args.command is None else "<command>"
   warnings = []
   try:
-    with open(args.source, encoding="utf-8") as f:
-      exe = compile_source(f.read(), warnings)
+    if args.command is None:
+      with open(args.source, encoding="utf-8") as f:
+        text = f.read()
+    else:
+      text = args.command
+    exe = compile_source(text, warnings)
   except CompileError as e:
-    print(f"{args.source}: error: {e}", file=sys.stderr)
+    print(f"{name}: error: {e}", file=sys.stderr)
     return 1
   for w in warnings:
-    print(f"{args.source}: warning: {w}", file=sys.stderr)
+    print(f"{name}: warning: {w}", file=sys.stderr)
+  out = args.output
+  if out is None and (args.keep or not run):             # where the .exe stays: next to the source, or yyyymmdd_HHMMSS.exe for -c
+    out = (os.path.splitext(args.source)[0] if args.command is None else time.strftime("%Y%m%d_%H%M%S")) + ".exe"
+  temp = out is None                                     # run and delete: a file in the temp directory
+  if temp:
+    fd, out = tempfile.mkstemp(suffix=".exe", prefix="kota_")
+    os.close(fd)
   with open(out, "wb") as f:
     f.write(exe)
-  print(f"wrote {out} ({len(exe)} bytes)")
-  return 0
+  if not run:
+    print(f"wrote {out} ({len(exe)} bytes)")
+    return 0
+  try:
+    code = run_exe(out)
+  finally:
+    if args.keep:
+      print(f"kept {out}", file=sys.stderr)
+    else:
+      try:
+        os.remove(out)
+      except OSError:
+        pass
+  return code
 
 
 if __name__ == "__main__":

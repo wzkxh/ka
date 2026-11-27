@@ -12,6 +12,8 @@ Reasons behind decisions: IMPLEMENTATION.txt. History and state: RELEASE_NOTES.m
 - **Document split:** LANGUAGE.md = short exact definition, no "why". IMPLEMENTATION.txt = decisions, reasons, alternatives, issues. NOTES.md = this file, how the
   code works. RELEASE_NOTES.md = versions, newest first, with the current state. PLANS.md = the owner's list of plans and ideas (the user maintains it; the next tasks come in the chat).
   README.md = what the files are and how to run.
+- **Command line** (`main()` in `kota.py`): `source [-o out.exe]`; `-e` run the .exe and delete it; `-k` (with `-e` or `-c`) keep it; `-c TEXT` source text instead of a file (implies running). `run_exe()` is the one place that starts a program (Windows only);
+  `python tools/test_cli.py` replaces it by the emulator.
 - **Version:** the `VERSION` constant in `kota.py` (no command line option for it, the user asked for none). Bump it for every delivery to the user and add an entry on top of RELEASE_NOTES.md.
 - **Style:** 2 spaces per indentation level in `.py` and `.ko` files (also continuation lines). Tests carry `-- =>` comments with the result of a statement
 - **Brackets (user, 6.3):** blanks between arguments -> blanks also after `(` and before `)`: `f( first, second )`; short cases (a few arguments, short names) -> no blanks: `f(a,b)`, `fn(T1,T2)->R`.
@@ -124,3 +126,12 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
 1. The user uploads the zip/folder. Unzip; read NOTES.md, RELEASE_NOTES.md, LANGUAGE.md, PLANS.md; `pip install unicorn pefile keystone-engine`; run `python rt.py --emu`.
 2. Implement the requested changes; run all tests; add/adjust tests (with comments) and docs (see 0); bump `VERSION`.
 3. Re-zip (`kota.zip`), present it, summarise what to check on Windows and any open question.
+
+13. Command line: -e, -k, -c (version 7.1)
+- `-e`: compile, run the .exe, delete it (user). The exit code of `kota.py` is the exit code of the program, so it can be used in scripts. `-k` keeps the .exe and says `kept NAME` on stderr (the program's own output stays alone on stdout).
+  `-k` without `-e` or `-c` is a usage error. `-c TEXT` works like Python's: the source is the text, nothing is read; it implies running. A source file together with `-c` is a usage error.
+- `-c` is done internally (user offered "a temp file or all internally"): no `.ko` file is made. Errors and warnings are named `<command>` (line numbers count the lines of the text).
+- Where the .exe goes: with `-e` or `-c` and neither `-k` nor `-o`, a file in the system's temp directory, which is deleted after the run, so an existing `program.exe` next to the source is never overwritten or deleted.
+  With `-k` the usual place: next to the source, or `yyyymmdd_HHMMSS.exe` in the current directory for `-c` (user's example name). `-o NAME` names it in every case; without `-k` it is deleted after the run all the same.
+- A compile error runs nothing and leaves no file. The .exe is also deleted when running it fails. Running is only possible on Windows: elsewhere the message `cannot run a Windows .exe on this system` and exit code 1 (Wine was not tried, nobody asked).
+- The compile message `wrote NAME (N bytes)` is printed only when nothing is run.
