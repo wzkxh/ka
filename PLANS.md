@@ -1,18 +1,15 @@
 ## Not in the language (yet)
-- options -e: compile, execute and delete exe; -E: as -e, leave exe;
-- option -c "...": compile string as temp file, execute, delete exe;
-- `assert` expr [, str] -- if expr is false, print str and exit w/RC 1; use it in tests;
-- `|x` unary abs (numbers) and len (str/text);
-- short strings 0-7 chars kept in 64-bit words;
-- maybe string literals in one table;
+- fns floor/ceil; or <x >x;
 - multi-assignment a=b=c=v;
-- multi-value assignment (a,b=x,y); returns;
+- multi-value assignment (a,b=x,y), not returns;
+- multi-value returns - maybe introduce tuples;
 - multi-value with split (a,b,\*c = x,y,p,q,r);
 - void; fns returning void; warning about calls whose value is not used;
+- short strings 0-7 chars kept in 64-bit words;
 - a garbage collector (GC); or rather reference counter;
+- maybe string literals in one table;
 - str/text repetition `x*n` `n*x`;
 - float literals: #i #n #p #t #inf -#inf #nan #pi #tau (or like in J?);
-- fns floor/ceil; or <x >x;
 - parameters (argv argc env);
 - implicit conversion on assignment (strict now); on calls; rules;
 - explicit conversion int <-> float, rounding; str <-> number; formatting;
@@ -43,7 +40,6 @@
 - `"^ctrl..."` multi-line strings, with/without indents, with/without interpretation, etc.
 - integer overflow detection as option; pragmas & cli options (TODO_pragmas.txt);
 - more operations on strings, numbers;
-- is prime fn (TODO_prime.txt);
 - standard library (functions and/or operators):
   - os/file system: open/close, read/write, properties, dir, start, current_time;
   - strings: replace, regex;
