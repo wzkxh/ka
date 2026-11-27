@@ -1,0 +1,214 @@
+A) Well, if you feel you need to re-test more that just test for the latest change or to add text to several doc files,
+do it. we'd rather have correct and well done project in a long time, than poor one but fast.
+
+B) No need to write all the details that are in LANGUAGE and IMPLEMENTATION in RELEASE_NOTES: this file just mentions what is changed. Who needs details, will find them in proper files.
+
+C) Please add file LIBRARY.txt with source code in C/Python of used functions (rt_alloc, rt_fmodfloor, rt_rand_int, etc, I guess, all in 'runtime'). That is, human-readable library functions. If you feel C better expresses the computations, use C instead of Python, doesn't matter much - anything's better than assembler. Keep it in sync with the project.
+
+D) I edited some test ka files, so don't auto-format them (i.e. old files that you don't modify if needed). Also edited
+some doc file, minor changes, compare and use them.
+
+E) This should be not in LANGUAGE but in IMPLEMENTATION:
+  The generator is SplitMix64 with the initial state `#123456789ABCDEF0`, set at the start of every program: until a program sets the state itself, its random
+  numbers are always the same. `?n` is the next 64-bit number modulo `n`; the float is `(next >> 11) * 2^-53 * x`, replaced by the next smaller float if it is not below `x`.
+Aha, I seem to remove it already.
+
+F) You wrote: `?x` may stand as a statement (setting the state). -- this is like all other expressions, no exception
+i.e. warning about ?x as statement - not a special case, don't do it. we'll have more unary expressions, they all return values. regarding warning - ok, issue such warnings, we'll some time have an option to switch on/off such warnings. in J
+if an expression returned `void` (in J terms) they didn't print anything. I wrote somewhere, maybe we'll have `discard` or `ignore`. Or better yet, keep in mind that there can be such warning, but DONT'T issue it by default now!
+
+G) ?0.0 and ?negative_float are run-time errors. ?1 is for the future (or if you have an idea, welcome; e.g. re-yield
+the last raw state so ?0; ?1; ?1 would return the same number. not sure if it's needed, seen it somewhere though. no
+other ideas yet. it can stay unused/rterror).
+
+H) Why do you think you need parentheses here
+a > 3 ? (\x:=x+1) ! (\x:=x-1)
+what's wrong with
+a > 3 ? \x:=x+1 ! \x:=x-1
+is it parsed differntly? why?
+
+I) Regarding blanks in expressions - there are no strict rules, estetically some blanks are just not needed like f(a, b).
+so I usually write compact text if it's short, short names, short constructions, and with blanks if it's long Java-style
+code, then there should be blanks, but then after `(` and before `)` too. anyway, don't pay much attention to it, it's
+very 'unimportant'. if I change something - keep it if you can, if you change it later, no big deal.
+
+J) You wrote "It is not a constant expression." (about X=?10) -- not so, we'll change it.
+And these parts in docs/discussions:
+"Every variable starts as 0" (my forced but temporary decision) -- I doubt it now. If a variable used before an
+assignment it should be an error.
+And constants:
+`function NAME(...)` -- there is no differences (const <-> var) for functions because functions that are defined
+by stmt `function name(...) ...` are already constants - you can't assign anything to that `name` (!). So `NAME` or
+`name` - it's the same for such functions (again, not vars like f=\x:=1). They are always const, they are all
+scanned/parsed/defined in one pass before execution (or rather compilation) of the whole file again, so all the fns
+are always defined. Is that what is called 'hoisting'?
+Also this part:
+  print SIZE_G  -- => 5  (a global constant exists from the start)
+  SIZE_G = 5
+I don't agree with this. Functions are defined with 1st pass, when 'execution' not started, it's acceptable (and should
+be mentioned in doc). But constants (and vars) - they are not defined before 'execution' passed through them. So to see
+this SIZE_G, the print statement must be after the assignment. It's easier in the global scope, but actually the same
+inside functions. we can't deal with complicated cases - for them we should issue warning, probably. but for simple
+cases, when constant is defined e.g. at the beginning of function, it's easily seen and should work. The same about
+"constant expressions". we don't have full power on constexpr of C++ and we don't have separate pre-processing step,
+like in C, so our constants are not like #define in C, they are really variables and their value can be result of
+run-time function or ?10 - it is really calculated at run-time. It's just that this value is not supposed to be
+changed later in some other code (or the same code :)) -- this is what we check, not that it's defined or not. And so
+this is connected with initialized/uninitialized:
+
+K) Uninitialized variables. I propose this: if it can be controlled during compile time - fine, do it and maybe mark
+those variables/consts as safe (if you need such marking). if there are unclear cases (inside ifs/whiles, as parameters
+etc), I propose 'initialization flags'. and this mode of compilation we'll have by default. that is, such 'unclear'
+variable will have also hidden 'initialized' flag, which is initially (from the beginnig of its scope) false. an
+assignment sets it to true, run-time. an access (reading) checks this flag (run-time) and reports error if it's not
+initialized. clear?
+
+L) And as for overflow checks, we'll eventually have different compilation modes (choosen by options of the compiler
+and pragmas that we'll have soon, but not now) - in check-initializations mode we'll have such mechanism for parts
+(whole file or a function) compiled this way, if this mode is off, then no such 'initialized' flags and vars/consts
+are used as they are (in worst case, uninitialized, as it happens in C).
+
+M) the time saving rules are ok, although it's not known if they work. one of a few changes in a batch - we'll see. it depends. editing docs - yes, i think just edit what changed, why rewrites (you said rewrites)? we don't have huge changes.. yet. i don't know... we need to add strings, GC, arrays, dictionaries soon... i'm already not so sure that it's all possible in free version of you 🙁
+
+---
+
+Version 6.8 is in ka-68.zip (everything under ka/). All 222 tests pass in the emulator; I haven't run it on Windows.
+
+What it is: my 6.4 as the base, with Gemini's string code merged in. Gemini's string parts are the parser changes, the type-checker rules for strings, the code generator for + and comparisons, and its hand-assembled routines (rt_strcmp, rt_strcat, rt_textcmp, rt_textcat, rt_print_value_str, rt_print_value_text). I did not use the rest of 6.6, because it lacks the 6.4 changes and would have undone them.
+
+Language:
+
+str and text are values, and they work as constants, parameters, results and closure variables.
++ and += concatenate, and all six comparisons work, including chained ones.
+An empty string is false in conditions, &&, ||, ! and ?:.
+Mixing str and text is a compile error.
+
+Two things I added or changed:
+
+print items: print 'a' + x now works. A print item that is more than a plain literal is parsed as an expression, and a plain literal is still printed straight from .data.
+Out of memory: rt_alloc now checks the HeapAlloc result and stops with runtime error: out of memory (exit code 1). To your question: no, closures didn't have this check before. I tested it with a copy of the emulator whose heap is only 256 KB, for both strings and closures.
+
+Tests:
+
+Gemini's: its string tests (63–68 and the string err_*) are included. I left out its constant and warning tests, since they follow the old rules.
+Mine: a new test, 69_string_truth_and_more (string conditions, constants, closures, ?:, unicode).
+Changes: err_string_value is removed, and the two err_type_*print* messages now say "only numbers, str and text can be printed".
+Missing files: the expected results for tests 21–33 were missing from the 6.4 folder in your zip. I took them from Gemini's folder, and they pass.
+
+Docs: LANGUAGE.md, IMPLEMENTATION.txt, NOTES.md and RELEASE_NOTES.md are updated. I did not update LIBRARY.txt.
+
+Slow text printing: Gemini's rt_print_value_text calls WriteFile once per character. It is correct but slow for long texts, and a buffer would fix it. I noted it in IMPLEMENTATION.txt and did not change it.
+
+---
+
+Version 6.8.1 is ready. rt_print_value_text now encodes into a 1024-byte buffer on the stack and calls WriteFile once per buffer instead of once per character. All 223 tests pass in the emulator; I haven't run it on Windows.
+
+The new test prints about 13 KB of mixed 1–4 byte characters, including lengths around the buffer limit. It now needs 44 WriteFile calls.
+
+Files:
+
+ka.py: the changed routine, with VERSION = "6.8.1".
+RELEASE_NOTES.md: a 6.8.1 entry on top.
+IMPLEMENTATION.txt: the "slow, one call per character" remark is replaced by a description of the buffer.
+New test: 70_long_text_print.ka goes in tests/ and 70_long_text_print.expected in tests/results/.
+
+---
+
+Version 6.9 is in ka-69.zip. All 223 tests pass in the emulator, but I haven't run it on Windows. It also needs Windows 8 or newer, because of GetSystemTimePreciseAsFileTime.
+
+What it does:
+
+?1: returns the UTC time in microseconds since 1970. It takes GetSystemTimePreciseAsFileTime, subtracts 116444736000000000 and divides by 10.
+?'...' and ?"...": return the local time (via GetLocalTime) as a str or a text, with all 18 format codes you listed. Everything else is copied, including unknown codes like y3.
+? operand: now accepts int, float, str and text, like !, and ?x has the type of x. A function is still a type error.
+Your example: ?'Now: y4/m2/d2 H2:M2:S2.F3' gives Now: 2026/11/26 23:35:58.296.
+
+Design, as you suggested:
+
+Engine: one formatting engine works on text and writes into a 64-character stack buffer.
+str formats: the format is converted to text, formatted, and converted back to UTF-8.
+Conversions: the two conversion routines work on existing buffers; allocation is a separate step. An empty result, or no format at all, is 0 with nothing allocated.
+Truncation: I chose to end the result at 64 characters. A code that doesn't fit is dropped whole, never half written. This was the one decision I made without asking.
+Invalid UTF-8: bytes that aren't valid UTF-8 in a str format would be lost in a plain conversion. I map them to U+DC00+byte on the way in and back to the byte on the way out. Such surrogates exist only inside the two internal buffers.
+
+Where the code is:
+
+Engine: the pure computing routines are in tools/time_rt.asm, built by tools/build_float_rt.py (extended to handle both asm files).
+Glue: the Windows calls and allocation are hand-assembled in ka.py.
+Docs: LANGUAGE, IMPLEMENTATION (new section 12), LIBRARY, NOTES, README and RELEASE_NOTES are updated.
+
+Tests:
+
+Test 71: the real clock can't be compared in a test, so 71_time checks ranges, shapes and the parts that don't depend on the time. rt_rand_one is removed, since ?1 is no longer an error.
+Fuzz tool: tools/fuzz_time.py is a new dev tool that checks the exact formatting against a Python reference. It runs 300 formats as both str and text at 6 fixed times, and all match.
+Emulator: tools/emu.py now takes a fixed time through run_pe(..., now=, unix_us=).
+
+---
+
+Version 7.0 is in kota-70.zip, and the language is now Kota. All 223 tests pass in the emulator, and both fuzz tools and the -- => comment check also pass; I haven't run it on Windows.
+
+What was renamed:
+
+Files: ka.py is now kota.py, the Python module is kota, and every .ka file is now .ko. That covers 223 tests and 8 benchmark programs.
+Docs and sources: Ka is now Kota, and ka.py, .ka, ka.zip and import ka are updated in all docs, tools/*, rt.py, performance/benchmarks.bat (CRLF kept), .asm headers and the benchmark comments.
+Zip: the folder inside is kota/.
+
+What I left alone:
+
+History: the entries in RELEASE_NOTES.md below 7.0 keep the old names of their time. I added a 7.0 entry that says so. The history line in NOTES.md now reads Tiny → Ka → Kota.
+Language: nothing else changed.
+
+A fix to my own earlier zip: ka-69.zip had a stray Keystone .whl file in it, left there by a pip download in the project folder. That's why it was 2 MB; the new zip is 390 KB and doesn't contain it.
+
+Your repo: the GitHub project is still named wzkxh/ka, and I haven't touched anything outside the zip.
+                                             ~~~~~~~~
+
+---
+
+Version 7.1 adds -e, -k and -c to kota.py. The 223 .ko tests and a new test of the options pass in the emulator, but I couldn't test actually launching an .exe here, since this sandbox isn't Windows.
+
+How the options behave:
+
+-e file.ko: compiles, runs the .exe and deletes it. The exit code of kota.py is the exit code of your program.
+-k: with -e or -c, keeps the .exe and prints kept NAME on stderr, so the program's own output stays alone on stdout. -k on its own is a usage error.
+-c "text": compiles the text itself, runs it and deletes the .exe, like python -c. I did it internally with no temp .ko file. Errors are named <command>.
+Where the .exe goes:
+Run and delete: it is a file in the temp directory, so an existing program.exe next to your source is never overwritten or deleted.
+With -k: it stays next to the source, or becomes yyyymmdd_HHMMSS.exe in the current directory for -c.
+With -o NAME: it uses that name, and it is still deleted after the run unless you also give -k.
+Errors: a compile error runs nothing and leaves no file. A source file together with -c is a usage error.
+Other systems: on non-Windows it prints cannot run a Windows .exe on this system and exits with 1, without trying Wine.
+
+Files: I sent only the changed ones, as you prefer for small changes. They go back into the project at the same paths:
+
+kota.py: version 7.1 with the new options.
+README.md, NOTES.md, IMPLEMENTATION.txt (new section 13), RELEASE_NOTES.md: updated.
+test_cli.py: new, goes in tools/. It runs every option combination, using the emulator in place of Windows.
+
+---
+
+assert works: assert condition[, report] prints assertion failed (line N): ... and exits with code 1 when the condition is false. All 232 tests pass in the emulator, 9 of them new; I haven't run it on Windows. You didn't give a version number, so I made it 7.2.
+
+Behavior:
+
+Condition: any int, float, str or text expression. 0, 0.0, '' and "" are false, the same rule as if. A function as the condition is a compile error that names 'assert'.
+Report: one item, as in print (any int, float, str or text). It is evaluated only when the assert fails.
+No report: the output is assertion failed (line 5): x > 10 || f * 2 < 1.5 && !x, with the condition printed. This is rebuilt from the tokens, so spaces are normalised and 0xFF shows as 255.
+Output: one line on standard output, like the runtime errors.
+CHECK_ASSERTS: a constant at the top of kota.py, True by default. When False, asserts are parsed and dropped, so nothing is evaluated and their expressions aren't type-checked. I tried this by hand, but there is no test for it.
+Keyword: assert is now a keyword, so it can't be a variable or function name. No test used it.
+
+Choices I made without asking (all in IMPLEMENTATION.txt section 14, so easy to change):
+
+Format: the assertion failed (line N): prefix and the line number.
+One report only: a second , item is a syntax error.
+Standard output: failures go to standard output, not standard error.
+
+Files:
+
+kota.py: version 7.2, with assert.
+Docs: LANGUAGE.md, NOTES.md, IMPLEMENTATION.txt and RELEASE_NOTES.md are updated.
+tests-72.zip: the new tests and their expected results, at their project paths: 72_assert, the rt_assert_* ones and err_type_assert_function. Unzip it in the project root.
+
+---
+
