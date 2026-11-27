@@ -1,0 +1,2 @@
+n = 7
+assert n == 8, n * 2  -- => assertion failed (line 2): 14 (exit code 1)

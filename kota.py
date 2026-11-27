@@ -24,9 +24,10 @@ import tempfile
 import time
 
 
-VERSION = "7.1"                         # see RELEASE_NOTES.md
+VERSION = "7.2"                         # see RELEASE_NOTES.md
 CHECK_INIT = True                       # runtime checks of variables that are not provably assigned (see InitCheck); a mode to switch off later
 WARN_UNUSED_VALUE = False               # warning for an expression statement that is not a call; off by default
+CHECK_ASSERTS = True                    # `assert` statements are checked at run time; False: they are parsed and dropped (no code, nothing evaluated)
 
 
 class CompileError(Exception):
@@ -92,8 +93,8 @@ def strip_comments(src):
 # ----------------------------------------------------------------------------
 # Lexer  (produces NEWLINE / INDENT / DEDENT tokens as well)
 # ----------------------------------------------------------------------------
-KEYWORDS = {"if", "elif", "else", "while", "break", "continue", "print", "exit", "function", "return", "skip"}
-STMT_KW = {"if", "while", "break", "continue", "print", "exit", "return", "skip"}
+KEYWORDS = {"if", "elif", "else", "while", "break", "continue", "print", "exit", "function", "return", "skip", "assert"}
+STMT_KW = {"if", "while", "break", "continue", "print", "exit", "return", "skip", "assert"}
 
 TOKEN_RE = re.compile(r"""
     (?P<ws>[ \r]+)
@@ -359,6 +360,34 @@ class Scope:
     self.ty, self.checked = None, False  # used by the type checker
 
 
+def render_tokens(toks):
+  """the source text of some tokens as one line, for the report of a failed assert (the spelling of numbers and the spaces are normalised)"""
+  out, prev, prefix = [], None, False
+  for k, v, _ in toks:
+    if k in ("nl", "indent", "dedent", "eof"):
+      return ""                                           # not a simple one-line expression: no text
+    if k in ("num", "hex"):
+      t = str(v)
+    elif k == "flt":
+      t = repr(v)
+    elif k == "str":
+      data, kind = v
+      q = "'" if kind == "b" else '"'
+      body = "".join(f"^{ord(ch):02x}" if ch in (q, "^") or ord(ch) < 32 else ch for ch in data.decode("utf-8", "replace"))
+      t = q + body + q
+    else:
+      t = v
+    operand_before = prev is not None and (prev[0] in ("num", "hex", "flt", "str", "id") or prev[1] in (")", "]"))
+    unary = k == "op" and t in ("-", "!", "~", "?", "\\", "^", "@") and not operand_before
+    if out and not prefix and t not in (")", "]", ",", ";") and not (t in ("(", "[") and operand_before) and not (out[-1] in ("(", "[")):
+      out.append(" ")
+    out.append(t)
+    prefix = unary
+    prev = (k, t)
+  text = "".join(out)
+  return text if len(text) <= 120 else text[:117] + "..."
+
+
 class Parser:
   def __init__(self, toks):
     self.t = toks
@@ -605,6 +634,18 @@ class Parser:
       self.i = save
     return ("if", cond, then, els, line)
 
+  def print_item(self):                   # one item of 'print' (and the report of 'assert'): a string literal (static) or an expression
+    save = (self.i, len(self.ctx))
+    s = self.string_item()
+    if s is not None and not (self.at_end() or self.is_(",")):
+      self.i = save[0]                                # 'a' + 'b': not a plain literal, an expression
+      del self.ctx[save[1]:]
+      s = None
+    if s is not None:
+      self.strings.append(s)
+      return ("str", len(self.strings) - 1)
+    return ("expr", self.expr())
+
   def stmt(self):
     k, v, line = self.peek()
     if (k == "kw" and v == "function") or (k == "op" and v == "\\"):
@@ -623,21 +664,30 @@ class Parser:
         items = []
         if not self.at_end():
           while True:
-            save = (self.i, len(self.ctx))
-            s = self.string_item()
-            if s is not None and not (self.at_end() or self.is_(",")):
-              self.i = save[0]                          # 'a' + 'b': not a plain literal, an expression
-              del self.ctx[save[1]:]
-              s = None
-            if s is not None:
-              self.strings.append(s)
-              items.append(("str", len(self.strings) - 1))
-            else:
-              items.append(("expr", self.expr()))
+            items.append(self.print_item())
             if not self.accept(","):
               break
         self.end_stmt()
         return ("print", items, line)
+      if v == "assert":                               # assert condition[, what to report]
+        self.next()
+        start = self.i
+        cond = self.expr()
+        text = render_tokens(self.t[start:self.i])
+        item = self.print_item() if self.accept(",") else None
+        self.end_stmt()
+        if not CHECK_ASSERTS:
+          return ("skip",)
+        head = f"assertion failed (line {line})"
+        self.strings.append((head + (": " if item or text else "")).encode())
+        items = [("str", len(self.strings) - 1)]
+        if item:
+          items.append(item)
+        elif text:
+          self.strings.append(text.encode())
+          items.append(("str", len(self.strings) - 1))
+        # if !condition: print the report, exit 1   (the checker names the 'assert' in its messages: the third item of "not")
+        return ("if", ("not", cond, "in 'assert'"), [("print", items, line), ("exit", ("num", 1), line)], [], line)
       if v == "if":
         self.next()
         return self.if_stmt(line)
@@ -1348,7 +1398,7 @@ class Checker(Resolver):
       self.need_num(t, line, "in operand of '?'", True)
       return t
     if k == "not":
-      self.need_num(self.expr(e[1], sc, line), line, "in operand of '!'", True)
+      self.need_num(self.expr(e[1], sc, line), line, e[2] if len(e) > 2 else "in operand of '!'", True)
       return INT
     if k == "bnot":
       self.operand(e[1], sc, line, "operand of '~'")

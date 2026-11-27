@@ -16,7 +16,7 @@ This file defines the language; the reasons behind the decisions are in IMPLEMEN
     If `]]--` follows `--[[` on the same line, it is the inside-line form.
   - An unclosed `--[[` is an error. `--` inside a string is text.
 - **Identifiers:** ASCII letters, digits, `_`; not starting with a digit.
-- **Keywords:** `if elif else while break continue print exit function return skip`. `\` is a synonym of `function` where
+- **Keywords:** `if elif else while break continue print exit function return skip assert`. `\` is a synonym of `function` where
   an operand or statement is expected.
 - **Integer literals:** decimal digits, -9223372036854775808 .. 9223372036854775807. `_` may separate digits (`1_000_000`), not at the
   start or the end and not doubled.
@@ -72,7 +72,7 @@ Types are checked at compile time, never written, and inferred:
 
 ## 3. Statements and lines
 - A statement ends at the end of the line, at `;`, at a closing `)` or `}`, at `else`/`elif`, or where another statement starts with a
-  keyword (`if while break continue print exit return skip function`) or with `{`. So `;` is needed only to separate statements
+  keyword (`if while break continue print exit return skip assert function`) or with `{`. So `;` is needed only to separate statements
   on one line when the next one starts otherwise: `a = 1; b = 2`; `i = i + 1 if i == 2: print i` needs none.
 - A statement continues on the next line if the line ends with `+ - * / \ % ^ & | ~ << >> +> <* *> ! ? == != < <= > >= && || = ,` or an `op=` form,
   or while a `(` is open (newlines inside parentheses are ignored; inside `{ }` they count again).
@@ -167,6 +167,7 @@ Precedence, highest to lowest; binary operators are left-associative except `^`:
 | `while cond block` | loop |
 | `break`, `continue` | only inside a `while` of the same function |
 | `exit expr` | end the program with that exit code (the end of the file exits with 0) |
+| `assert cond[, report]` | if `cond` is false (`0`, `0.0`, `''`, `""`; any int, float, str or text expression) print `assertion failed (line N): ` and the report, and exit with code 1. The report is one item as in `print` (evaluated only on failure); without it the text of the condition is printed. The compiler constant `CHECK_ASSERTS = False` removes all asserts |
 | `return [expr]`, `= expr` | only inside a function; `=` needs a value |
 | `function name(params) body`, `\name(params) body` | named function definition; one parameter needs no parentheses: `function name p body` |
 | `skip` | the empty statement |
@@ -238,6 +239,7 @@ Written to standard output, exit code 1:
 `runtime error: variable 'x' is not initialized` (see 7),
 `runtime error: call of an unset function` (a function that ended without a result),
 `runtime error: out of memory` (`HeapAlloc` failed: a closure or a string could not be allocated).
+A failed `assert` prints `assertion failed (line N): ...` (not a runtime error, same exit code 1).
 Very deep recursion overflows the 1 MB stack and crashes.
 
 ## 9. Compile errors and warnings

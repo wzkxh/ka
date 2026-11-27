@@ -1,0 +1,29 @@
+-- assert condition[, report]: nothing happens when the condition is true (any expression: int, float, str, text; 0, 0.0, '' and "" are false)
+x = 3
+assert x > 1
+assert x == 3 && x < 10, "x is out of range"
+assert 0.5
+assert -1.5, "a float is true if it is not zero"
+assert 'abc'
+assert "unicode: é€😀"
+assert !''
+assert !"", "an empty text is false"
+print "all asserts passed"                             -- => all asserts passed
+-- the report is evaluated only when the assert fails
+function noisy(s) {
+  print "evaluated: ", s
+  =s
+}
+assert 1, noisy("not called")
+assert x, noisy("not called either")
+print "still fine"                                     -- => still fine
+-- an assert can be a one-line body, and the report may be continued on the next line
+if x > 0: assert x < 100, "x is too big"
+assert x > 0 &&
+       x < 100,
+       "x is out of range"
+function positive(n) {
+  assert n > 0, "n must be positive"
+  =n
+}
+print positive(5), " ", positive(7)                    -- => 5 7

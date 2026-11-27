@@ -1,0 +1,4 @@
+print "start"
+x = 5
+assert x > 10, "x must be above 10"  -- => assertion failed (line 3): x must be above 10 (exit code 1)
+print "not reached"

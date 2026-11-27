@@ -1,12 +1,16 @@
 # Kota - release notes (newest first)
 
-## Current state (version 7.1)
+## Current state (version 7.2)
 Kota compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3, no dependencies). The version is the `VERSION` constant in `kota.py`.
 - **Language:** 64-bit ints and floats, first-class functions and closures (shared by reference, never freed), static type inference, constants, byte strings (`str`) and unicode strings (`text`) as values.
   Details: LANGUAGE.md. Reasons: IMPLEMENTATION.txt.
-- **Tests:** 223 programs in `tests/` with their expected results in `tests/results/` (all pass under the emulator on Linux; the user runs them on real Windows). Every test has `-- =>` result comments.
+- **Tests:** 232 programs in `tests/` with their expected results in `tests/results/` (all pass under the emulator on Linux; the user runs them on real Windows). Every test has `-- =>` result comments.
 - **Checked on real Windows by the user:** all 194 tests of version 6.3 passed.
 - **Known limits:** see IMPLEMENTATION.txt section 9 (float printing last digit, fractional float powers checked only in an emulator, strings can only be built by `+` and compared, no input, no GC).
+
+## Version 7.2
+- **`assert condition[, report]`:** if the condition is false (`0`, `0.0`, `''`, `""`) it prints `assertion failed (line N): ` and the report (any int, float, str or text expression; without it the text of the condition) and exits with code 1.
+  `CHECK_ASSERTS = False` at the top of `kota.py` drops all asserts. `assert` is a keyword now. 9 new tests (`72_assert`, `rt_assert_*`, `err_type_assert_function`). Details: IMPLEMENTATION.txt section 14.
 
 ## Version 7.1
 - **Command line:** `-e` compiles, runs the .exe and deletes it (the exit code is the program's); `-k` (with `-e` or `-c`) keeps it; `-c "text"` compiles Kota source given on the command line (like `python -c`), runs it and deletes

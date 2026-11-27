@@ -1,0 +1,6 @@
+function check(n) {
+  assert n > 0, "n must be positive"
+  =n
+}
+print check(3)  -- => 3
+check(-1)  -- => assertion failed (line 2): n must be positive (exit code 1)

@@ -1,0 +1,2 @@
+name = ""
+assert name, "the name is empty: " + "é€"  -- => assertion failed (line 2): the name is empty: é€ (exit code 1)

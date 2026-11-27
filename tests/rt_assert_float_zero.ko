@@ -1,0 +1,2 @@
+x = 0.0
+assert x  -- => assertion failed (line 2): x (exit code 1)

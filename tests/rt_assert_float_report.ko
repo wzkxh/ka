@@ -1,0 +1,1 @@
+assert 0, 2.5 / 4  -- => assertion failed (line 1): 0.625 (exit code 1)

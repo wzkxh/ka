@@ -1,0 +1,3 @@
+x = 5
+f = 2.5
+assert x > 10 || f * 2 < 1.5 && !x  -- => assertion failed (line 3): x > 10 || f * 2 < 1.5 && !x (exit code 1)

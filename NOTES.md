@@ -14,6 +14,8 @@ Reasons behind decisions: IMPLEMENTATION.txt. History and state: RELEASE_NOTES.m
   README.md = what the files are and how to run.
 - **Command line** (`main()` in `kota.py`): `source [-o out.exe]`; `-e` run the .exe and delete it; `-k` (with `-e` or `-c`) keep it; `-c TEXT` source text instead of a file (implies running). `run_exe()` is the one place that starts a program (Windows only);
   `python tools/test_cli.py` replaces it by the emulator.
+- `assert` (version 7.2) is desugared in `Parser.stmt` to `("if", ("not", cond, "in 'assert'"), [print, exit 1], [], line)`: nothing else knows it. The third item of `"not"` is the text the checker uses in its message. `render_tokens()` makes the condition text from the tokens.
+  `CHECK_ASSERTS = False` makes the parser return `("skip",)` (the expressions are parsed, neither type-checked nor compiled).
 - **Version:** the `VERSION` constant in `kota.py` (no command line option for it, the user asked for none). Bump it for every delivery to the user and add an entry on top of RELEASE_NOTES.md.
 - **Style:** 2 spaces per indentation level in `.py` and `.ko` files (also continuation lines). Tests carry `-- =>` comments with the result of a statement
 - **Brackets (user, 6.3):** blanks between arguments -> blanks also after `(` and before `)`: `f( first, second )`; short cases (a few arguments, short names) -> no blanks: `f(a,b)`, `fn(T1,T2)->R`.
@@ -135,3 +137,17 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
   With `-k` the usual place: next to the source, or `yyyymmdd_HHMMSS.exe` in the current directory for `-c` (user's example name). `-o NAME` names it in every case; without `-k` it is deleted after the run all the same.
 - A compile error runs nothing and leaves no file. The .exe is also deleted when running it fails. Running is only possible on Windows: elsewhere the message `cannot run a Windows .exe on this system` and exit code 1 (Wine was not tried, nobody asked).
 - The compile message `wrote NAME (N bytes)` is printed only when nothing is run.
+
+14. assert (version 7.2)
+- `assert condition[, report]` (user): the condition is any expression, false is `0`, `0.0`, `''`, `""` (the same truth rule as `if`); the report is shown if there is one, else the condition; exit code 1. The user's wording: "report the
+  second expr if provided, if not provided just say that the condition failed (maybe also print the condition)".
+- Output (my choice, easy to change): to standard output like the runtime errors, one line `assertion failed (line N): REPORT`; the report is printed like a `print` item (any int, float, str or text; a function is a type error);
+  without a report the condition is printed, rebuilt from the tokens (`render_tokens`: spaces normalised, numbers in decimal, so `0xFF` shows as `255`; no text if the condition is not on one line, then only the first part).
+  The line is the line where the `assert` keyword stands. The report is evaluated only when the assert fails.
+- Done by a rewrite in the parser, not as a new statement: `assert c, r` is `if !c: print "assertion failed (line N): ", r; exit 1`. So the checker, the initialisation analysis and the code generator needed no change; type errors of the
+  condition say `in 'assert'` (the `not` node carries that text). The report is checked as a `print` item (its errors say `in 'print'`).
+- `CHECK_ASSERTS` (a constant at the top of kota.py, user: "a global var at the beginning like CHECK_ASSERTS"): True by default. False: the statement is parsed (syntax errors are still found, names are still resolved) and dropped, so the condition
+  and the report are neither type-checked nor evaluated, like Python's `-O`. A program may therefore compile with the flag on and fail to compile with it off only through a type error inside an assert.
+- `assert` is a keyword now: it cannot be a variable or function name any more (no test used it).
+- Tests: `72_assert` (passing asserts, report not evaluated, one-line body, continued lines), `rt_assert_*` (message, condition text, int and float reports, empty text, in a function), `err_type_assert_function`.
+  The flag `CHECK_ASSERTS = False` was tried by hand (a failing assert is dropped, nothing runs), there is no test for it: it is a compiler constant.

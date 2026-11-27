@@ -1,0 +1,1 @@
+assertion failed (line 3): x > 10 || f * 2 < 1.5 && !x
