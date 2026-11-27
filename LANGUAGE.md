@@ -134,7 +134,24 @@ Precedence, highest to lowest; binary operators are left-associative except `^`:
   A negative count shifts the other way: `x >> -n` is `x << n`, `x << -n` is `x >> n`, `x +> -n` is `x << n`.
   A rotate takes the count modulo 64: `x <* -n` is `x *> n`, `x *> -n` is `x <* n`.
 - **Random numbers**, unary `?x`: for an int `n > 1`, `?n` is an int in `0 .. n-1`; `?0` is the next raw 64 bits as an int; for an int `m < 0`, `?m` sets the state of the
-  generator to `-m` and gives 0; for a float `x > 0.0`, `?x` is a float in `[0, x)`. `?1`, `?0.0`, a negative float and NaN are runtime errors. `?x` has the type of `x`.
+  generator to `-m` and gives 0; for a float `x > 0.0`, `?x` is a float in `[0, x)`. `?1` is the current time (below). `?0.0`, a negative float and NaN are runtime errors.
+  `?x` has the type of `x`; the operand may be any int, float, str or text expression.
+- **Time**, `?1`: the current UTC time as an int, in microseconds since 1970-01-01 (`GetSystemTimePreciseAsFileTime`).
+  `?'format'` and `?"format"`: the current local time (`GetLocalTime`) as a `str` or as a `text`, made by the format. A format code is a letter and a digit; any other character,
+  also an unknown code such as `y3`, is copied as it is (a `str` format: byte by byte, also bytes that are not UTF-8).
+
+  | code | result |
+  |---|---|
+  | `y2` `y4` | year, last two digits (00..99) / four digits |
+  | `m1` `m2` | month 1..12 / 01..12 |
+  | `d1` `d2` | day 1..31 / 01..31 |
+  | `H1` `H2` | hour 0..23 / 00..23 |
+  | `M1` `M2` | minute 0..59 / 00..59 |
+  | `S1` `S2` | second 0..59 / 00..59 |
+  | `F1` `F2` `F3` | fraction of a second: tenths 0..9, hundredths 00..99, thousandths 000..999 |
+  | `w1` `w2` `w3` | weekday: 1..7 (Monday is 1) / `Mo`..`Su` / `Mon`..`Sun` |
+
+  `?'Now: y4/m2/d2 H2:M2:S2.F3'` is `Now: 2026/11/26 23:35:58.296`. The result has at most 64 characters (a code that does not fit ends it); an empty result is the empty string.
 - **Conditional** `c ? a ! b`: `c` is evaluated, then only `a` or only `b`. A one-line function body in the middle part ends at the `!`: `c ? \x:=x+1 ! \x:=x-1`.
   A line may end with `?` or `!` (expression continues on the next line).
 - **Chained comparisons:** `a < b <= c` is `a < b && b <= c` with `b` evaluated once; evaluation stops at the first false link.
@@ -217,7 +234,7 @@ Written to standard output, exit code 1:
 `runtime error: division by zero` (`/ \ %` with a zero divisor, `0.0 ^ negative`),
 `runtime error: negative exponent` (int `^`),
 `runtime error: power of a negative number with a fractional exponent`,
-`runtime error: bad argument of '?'` (`?1`, `?0.0`, a float that is not above 0.0, NaN),
+`runtime error: bad argument of '?'` (`?0.0`, a float that is not above 0.0, NaN),
 `runtime error: variable 'x' is not initialized` (see 7),
 `runtime error: call of an unset function` (a function that ended without a result),
 `runtime error: out of memory` (`HeapAlloc` failed: a closure or a string could not be allocated).
@@ -252,7 +269,7 @@ Very deep recursion overflows the 1 MB stack and crashes.
 | " | unicode string `text` |
 | # | hex literal `#ff`, binary literal `2#101`; `# ` comment |
 | ! | unary not, conditional `c ? a ! b`, != - not equal |
-| ? | unary random, conditional `c ? a ! b` |
+| ? | unary random and time, conditional `c ? a ! b` |
 | / | unary - nothing, float division; /= |
 | % | unary - nothing, modulo (floored); %= |
 | & | unary - nothing, bitwise and, && - logical and; &= &&= |

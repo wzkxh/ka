@@ -248,8 +248,7 @@ Known approximations: any call widens `may`, also one that cannot assign the var
 - Algorithm and state: SplitMix64 (the user's C code) with the initial state 0x123456789ABCDEF0, set at the start of every program: until a program sets the state itself, its random numbers are always
   the same. `?n` is the next 64-bit number modulo `n`; the float is `(next >> 11) * 2^-53 * x`, replaced by the next smaller float if it is not below `x`.
 User's design: a unary operator `?x` on numbers; the algorithm is the user's C code (SplitMix64 with next_u64, rand_int64, rand_float64), translated to machine code.
-- `?n` (int n > 1): next_u64 % n (as unsigned numbers), so 0..n-1. The modulo bias is accepted, as in the C code. `?1` is a runtime error (user, 6.4: "?1 is for the future, it can stay unused/rterror";
-  an idea that was not taken: let `?1` repeat the last raw number).
+- `?n` (int n > 1): next_u64 % n (as unsigned numbers), so 0..n-1. The modulo bias is accepted, as in the C code. `?1` was a runtime error in 6.4 ("for the future"); since 6.9 it is the time (section 12).
 - `?0`: the next 64 bits as a signed int. `?m` (int m < 0): the state becomes -m and the result is 0: "half the range, not all cases, but it's ok" (a seed is
   a positive 63-bit number; for the smallest int the negation wraps to 2^63, so that case is also a valid state).
 - `?x` (float x > 0.0): ((next >> 11) * 2^-53) * x, which is exact for the 53-bit part; if rounding made the result reach x it becomes nextafter(x, 0.0) (the number below x,
@@ -261,3 +260,18 @@ User's design: a unary operator `?x` on numbers; the algorithm is the user's C c
 - The three routines (rt_next_u64, rt_rand_int, rt_rand_float) are hand-assembled in ka.py like the rest of the runtime, not generated from float_rt.asm. `?x` as a statement is an ordinary expression
   statement (no warnings are issued by default). `?x` may be used in a constant (user, 6.4: a constant is a variable assigned once at run time).
 - Tests: tests/62_random.ka. The expected numbers come from an independent Python version of the C code, not from the compiler.
+
+12. Time (version 6.9)
+- `?1` is the UTC time in microseconds since 1970 (user): `GetSystemTimePreciseAsFileTime` gives 100 ns units since 1601; minus 116444736000000000, divided by 10 (user). It needs Windows 8 or newer.
+- `?'fmt'` / `?"fmt"` is the local time (`GetLocalTime`, so the milliseconds are all the precision there is: F3 is exact, F1 and F2 are cut, not rounded) as a str / text of the same kind as the
+  argument; codes are a letter and a digit, everything else is copied (user). `?` accepts any operand type that `!` accepts, and `?x` has the type of `x`.
+- Design (user's suggestion): one engine works on text. `rt_time_format` writes at most 64 code points into a buffer on the stack (user: "some reasonable length, e.g. 50 or 64"; a code that does
+  not fit ends the result, an unfinished code is never half written). A `str` format is first converted to text (`rt_utf8_to_text`, at most 128 code points, which is enough: every format character
+  gives at least half a result character), the result is converted back (`rt_text_to_utf8`). The conversions work between two buffers that exist already; the allocation is separate
+  (`rt_time_text`, `rt_time_str`; the empty result is 0, nothing is allocated). No format at all (0) gives 0.
+- A byte of a str format that is not valid UTF-8 would be lost by a plain conversion. So the decoder maps it to U+DC00 + byte (Python's surrogateescape) and the encoder maps U+DC80..U+DCFF back
+  to that byte: the byte survives, also bytes that are not UTF-8. Such surrogates exist only inside these two buffers (a `text` literal cannot contain surrogates).
+- The routines that only compute are machine code from tools/time_rt.asm (TIME_RT in ka.py, same way as the float runtime; the build script got `db` and `lea rax,[rip+label]`); the three that call
+  Windows or allocate are hand-assembled in ka.py. `rt_alloc` is shared with closures and strings (checked, out of memory is a runtime error).
+- Tests: the real clock cannot be compared in a test, so tests/71_time.ka checks ranges, shapes and the parts that do not depend on the time. tools/fuzz_time.py checks the formatting
+  exactly against a Python reference at fixed times (the emulator takes the time as a parameter): 300 formats, random and edge cases, str and text, 6 times.

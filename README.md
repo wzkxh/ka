@@ -23,8 +23,8 @@ python rt.py --emu          # Linux/macOS: run tests in an emulator (pip install
 | `rt.py` | test runner (run tests) |
 | `performance/` | some benchmarks vs Python 3.3; 5x to 16x faster |
 | `tools/emu.py` | Unicorn-based `.exe` emulator used for checking without Windows |
-| `tools/float_rt.asm`, `tools/build_float_rt.py` | source of the float runtime machine code embedded in `ka.py` (dev only, needs `keystone-engine`) |
-| `tools/fuzz_float.py` | fuzz test of the float runtime routines in Unicorn against Python (dev only) |
+| `tools/float_rt.asm`, `tools/time_rt.asm`, `tools/build_float_rt.py` | source of the float and time runtime machine code embedded in `ka.py` (dev only, needs `keystone-engine`) |
+| `tools/fuzz_float.py`, `tools/fuzz_time.py` | fuzz tests of the float and time-format routines in Unicorn against Python (dev only) |
 | `tools/annotate_tests.py` | adds `-- =>` result comments to the tests from the real behaviour; `--check` verifies the existing ones (dev only) |
 
 ## Resuming work in a new Claude chat

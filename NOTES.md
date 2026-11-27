@@ -100,7 +100,7 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
 - **Scope entry:** `hoist(scope)` creates the closures of all `named_fns`. Constants and variables are assigned where their statements are. `alloc_flags()` gives every variable in `InitCheck.flagged` a hidden flag
   (a data slot for a global, a frame slot for a local, the second quadword of its 16-byte box for a captured variable); `var_store` sets it, `var_load(check=True)` tests it and jumps to a per-name stub
   (`stub_label`, `emit_uninit_stubs`) that prints `runtime error: variable 'x' is not initialized`. `CHECK_INIT = False` removes the flags.
-- Random numbers: `("rand", e)` -> `rt_rand_int` / `rt_rand_float` (operand in rax; `rt_next_u64` is SplitMix64 on the 8 bytes at `state`; `?1`, a float that is not above 0.0 and NaN end in `rt_badrand`); written in `runtime()` with the compact bracket style.
+- Random numbers: `("rand", e)` -> `rt_rand_int` / `rt_rand_float` (operand in rax; `rt_next_u64` is SplitMix64 on the 8 bytes at `state`; a float that is not above 0.0 and NaN end in `rt_badrand`; `?1` jumps to `rt_time_us`; a str/text operand calls `rt_time_str`/`rt_time_text`, see Time below); written in `runtime()` with the compact bracket style.
 - Program start: GetStdHandle(stdout), `SetConsoleOutputCP(65001)`, GetProcessHeap.
 - **Float runtime** (`FLOAT_RT` between the BEGIN/END markers in ka.py): machine code generated from `tools/float_rt.asm` by `tools/build_float_rt.py` (Keystone assembles single instructions; the script does labels
   and rel32 jumps). `rt_fmt_float` (rax = bits, rdx = buffer -> rax = length), `rt_fpow` (xmm0, xmm1 -> xmm0, edx = error code), `rt_fmod` (exact integer algorithm). They set the x87 control word themselves.
@@ -116,6 +116,8 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
 - `python rt.py [-k name] [-v] [--emu] [--keep]`; the programs are `tests/NAME.ka`, what they must give is in `tests/results/` (`NAME.expected/.exit/.warn`, `err_NAME.error`); see the header of rt.py. Output is compared as raw bytes.
 - The emulator fakes kernel32 and asserts 16-byte stack alignment at every API call. It starts with a 64-bit x87 precision (real Windows: 53); QEMU's x87 transcendental functions are only ~4e-15 accurate.
 - When adding a feature add tests for normal use, interaction with blocks/continuation lines, error messages, and a regression for every bug found. Write `-- =>` comments (or run tools/annotate_tests.py).
+- **Time runtime** (`TIME_RT` between its markers in ka.py): `rt_utf8_to_text`, `rt_text_to_utf8`, `rt_time_format` from `tools/time_rt.asm` (same build script, `python tools/build_float_rt.py` does both files);
+  `rt_time_us`, `rt_time_text`, `rt_time_str` (Windows calls, allocation) are in `runtime()`. `python tools/fuzz_time.py` checks the formatting at fixed times; `emu.run_pe(..., now=datetime, unix_us=n)` fixes the clock.
 - `tools/fuzz_float.py [count]` checks the float routines; `tools/annotate_tests.py` adds result comments; `tools/build_float_rt.py` rebuilds the float runtime.
 
 ## 3. Session checklist

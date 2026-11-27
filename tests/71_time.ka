@@ -1,0 +1,32 @@
+-- ?1 is the time: microseconds since 1970-01-01 UTC (an int)
+t1 = ?1
+t2 = ?1
+print t1 > 1700000000000000 && t1 < 4000000000000000, ' ', t2 >= t1 && t2 - t1 < 10000000   -- => 1 1
+-- ?'...' gives the local time as a str, ?"..." as a text; a format code is a letter and a digit
+print ?'no format codes'                                -- => no format codes
+print ?"no format codes: é€😀"                         -- => no format codes: é€😀
+print ?'y3 m3 d0 H5 F4 w4 Y4 h2 s2 f2 ym y'            -- => y3 m3 d0 H5 F4 w4 Y4 h2 s2 f2 ym y  (none of these is a code)
+print !?'', ' ', !?"", ' ', !?'x', ' ', !?"x"           -- => 1 1 0 0  (the empty format gives the empty string)
+s = ?'y4/m2/d2 H2:M2:S2.F3'
+print s >= '2026/01/01 00:00:00.000' && s <= '2999/12/31 23:59:59.999'     -- => 1
+u = ?"y4/m2/d2 H2:M2:S2.F3"
+print u >= "2026/01/01 00:00:00.000" && u <= "2999/12/31 23:59:59.999"     -- => 1
+-- each field is in its range (one call each, so a change of the second cannot matter)
+print ?'m2' >= '01' && ?'m2' <= '12', ' ', ?'d2' >= '01' && ?'d2' <= '31', ' ', ?'H2' <= '23', ' ', ?'M2' <= '59', ' ', ?'S2' <= '60'   -- => 1 1 1 1 1
+print ?'m1' >= '1' && ?'d1' >= '1', ' ', ?"F3" <= "999", ' ', ?'F1' <= '9', ' ', ?"F2" <= "99"   -- => 1 1 1 1
+-- the weekday: all three forms in one call
+w = ?'w1 w2 w3'
+print w == '1 Mo Mon' || w == '2 Tu Tue' || w == '3 We Wed' || w == '4 Th Thu' || w == '5 Fr Fri' || w == '6 Sa Sat' || w == '7 Su Sun'   -- => 1
+x = ?"w1 w2 w3"
+print x == "1 Mo Mon" || x == "2 Tu Tue" || x == "3 We Wed" || x == "4 Th Thu" || x == "5 Fr Fri" || x == "6 Sa Sat" || x == "7 Su Sun"   -- => 1
+-- the argument is any expression of type str or text, the result has the same type
+f = 'H2'
+function stamp(fmt): return ?fmt
+print ?f <= '23', ' ', stamp('S2') <= '60', ' ', stamp('x1') == 'x1'   -- => 1 1 1
+print ?('y' 'z') + '!'                                  -- => yz!
+-- the result is at most 64 characters: a code that does not fit ends it
+print ?'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' == 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'   -- => 1  (70 a give 64)
+print ?"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaay4" == "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"   -- => 1  (63 a, and y4 does not fit)
+-- ?0 and the others are the random numbers as before
+?-5
+print ?0 == ?0, ' ', ?10 < 10                           -- => 0 1

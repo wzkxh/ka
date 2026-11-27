@@ -1,12 +1,22 @@
 # Ka - release notes (newest first)
 
-## Current state (version 6.8.1)
+## Current state (version 6.9)
 Ka compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3, no dependencies). The version is the `VERSION` constant in `ka.py`.
 - **Language:** 64-bit ints and floats, first-class functions and closures (shared by reference, never freed), static type inference, constants, byte strings (`str`) and unicode strings (`text`) as values.
   Details: LANGUAGE.md. Reasons: IMPLEMENTATION.txt.
 - **Tests:** 223 programs in `tests/` with their expected results in `tests/results/` (all pass under the emulator on Linux; the user runs them on real Windows). Every test has `-- =>` result comments.
-- **Checked on real Windows by the user:** all 223 tests of version 6.8.1 passed.
+- **Checked on real Windows by the user:** all 223 tests of version 6.9 passed.
 - **Known limits:** see IMPLEMENTATION.txt section 9 (float printing last digit, fractional float powers checked only in an emulator, strings can only be built by `+` and compared, no input, no GC).
+
+## Version 6.9
+- **`?1` is the time:** microseconds since 1970-01-01 UTC (`GetSystemTimePreciseAsFileTime`). It was a runtime error.
+- **`?'format'` and `?"format"`:** the local time (`GetLocalTime`) as a `str` / `text`. Codes `y2 y4 m1 m2 d1 d2 H1 H2 M1 M2 S1 S2 F1 F2 F3 w1 w2 w3`, other characters are copied, at most 64 characters.
+  The operand of `?` may now be a string; `?x` has the type of `x`.
+- New runtime in `tools/time_rt.asm` (built into `ka.py` like the float runtime): `rt_utf8_to_text`, `rt_text_to_utf8` (conversions between two existing buffers; bytes that are not UTF-8 survive), `rt_time_format`;
+  `rt_time_us`, `rt_time_text`, `rt_time_str` in `ka.py`. The build script handles two asm files now.
+- Tests: `71_time` (the time cannot be compared, so ranges and shapes); `rt_rand_one` removed. `tools/fuzz_time.py` compares the formatting with a Python reference at fixed times (the emulator got `GetLocalTime`,
+  `GetSystemTimePreciseAsFileTime` and a `now=` parameter).
+- Needs Windows 8 or newer (`GetSystemTimePreciseAsFileTime`).
 
 ## Version 6.8.1
 - Printing a `text` is buffered: `rt_print_value_text` (rewritten) encodes into a 1024-byte stack buffer and calls `WriteFile` once per buffer, not once per character.

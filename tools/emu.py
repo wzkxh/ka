@@ -9,13 +9,14 @@ emu.py - run a Windows x64 console .exe produced by ka.py inside a CPU emulator
 
 Library use:  stdout, exit_code, error = run_pe(path, stdin=b"...")
 Faked API: GetStdHandle, WriteFile, SetConsoleOutputCP (no-op), ExitProcess,
-GetProcessHeap, HeapAlloc (bump allocator). Checks stack alignment at every call.
+GetProcessHeap, HeapAlloc (bump allocator), GetLocalTime and GetSystemTimePreciseAsFileTime (the real clock, or the fixed time
+given as run_pe(..., now=datetime, unix_us=microseconds)). Checks stack alignment at every call.
 """
 import struct
 import sys
 
 
-def run_pe(path, stdin=b"", max_insns=400_000_000):
+def run_pe(path, stdin=b"", max_insns=400_000_000, now=None, unix_us=None):
   import pefile
   from unicorn import Uc, UC_ARCH_X86, UC_MODE_64, UC_HOOK_CODE, UcError
   from unicorn.x86_const import (UC_X86_REG_RSP, UC_X86_REG_RIP, UC_X86_REG_RAX, UC_X86_REG_RCX,
@@ -65,6 +66,15 @@ def run_pe(path, stdin=b"", max_insns=400_000_000):
       del inp[:len(line)]
       uc.mem_write(rdx, line)
       uc.mem_write(r9, struct.pack("<I", len(line)))
+    elif name == "GetLocalTime":                  # SYSTEMTIME: year, month, weekday (0 = Sunday), day, hour, minute, second, ms
+      import datetime
+      t = now or datetime.datetime.now()
+      uc.mem_write(rcx, struct.pack("<8H", t.year, t.month, (t.weekday() + 1) % 7, t.day, t.hour, t.minute, t.second,
+                                    t.microsecond // 1000))
+    elif name == "GetSystemTimePreciseAsFileTime":   # 100 ns since 1601
+      import time
+      us = unix_us if unix_us is not None else int(time.time() * 1_000_000)
+      uc.mem_write(rcx, struct.pack("<Q", us * 10 + 116444736000000000))
     elif name == "GetProcessHeap":
       rax = 1
     elif name == "HeapAlloc":

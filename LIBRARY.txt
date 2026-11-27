@@ -1,6 +1,6 @@
 LIBRARY - the runtime of the Ka compiler as readable C code
 ============================================================
-The machine code of these routines is written by hand in ka.py (function runtime() and the code generator) or generated from tools/float_rt.asm. This file says
+The machine code of these routines is written by hand in ka.py (function runtime() and the code generator) or generated from tools/float_rt.asm and tools/time_rt.asm. This file says
 what every routine does, in C, for people. It is not compiled. When a routine changes, change it here too.
 
 Conventions
@@ -72,7 +72,7 @@ rt_divzero    "runtime error: division by zero"                                 
 rt_notfn      "runtime error: call of an unset function"                         the callee is 0 (a function that ended without a result)
 rt_negexp     "runtime error: negative exponent"                                 int ^ with a negative exponent
 rt_badpow     "runtime error: power of a negative number with a fractional exponent"
-rt_badrand    "runtime error: bad argument of '?'"                               ?1, ?0.0, a float that is not above 0.0, NaN
+rt_badrand    "runtime error: bad argument of '?'"                               ?0.0, a float that is not above 0.0, NaN
 (per variable name) "runtime error: variable 'x' is not initialized"             one tiny stub per name; a read whose hidden flag is 0 jumps to it:
 
 void uninit_stub_x(void)
@@ -180,7 +180,7 @@ int64_t rt_rand_int(int64_t n)                       // rax = n, result in rax; 
 {
   if (n == 0) return (int64_t)rt_next_u64();         // ?0: the raw 64 bits
   if (n < 0)  { state = 0 - (uint64_t)n; return 0; } // ?m: the new state is -m (for the smallest int: itself)
-  if (n == 1) rt_badrand();                          // ?1 is not defined
+  if (n == 1) return rt_time_us();                   // ?1 is the time (section 6a)
   return (int64_t)(rt_next_u64() % (uint64_t)n);     // 0 .. n-1
 }
 
@@ -191,6 +191,70 @@ double rt_rand_float(double x)                       // rax = bits of x, result 
   double result = unit * x;
   if (result >= x) result = nextafter(x, 0.0);       // guards against rounding: the result is always below x
   return result;
+}
+
+
+6a. Time (rt_time_us, rt_time_text, rt_time_str in ka.py; the three others in tools/time_rt.asm)
+---------------------------------------------------------------------------------------------------
+int64_t rt_time_us(void)                             // ?1
+{
+  uint64_t ft;                                       // 100 ns since 1601-01-01
+  GetSystemTimePreciseAsFileTime(&ft);
+  return (ft - 116444736000000000ULL) / 10;          // microseconds since 1970-01-01 UTC
+}
+
+// ?"fmt": rax = text object or 0;  ?'fmt': rax = str object or 0.  Result: a new object, or 0 for an empty result.
+text *rt_time_text(text *fmt)
+{
+  SYSTEMTIME st;  uint32_t buf[64];
+  GetLocalTime(&st);
+  int n = rt_time_format(fmt ? fmt->chars : 0, fmt ? fmt->length : 0, &st, buf);
+  if (n == 0) return 0;
+  text *r = rt_alloc(8 + 4 * n);  r->length = n;  memcpy(r->chars, buf, 4 * n);
+  return r;
+}
+
+str *rt_time_str(str *fmt)
+{
+  SYSTEMTIME st;  uint32_t f[128], buf[64];  uint8_t bytes[256];
+  GetLocalTime(&st);
+  int nf = fmt ? rt_utf8_to_text(fmt->bytes, fmt->length, f, 128) : 0;   // 128 code points are always enough
+  int n = rt_time_format(f, nf, &st, buf);
+  if (n == 0) return 0;
+  int nb = rt_text_to_utf8(buf, n, bytes);
+  str *r = rt_alloc(8 + nb);  r->length = nb;  memcpy(r->bytes, bytes, nb);
+  return r;
+}
+
+int rt_utf8_to_text(uint8_t *s, int len, uint32_t *out, int room)   // no allocation
+{
+  int n = 0;
+  while (len > 0 && n < room) {
+    // a valid sequence (no overlong form, no surrogate, at most 10FFFF) gives its code point and uses 1..4 bytes;
+    // any other byte b gives 0xDC00 + b and uses 1 byte (surrogateescape: rt_text_to_utf8 turns it back into b)
+  }
+  return n;
+}
+
+int rt_text_to_utf8(uint32_t *s, int n, uint8_t *out)               // 4 bytes room per code point; no allocation
+{
+  // 0xDC80..0xDCFF -> the one byte (c & 0xFF); otherwise the usual UTF-8 of c; returns the number of bytes
+}
+
+int rt_time_format(uint32_t *f, int n, SYSTEMTIME *st, uint32_t *out)   // out has room for 64; returns how many were written
+{
+  int k = 0;
+  while (n > 0 && k < 64) {
+    if (n >= 2 && f[1] >= '1' && f[1] <= '4' && is_code(f[0], f[1])) {   // y2 y4 m1 m2 d1 d2 H1 H2 M1 M2 S1 S2 F1 F2 F3 w1 w2 w3
+      char text[4];  int len = format_code(f[0], f[1], st, text);        // y2: year % 100 with 2 digits; F1: ms / 100; F2: ms / 10 with 2 digits;
+      if (k + len > 64) break;                                           // F3: ms with 3 digits; w1: Monday 1 .. Sunday 7; w2, w3: names
+      for (int i = 0; i < len; i++) out[k++] = text[i];
+      f += 2;  n -= 2;
+    } else {
+      out[k++] = *f++;  n--;                                             // any other character is copied
+    }
+  }
+  return k;
 }
 
 
