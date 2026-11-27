@@ -8,36 +8,3 @@ mandelbrot        11.0
 phys.simulation    6.4
 finance            6.9
 
-wrote cs.exe (4096 bytes)
-448
-exit code: 0
-1.212_212_200
-wrote fib.exe (4096 bytes)
-9227465
-exit code: 0
-0.407_520_100
-wrote prime.exe (4096 bytes)
-78498
-exit code: 0
-0.724_366_700
-wrote crc64.exe (4608 bytes)
-6380114920827571293
-exit code: 0
-0.438_530_300
-wrote e_pi.exe (4608 bytes)
-2.71828182845905
-3.14159263359025
-exit code: 0
-0.682_933_900
-wrote mb.exe (4608 bytes)
-41300170
-exit code: 0
-0.608_743_700
-wrote sim.exe (5120 bytes)
-4431000
-exit code: 0
-0.650_733_000
-wrote fin.exe (4608 bytes)
-30524.034255981
-exit code: 0
-0.898_583_700

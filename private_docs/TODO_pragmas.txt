@@ -1,17 +1,24 @@
--o exefile
--c "commands"  make file, compile, execute, delete both (future: also before main source file)
--e             compile, execute, delete
--k             don't delete in -e, exe in -c
+command line options and pragmas
+
 -i             check init                       %-i
 -a             check assert                     %-a
--v             check int overlow                %-v
--b             check bounds                     %-b
+-v             check integer overlow            %-v
+-b             check bounds (range, stack)      %-b
 -u             warn unused                      %+w
 -n             check null?                      %-n
--z             check zero?                      %-z
+-z             check zerodiv?                   %-z
 -f             check fp (result inf,nan,ufl)?   %+f
 
-comp.tolerance, output.precision -- not worth, don't do
+inline fns; struct packing
 
-64 - not so obvious
+Comparison tolerance, output.precision -- not worth, don't do
+-- abs(a-b) and CT*max(abs(a),abs(b))
+
+i think at file level it must be this way: when a piece of code is compiled that needs such flag (i.e. int a = b + c;),
+a global file flag is set "flag is used" (if it was set as compiler option, fine). naturally, initially it's
+"flag not used". then when we see construction #pragma check(ovf,on), we check this flag - if it's not yet used, great,
+we just set this option. if it is 'used' - it means that the flag is set later than it should have been.
+That "latch" or "seal" mechanism (flag_used state tracking) is a classic, rock-solid compiler design pattern
+the moment any code actually consumes it
+OVF.is_locked = true
 

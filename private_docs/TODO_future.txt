@@ -1,63 +1,16 @@
-split ka.py into several files?
+
+64 - not so obvious
 
 
-maybe add pragmas and options to the compiler?
-comp.tolerance, output.precision, int.overflow, assert.check
-%CT=0
-%CT=n -- digits
-%CT=epsilon -- tolerance
--- abs(a-b) and CT*max(abs(a),abs(b))
-%ComparisonTolerance=0.0|1e-14
-%IntegerOverflow=0|1
-%CheckAssertion=0|1
-
-Checks: OVF, ASSERT, BOUNDS, NULL, INIT, ZERODIV (hardware), FP (produce INF, NAN, UFL; zdiv)
-check FP ovf to infinity - can report.
-invalid ops making NAN.
-#-O #+O #-A #+A #-B #+B #-N #+N #-I #+I
-range checking
-stack checking
-inline
-struct packing
-
-i think at file level it must be this way: when a piece of code is compiled that needs such flag (i.e. int a = b + c;),
-a global file flag is set "flag is used" (if it was set as compiler option, fine). naturally, initially it's
-"flag not used". then when we see construction #pragma check(ovf,on), we check this flag - if it's not yet used, great,
-we just set this option. if it is 'used' - it means that the flag is set later than it should have been.
-That "latch" or "seal" mechanism (flag_used state tracking) is a classic, rock-solid compiler design pattern
-the moment any code actually consumes it
-OVF.is_locked = true
-
-Every variable starts as 0 -- I doubt it. If a variable used before assignment it should be an error.
-
-constants:
-or function NAME(...) -- there is no differences for functions because functions defined by stmt
-function name(...) ... are already constants - you can't assign anything to that name (!). So NAME or
-name - it's the same for functions.
-Rethink all that - constants.
-discuss:
-print SIZE_G  -- => 5  (a global constant exists from the start)
-SIZE_G = 5
-(constant global) functions are defined with 1st pass, when execution not started, it's acceptable
-but should be mentioned. constants - not so obvious.
-
-initialization flags - also an option/pragma.
-
-initializations
-===============
-1. Static error: The compiler detects an obvious read-before-write in control flow and rejects it.
-2. Static warning: The compiler cannot establish initialization, but cannot establish the opposite either. it issues a warning.
-3. Runtime check: An optional compilation setting (and pragma on file or function level) inserts
-initialization tracking and checks every read.
-
-
-overflow. it's integer overflow which hardware doesn't detect. so we have a flag to checking that too. (also for MININT/-1, MININT*-1, -MININT)
+integer overflow. it's integer overflow which hardware doesn't detect. so we have a flag
+to checking that too. (also for MININT/-1, MININT*-1, -MININT)
 
 zerodiv - always. hardware traps it.
 
 
 
-print -0.0 -----> 0.0 signbit(x)
+print -0.0 -----> 0.0
+signbit(x)
 
 
 
@@ -69,43 +22,24 @@ A few observations:
 - Assignment of short strings copies the word.
 - Concatenation creates a new value, as you intend.
 - Empty string is simply length zero; no allocation.
+- str: 0 or 1-7 bytes (ascii?); text: 0 or 1 wide unicode or 1-7 bytes (or ascii)
 
 
-random numbers
-==============
+split ka.py into several files?
 
-based on SplitMix64
 
-static uint64_t state = 0x123456789ABCDEF0ULL; // Must be seeded
-uint64_t next_u64(void)
-{
-  uint64_t z = (state += 0x9E3779B97F4A7C15ULL);
-  z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL;
-  z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
-  return z ^ (z >> 31);
-}
-// yield 64-bit int 0..n-1, n>1
-int64_t rand_int64(int64_t n)
-{
-  return (int64_t)( next_u64() % (uint64_t)n );
-}
-// float64 in [0.0, x), x>0
-double rand_float64(double x)
-{
-  // 0x1.0p-53 is 2^-53 (1.1102230246251565e-16)
-  double unit = (next_u64() >> 11) * 0x1.0p-53; // Strictly in [0.0, 1.0)
-  double result = unit * x;
-  // Guard against edge-case floating-point rounding when unit is 1.0 - 2^-53
-  if (result >= x) { result = __builtin_nextafter(x, 0.0); }
-  return result;
-}
+Future ?'...'
+m3 - month Jan..Dec
+m4 - month January..December
+d3 - day of year 001..365 (or n1,n2,n3)
+h1 - 1..12 american hour h2 - 01..12 ameraican hour
+a1 - a/p a2 - am/pm A1 - A/P A2 - AM/PM
+w4 - weekday Monday..Sunday
 
-?n - int random 0..n-1 (n>1)
-?x - float random [0..x) (x>0.0)
-?0 - next random like int_random, but just return all 64 bits of next_u64()
-?m - set seed state to -m (m<0), yes half a range, but it's ok for us
 
-/* adult versions:
+Random numbers
+
+// adult versions:
 // Classic Rejection Sampling (Zero Bias, Pure 64-bit)
 int64_t rand_int64(int64_t n)
 {
@@ -113,7 +47,7 @@ int64_t rand_int64(int64_t n)
   // Largest multiple of range that fits in uint64_t, shifted to threshold
   uint64_t threshold = -range % range;
   uint64_t r;
-  do { r = next_u64(); } while (r < threshold);
+  do { r = next_u64(); } while(r < threshold);
   return (int64_t)(r % range);
 }
 int64_t rand_int64(int64_t n) // to complex
@@ -121,16 +55,16 @@ int64_t rand_int64(int64_t n) // to complex
   uint64_t range = (uint64_t)n;
   __uint128_t m = (__uint128_t)next_u64() * (__uint128_t)range;
   uint64_t l = (uint64_t)m;
-  if (l < range)
+  if(l < range)
   {
     uint64_t t = -range;
-    if (t >= range)
+    if(t >= range)
     {
       t -= range;
-      if (t >= range)
+      if(t >= range)
         t %= range;
     }
-    while (l < t)
+    while(l < t)
     {
       m = (__uint128_t)next_u64() * (__uint128_t)range;
       l = (uint64_t)m;
@@ -138,7 +72,7 @@ int64_t rand_int64(int64_t n) // to complex
   }
   return (int64_t)(m >> 64);
 }
-*/
+
 
 Prime
 =====
@@ -146,12 +80,11 @@ Prime
 def is_prime(n): # int64 -> int64 (0|1)
   if n < 66:
     if n < 2: return 0
-    return (0x28208A20A08A28AD >> (n - 2)) & 1
-  if (n & 1) == 0 or (n % 3) == 0: return 0
+    return (0x28208A20A08A28AD >> (n-2)) & 1
+  if (n&1) == 0 or (n%3) == 0: return 0
   i = 5
-  while i * i <= n:
-    if (n % i) == 0 or (n % (i + 2)) == 0: return 0
+  while i*i <= n:
+    if (n % i) == 0 or (n % (i+2)) == 0: return 0
     i += 6
   return 1
-
 

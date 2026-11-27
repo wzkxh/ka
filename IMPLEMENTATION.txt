@@ -171,8 +171,7 @@ Floored division and modulo (version 6.2, user: "let's do it mathematically"): `
 - `@x` = variable of the nearest enclosing function (draft, replaced the first spelling `\x`). A first version of the idea was `nonlocal x`. The user expects to
   redo it ("we'll do later"); only one level exists.
 - Named functions are hoisted (created at scope entry): they exist from the start of their scope ("main code first, helpers below", mutual recursion). Version 6.4 (user): a name defined with
-  `function` is a constant, "in a compiled language you cannot redefine a function with the same name or write n = 2 after
-():=1" (Python allows it silently because a session is interpreted).
+  `function` is a constant, "in a compiled language you cannot redefine a function with the same name or write f=2 after \f():=1" (Python allows it silently because a session is interpreted).
   Before 6.4 such a name was an ordinary variable that could be reassigned (test 20 did it); the check is made in Checker.stmt: the target's scope must not have a function of that name.
   The user also considered a single `f = function...` form instead; rejected (no main-first layout, call-before-definition becomes a runtime error, mutual recursion gets fragile).
   The names of functions are not special in other ways (no capital-letter rule); direct calls without a closure lookup remain a possible optimisation.

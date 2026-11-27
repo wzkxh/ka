@@ -5,13 +5,13 @@ executable (PE32+) directly. Pure Python 3, no dependencies (the compiler runs o
 OS; the produced .exe runs on Windows).
 
 Usage:
-    python kota.py program.ko              -> program.exe
-    python kota.py program.ko -o out.exe
-    python kota.py -e program.ko           compile, run the .exe, delete it   (-k: keep it)
-    python kota.py -c "print 1 + 2"        compile the text, run, delete      (-k: keep it as yyyymmdd_HHMMSS.exe)
+  python kota.py program.ko             -> program.exe
+  python kota.py program.ko -o out.exe  -> out.exe
+  python kota.py -e program.ko          compile, run the .exe, delete it (-k: keep it)
+  python kota.py -c "print 1 + 2"       compile the text, run, delete    (-k: save as yyyymmdd_HHMMSS.exe)
 
 The language is described in LANGUAGE.md. Pipeline:
-    strip comments -> tokenize (NEWLINE/INDENT/DEDENT) -> parse to AST (tuples)
+  strip comments -> tokenize (NEWLINE/INDENT/DEDENT) -> parse to AST (tuples)
     -> type check (static inference) -> x86-64 code -> PE image
 """
 import argparse
@@ -24,10 +24,12 @@ import tempfile
 import time
 
 
-VERSION = "7.4"                         # see RELEASE_NOTES.md
-CHECK_INIT = True                       # runtime checks of variables that are not provably assigned (see InitCheck); a mode to switch off later
-WARN_UNUSED_VALUE = False               # warning for an expression statement that is not a call; off by default
-CHECK_ASSERTS = True                    # `assert` statements are checked at run time; False: they are parsed and dropped (no code, nothing evaluated)
+VERSION = "7.4"                   # see RELEASE_NOTES.md
+
+CHECK_INIT = True                 # runtime checks of variables that are not provably assigned (see InitCheck)
+WARN_UNUSED_VALUE = False         # warning for an expression statement that is not a call; off by default
+CHECK_ASSERTS = True              # `assert` statements are checked at run time;
+                                  # False: they are parsed and dropped (no code, nothing evaluated)
 
 
 class CompileError(Exception):

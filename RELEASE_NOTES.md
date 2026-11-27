@@ -60,7 +60,7 @@ Kota compiles to a Windows x64 console `.exe` (PE written directly, pure Python 
 - New `LIBRARY.txt`: C source of the runtime routines. Tests: 13 more (207); the tests that depended on the old rules were changed.
 
 ## Version 6.3
-- **Random numbers:** the unary operator `?x`. `?n`, `?x`.
+- **Random numbers:** the unary operator `?x`; int/float: `?n -> 0..n-1`, `?x -> [0.0..x)`.
 - `PLANS.md` updated by the user.
 - 3 new tests: `62_random`, `err_const_random`, `err_type_random_function`.
 

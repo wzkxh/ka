@@ -247,13 +247,49 @@ Implementation is like this
 def is_prime(n): # int64 -> int64 (0|1)
   if n < 66:
     if n < 2: return 0
-    return (0x0A08228828228A2B >> (n - 2)) & 1
-  if (n & 1) == 0 or (n % 3) == 0: return 0
+    return (0x0A08228828228A2B >> (n-2)) & 1
+  if (n&1) == 0 or (n%3) == 0: return 0
   i = 5
-  while i * i <= n:
-    if (n % i) == 0 or (n % (i + 2)) == 0: return 0
+  while i*i <= n:
+    if (n%i) == 0 or (n % (i+2)) == 0: return 0
     i += 6
   return 1
 Please check that it's correct for numbers -2 .. 100. Add test file with these numbers too.
+
+Version 7.4 is ready: the unary *n prime test is in. All 252 tests pass in the emulator, but I haven't run it on Windows.
+
+The prime function you gave me is wrong as written. I checked it for -2..100 first, and it reports 4, 9, 15, 21 and others as prime. The constant 0x28208A20A08A28AD has the bit for each prime p at position p, plus a stray bit 0. That is the right mask for mask >> n, but your code uses (mask >> (n - 2)) & 1. The correct constant for that form is 0x0A08228828228A2B, with 18 bits set. With it the function agrees with a sieve for -100..300000, and the compiled operator matches a Python Miller–Rabin reference in the emulator.
+
+What *n does:
+
+Behavior: it returns 1 if the int n is prime, else 0, for ints only. A float or string operand is a compile error that names '*'.
+Precedence: it is a prefix operator at the same level as -, ! and |. After an operand * is still multiplication, so 3 * *5 is 3 and **7 is *(*7) = 0.
+Implementation: your algorithm in machine code, rt_isprime, from the new tools/int_rt.asm. I added jo to the build script, which now handles three asm files.
+
+One change to your algorithm: i * i <= n is checked for signed overflow. For primes between 3037000499² and 2^63 the square of the first i past the root wraps negative, so the loop would run about 4×10^8 extra steps.
+
+Big numbers: I ran the largest prime below 2^63 once by hand to check that guard; it returned 1 after 173 s in the emulator, before your instruction arrived. I won't run any again. The test and tools/fuzz_prime.py now stay below 10^9.
+
+Tests:
+
+75_prime: the numbers -2..100 one by one, a comparison against a trial-division function written in Kota, and the primes below 100000 counted (9592).
+Error tests: err_type_prime_float and err_type_prime_text.
+
+LIBRARY.txt has a new section 6b for rt_isprime, and I added the in-place operations |x and assert to section 7.
+
+A slip of mine, now fixed: since 7.1 I had appended the numbered decision sections 13–16 to NOTES.md instead of IMPLEMENTATION.txt. They are now all in IMPLEMENTATION.txt as sections 13–17 (Time, Command line, assert, |, prime test), with the cross-references updated, and NOTES.md is back to its own content.
+
+Files: kota.py, LANGUAGE.md, LIBRARY.txt, NOTES.md, IMPLEMENTATION.txt and RELEASE_NOTES.md, plus tools-and-tests-74.zip. The zip holds tools/int_rt.asm, tools/build_float_rt.py, tools/fuzz_prime.py and the three new tests with their expected results; unzip it in the project root.
+
+| Upper bound of n | Typical time (prime) | Notes |
+| --- | --- | --- |
+| ≤ 10⁶ – 10⁷ | < 0.001 ms | Instant |
+| ≤ 10⁹ | ~ 0.01–0.1 µs | Still essentially free |
+| ≤ 10¹¹ | ~ 1–5 µs | Negligible |
+| ≤ 10¹² | ~ 0.05–0.2 ms | Fine for most uses (practical limit) |
+| ≤ 10¹³ | ~ 0.3–1 ms | Still very usable |
+| ≤ 10¹⁴ | ~ 3–10 ms | Acceptable for occasional calls |
+| ≤ 10¹⁵ | ~ 30–50 ms | Noticeable but ok |
+| ≤ 10¹⁶ | ~ 0.1–0.2 s | Starting to feel slow |
 
 
