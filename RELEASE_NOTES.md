@@ -10,7 +10,8 @@ Kota compiles to a Windows x64 console `.exe` (PE written directly, pure Python 
 
 ## Version 7.4
 - **Unary `*n`, the prime test:** 1 if the int `n` is prime, else 0; ints only.
-- Tests: `75_prime`, `err_type_prime_float`, `err_type_prime_text`; LIBRARY.txt also got the in-place operations `|x` and `assert`.
+- Tests: `77_prime`, `78_primes`, `err_type_prime_float`, `err_type_prime_text`; LIBRARY.txt also got the in-place operations `|x` and `assert`.
+- Test files 63..75 are renamed - or rather their enumeration is fixed.
 
 ## Version 7.3
 - **Unary `|x`:** the absolute value of an int or a float (same type), the length of a `str` (bytes) or a `text` (characters), an int. Details: IMPLEMENTATION.txt section 15.
