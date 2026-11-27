@@ -6,8 +6,8 @@ This file defines the language; the reasons behind the decisions are in IMPLEMEN
 
 ## 1. Lexical structure
 - Source is UTF-8 text. Line endings `LF` or `CR LF`.
-- `TAB` is like any other control (e.g. BEL, ESC, HT) or unexpected (`$`,`½`,`∞`) character: just text inside strings and comments,
-  `unexpected character` anywhere else. Indentation consists of spaces only. And better use 2 spaces.
+- `TAB` is like any other control (e.g. BEL, ESC, HT) or unexpected (`\``,`½`,`∞`) character: just text inside strings and comments,
+  *unexpected character* anywhere else. Indentation consists of spaces only. And better use 2 spaces.
 - **Comments:**
   - `--` to the end of the line.
   - `# ` to the end of the line: a hash followed by a space or by the end of the line, but not directly after a digit (`2#` starts a binary literal).
