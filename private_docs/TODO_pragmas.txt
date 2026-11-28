@@ -1,13 +1,16 @@
 command line options and pragmas
 
+-u             warn unused                      %+w
 -i             check init                       %-i
 -a             check assert                     %-a
 -v             check integer overlow            %-v
 -b             check bounds (range, stack)      %-b
--u             warn unused                      %+w
 -n             check null?                      %-n
 -z             check zerodiv?                   %-z
 -f             check fp (result inf,nan,ufl)?   %+f
+
+zdiv, fp overflow etc - hw or software?
+
 
 inline fns; struct packing
 

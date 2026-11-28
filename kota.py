@@ -2,26 +2,19 @@
 """
 kota - a compiler for the language "Kota" that produces a native Windows x64 console
 executable (PE32+) directly. Pure Python 3, no dependencies (the compiler runs on any
-OS; the produced .exe runs on Windows).
+OS; the produced .exe runs on Windows 8/10/11).
 
 Usage:
-  python kota.py program.ko             -> program.exe
-  python kota.py program.ko -o out.exe  -> out.exe
-  python kota.py -e program.ko          compile, run the .exe, delete it (-k: keep it)
-  python kota.py -c "print 1 + 2"       compile the text, run, delete    (-k: save as yyyymmdd_HHMMSS.exe)
+  kota.py program.ko             -> program.exe
+  kota.py program.ko -o out.exe  -> out.exe
+  kota.py -e program.ko          compile, run the .exe, delete it (-k: keep it)
+  kota.py -c "print 1+2"         compile the text, run and delete (-k: save as yyyymmdd_HHMMSS.exe)
 
 The language is described in LANGUAGE.md. Pipeline:
   strip comments -> tokenize (NEWLINE/INDENT/DEDENT) -> parse to AST (tuples)
     -> type check (static inference) -> x86-64 code -> PE image
 """
-import argparse
-import os
-import re
-import struct
-import subprocess
-import sys
-import tempfile
-import time
+import argparse, os, re, struct, subprocess, sys, tempfile, time
 
 
 VERSION = "7.4"                   # see RELEASE_NOTES.md
