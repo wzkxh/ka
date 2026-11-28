@@ -56,10 +56,10 @@ Types are checked at compile time, never written, and inferred:
   `return` without a value and falling off the end give the int 0 (not checked).
 - Calls check the number and types of the arguments. Calling a number is an error.
 - Function types may refer to themselves (`function f(a): return a(a)` with `d = f(q)`, `function q(x): return x`).
-- **Numbers** (int, float) are accepted by `+ - * / \ % ^`, unary `-` `?` `|`, `< <= > >= == !=`, `&& || !`, conditions of `if`, `while`, `?!`, and `print`.
+- **Numbers** (int, float) are accepted by `+ - * / \ % ^`, unary `+` `-` `?` `|`, `< <= > >= == !=`, `&& || !`, conditions of `if`, `while`, `?!`, and `print`.
   **Ints only** are accepted by `& | ~ << >> +> <* *>`, unary `~` `*` and `exit`.
   Functions are accepted by `==` and `!=` (equal if they are the same function; same signature).
-- **Strings** (`str`, `text`) are accepted by unary `|` (the length), unary `?` (the time), `+` (concatenation), `+=`, `== != < <= > >=` (by contents; `str` by unsigned bytes, `text` by code points; chains work too),
+- **Strings** (`str`, `text`) are accepted by unary `+` (upper case), unary `|` (the length), unary `?` (the time), `+` (concatenation), `+=`, `== != < <= > >=` (by contents; `str` by unsigned bytes, `text` by code points; chains work too),
   `&& || !`, conditions of `if`, `while`, `?!`, and `print`. Both operands must have the same string type: `str` and `text` do not mix and do not convert.
   Assignment, passing, returning and closures share the string; strings never change, `+` makes a new one. The memory of strings is not freed.
 - **Int and float mix inside operators:** `+ - * % ^` give a float if either side is a float (the other side is converted), else an int.
@@ -68,7 +68,8 @@ Types are checked at compile time, never written, and inferred:
 - There is no other implicit conversion: assigning, passing or returning a float where an int is expected is an error, and vice versa
   (`x = 0` then `x = 0.5` is an error; `f(1)` and `f(1.5)` cannot both be called).
 - The branches of `c ? a ! b` have the same type, int and float mix as in an operator; `str` and `text` branches must match exactly.
-- Truth: `0`, `0.0` and `-0.0` are false, any other number (also NaN) is true; the empty string is false, any other string is true. Comparisons and logical operators give the int `0` or `1`.
+- Truth: `0`, `0.0` and `-0.0` are false, any other number (also NaN) is true; the empty string is false, any other string is true; a function is true (only an unset function, see 8, is false:
+  `if f`, `while f`, `!f`, `f && g`, `f ? a ! b`, `assert f`). Comparisons and logical operators give the int `0` or `1`.
 
 ## 3. Statements and lines
 - A statement ends at the end of the line, at `;`, at a closing `)` or `}`, at `else`/`elif`, or where another statement starts with a
@@ -101,7 +102,7 @@ Precedence, highest to lowest; binary operators are left-associative except `^`:
 | level | operators |
 |---|---|
 | 14 | call `f(args)`; primary: number, variable, `(expr)`, function literal |
-| 13 | unary `-` `~` `!` `?` `\|` `*` |
+| 13 | unary `+` `-` `~` `!` `?` `\|` `*` |
 | 12 | `^` power (right-associative) |
 | 11 | `*` `/` `\` `%` |
 | 10 | `+` `-` |
@@ -133,6 +134,8 @@ Precedence, highest to lowest; binary operators are left-associative except `^`:
   For `<< >> +>` a count of 64 or more shifts everything out (result 0; `+>` gives 0 or -1 by the sign).
   A negative count shifts the other way: `x >> -n` is `x << n`, `x << -n` is `x >> n`, `x +> -n` is `x << n`.
   A rotate takes the count modulo 64: `x <* -n` is `x *> n`, `x *> -n` is `x <* n`.
+- **Unary plus**, `+x`: a number as it is (`+x` is `x`, also `+-0.0` is `-0.0`); a `str` or a `text` in upper case, as a new string: `+'abc'` is `'ABC'`. A `str` changes the ASCII letters only (other bytes stay);
+  a `text` also changes the letters of Latin-1, Latin Extended-A, Greek and Cyrillic that have a one-character upper case (the sharp s `ß` stays). `+x + 1` is `(+x) + 1`; after an operand `+` is the sum. Not for functions.
 - **Absolute value and length**, unary `|x` (after an operand `|` is bitwise or): for an int or a float the absolute value, of the same type (the smallest int stays as it is, `|-0.0` is `0.0`, the sign of NaN is cleared);
   for a `str` the number of bytes, for a `text` the number of characters, an int (0 for the empty string). `|x + 1` is `(|x) + 1`, `|(a - b)` needs the parentheses. Not for functions.
 - **Prime test**, unary `*n` (after an operand `*` is multiplication): for an int `n` the int 1 if `n` is a prime number, else 0 (`*-3`, `*0`, `*1` are 0, `*2` is 1). Ints only.
@@ -164,6 +167,7 @@ Precedence, highest to lowest; binary operators are left-associative except `^`:
 | statement | meaning |
 |---|---|
 | `name = expr`, `^name = expr`, `@name = expr` | assign, creates a variable / a global / an enclosing function's variable (see 7) |
+| `a = b = c = expr` | chained assignment: `expr` is computed once, `c` gets it, then `b = c`, then `a = b`; any number of names, each may be `^name` or `@name`; constants too (`A = B = 1`) |
 | `name op= expr` | `name = name op expr` for `+ - * / \ % ^ & \| ~ && \|\| << >> +> <* *>`; `&&=` and `\|\|=` short-circuit; also `^name op= expr`, `@name op= expr` |
 | `print a, b, "text", ...` | print the items one after another, then a newline; `print` alone prints an empty line. Items are numbers or strings |
 | `if cond block [elif cond block]... [else block]` | conditional (`else if` also works) |
@@ -265,7 +269,7 @@ Very deep recursion overflows the 1 MB stack and crashes.
   `in the condition of 'if'`, `in 'print' (only numbers, str and text can be printed)`, `in 'return' (all returns of a function must agree)`, ...),
   `the result is float, expected int`, `wrong number of arguments: the function takes N, called with M`, `an int is not a function` (or `a float ...`),
   `expected a number, found fn()`, `expected int, found float` (the operand of `~`, `*`), `cannot mix text and str`, `cannot compare str and int`,
-  `in operand of '|'`, `in operand of '*'`, `in 'assert'`, `in '?!' (both branches must have the same type, or both be numbers)`, `in the condition of '?'`.
+  `in operand of '+'`, `in operand of '|'`, `in operand of '*'`, `in 'assert'`, `in '?!' (both branches must have the same type, or both be numbers)`, `in the condition of '?'`.
 
 
 ## 10. Characters (JFYI)
@@ -274,24 +278,24 @@ Very deep recursion overflows the 1 MB stack and crashes.
 | ' | byte string `str` |
 | " | unicode string `text` |
 | # | hex literal `#ff`, binary literal `2#101`; `# ` comment |
-| ! | unary not, conditional `c ? a ! b`, != - not equal |
+| ! | unary not, conditional `c ? a ! b`, `!=` - not equal |
 | ? | unary random and time, conditional `c ? a ! b` |
-| / | unary - nothing, float division; /= |
-| % | unary - nothing, modulo (floored); %= |
-| & | unary - nothing, bitwise and, && - logical and; &= &&= |
-| \| | unary absolute value / length, bitwise or, \|\| - logical or; \|= \|\|= |
-| ~ | unary bitwise not, xor; ~= |
-| * | unary prime test, multiply; \*= ; `<*` `*>` rotate |
-| + | identity, plus; += ; `+>` arithmetic shift right |
-| - | negative, minus; -= |
-| < | unary - nothing, less; <= - le; `<<` shift left, `<*` rotate left |
-| > | unary - nothing, greater; >= - ge; `>>` shift right, `+>` `*>` |
-| = | return, assignment, == - equal |
+| / | unary - nothing, float division; `/=` |
+| % | unary - nothing, modulo (floored); `%=` |
+| & | unary - nothing, bitwise and, `&&` - logical and; `&=` `&&=` |
+| \| | unary absolute value/length, bitwise or, \|\| - logical or; \|= \|\|= |
+| ~ | unary bitwise not, xor; `~=` |
+| * | unary prime test, multiply; `\*=` ; `<*` `*>` rotate |
+| + | unary identity/upper-case; plus; `+=` ; `+>` arithmetic shift right |
+| - | negative, minus; `-=` |
+| < | unary - nothing, less; `<=` - le; `<<` shift left, `<*` rotate left |
+| > | unary - nothing, greater; `>=` - ge; `>>` shift right, `+>` `*>` |
+| = | return, assignment, `==` - equal |
 | , | separate parameters, arguments |
 | : | start block, unary - nothing |
 | ; | separate statements, unary - nothing |
-| \\ | function (synonym of `function`) where an operand or statement is expected; integer division (binary); \\= |
-| ^ | global variable (prefix), power (binary); ^= |
+| \\ | function def/literal (read: λ); integer division (binary); \\= |
+| ^ | global variable (prefix), power (binary); `^=` |
 | _ | 'blank' in ids and numbers, ids can start/end with it |
 | @ | upper-level variable |
 | () | expressions, parameters, arguments |

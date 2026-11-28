@@ -1,2 +1,0 @@
-function f(): return 1
-if f: print 1  -- ERROR: in the condition of 'if'

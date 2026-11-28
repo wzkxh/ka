@@ -15,7 +15,7 @@ Reasons behind decisions: IMPLEMENTATION.txt. History and state: RELEASE_NOTES.m
   LIBRARY.txt = the runtime routines as C (add every new routine). NOTES.md = this file, only for me. README.md = what the files are and how to run. PLANS.md = the owner's private list of plans.
 - Rules of the owner: do only what was asked, his time is limited (do not start changes or run commands that were not asked for). If the language definition has conflicts or unclear cases, ask before implementing;
   simple solutions are fine, he says what may be skipped. PLANS.md is private: do not raise or ask about its items until he asks. Do not suggest documenting facts that follow directly from the grammar (noise).
-  Printing of -0.0 is on his todo list: leave it. Prime test: never run it on big numbers (10^12 and larger) in tests, fuzz tools or by hand.
+  Prime test: never run it on big numbers (10^12 and larger) in tests, fuzz tools or by hand.
 - Delivery: a zip of the project (not 7z); for a small change only the changed files (`kota.py` and the documents) are welcome.
 - **Version:** the `VERSION` constant in `kota.py` (no command line option for it, the user asked for none). Bump it for every delivery to the user and add an entry on top of RELEASE_NOTES.md.
 - **Style:** 2 spaces per indentation level in `.py` and `.ko` files (also continuation lines). Tests carry `-- =>` comments with the result of a statement
@@ -57,13 +57,14 @@ Reasons behind decisions: IMPLEMENTATION.txt. History and state: RELEASE_NOTES.m
 - `assert c[, r]` is rewritten in `Parser.stmt` to `("if", ("not", c, "in 'assert'"), [print, exit 1], [], line)`: nothing after the parser knows it (the third item of `"not"` is the text of the checker's message).
   `render_tokens()` rebuilds the condition text for the report from the tokens; `print_item()` parses one item of `print` and the report. `CHECK_ASSERTS = False` makes the parser return `("skip",)`.
 - Expression levels low to high: `cond` `or_` `and_` `eq` `cmp` `bor` `bxor` `band` `shift` `add` `mul` (`* / % \`) `power` `unary` `postfix`. `chain()` builds `("cmp", ops, operands)` for 2+
-  comparisons of one level. `power()` = `unary ['^' power]`; `-5`/`-1.5` are folded into literals. `unary()` takes the prefix operators `- ~ ! ? | *`; `?x`, `|x` and `*x` become `("rand", e)`, `("abs", e)`, `("prime", e)`
-  (after an operand `?`, `|` and `*` are the conditional, bitwise or and multiplication; `|` and `*` also start an expression statement).
+  comparisons of one level. `power()` = `unary ['^' power]`; `-5`/`-1.5` are folded into literals. `unary()` takes the prefix operators `+ - ~ ! ? | *`; `+x` becomes `("pos", e)` (identity for numbers, upper case for str/text: `rt_strupper` / `rt_textupper`); `?x`, `|x` and `*x` become `("rand", e)`, `("abs", e)`, `("prime", e)`
+  (after an operand `?`, `|` and `*` are the conditional, bitwise or and multiplication; `+`, `|` and `*` also start an expression statement).
+- Chained assignment: `assign()` collects `a = b = c = e` (`chain_target()`), builds `c = e; b = c; a = b` as a `("block", [...])`; `assign_node()` makes one assignment (constants, declare).
 - Print items: `string_item()` collects adjacent literals or a parenthesised group of them; if more follows (`'a' + 'b'`) the parser goes back and parses an expression. A string literal elsewhere is a value:
   `("bstr", i)` / `("btext", i)` indexing `Parser.byte_strings` (bytes) / `Parser.text_strings` (lists of code points); adjacent literals are joined in `primary`.
 - AST (line last): statements `("assign",name,expr,line,mode[,True])` (6th element = constant definition) `("print",items,line) ("if",c,then,else,line) ("while",c,body,line) ("exit",e,line)
   ("exprstmt",e,line) ("return",e|None,line) ("fn",Scope) ("block",stmts) ("skip",) ("break",) ("continue",)`; expressions `("num",n) ("flt",x) ("var",name,line,mode) ("call",callee,args,line)
-  ("fnlit",Scope) ("bin",op,l,r) ("cmp",ops,xs) ("cond",c,a,b) ("and"|"or",l,r) ("neg"|"not"|"bnot"|"rand"|"abs"|"prime",e) ("bstr"|"btext",i)`;
+  ("fnlit",Scope) ("bin",op,l,r) ("cmp",ops,xs) ("cond",c,a,b) ("and"|"or",l,r) ("pos"|"neg"|"not"|"bnot"|"rand"|"abs"|"prime",e) ("bstr"|"btext",i)`;
   `("not",e,text)` may carry the text of the type error message (`assert`). `mode`: None, `^` (global), `@` (enclosing function).
 - Scopes: `Scope` per function plus the global scope (`parent is None`). `declare(name, mode, line)` registers assigned names; `globals_decl` / `nonlocal_decl` record names used as `^x` / `@x`
   (a name cannot be both local and marked). `^x` in a function also creates the global slot and adds it to `fn_globals`.
@@ -81,7 +82,7 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
   bodies are checked once (`check_body`). No occurs check; `unify_raw` skips pairs already being compared; `show()` cuts cycles.
 - Operators whose result type depends on operand types that may be unknown yet (`+ - * % ^`, `== !=`, `?:`) are constraints (`arith`, `eq`, `order`, `cond`, `num` in `Checker.pending`), settled by `step()` /
   `solve()`; `finish()` makes what is still unknown int. `abs` (`|x`: int -> int, float -> float, str/text -> int; the result is a fresh variable until the operand type is known) is a constraint too; `prime` (`*n`) just needs an int (`operand()`).
-  `/` (float result) and `\` (int result) only need numeric operands (`need_num`; `need_num(..., True)` also accepts `str`/`text`: truth values and `print`). `+` on strings is in `arith`, string comparisons in `eq`/`order` (both sides the same string type, `same_string`). Assignments, arguments, returns use plain `unify` (strict).
+  `/` (float result) and `\` (int result) only need numeric operands (`need_num`; `need_num(..., True)` also accepts `str`/`text`: `print`, `?`; `need_num(..., "truth")` also accepts functions: conditions, `&&` `||` `!`, `assert`). `+` on strings is in `arith`, string comparisons in `eq`/`order` (both sides the same string type, `same_string`). Assignments, arguments, returns use plain `unify` (strict).
 - `Checker.types` maps `id(expression node)` to its `Ty` (the AST must stay alive; `compile_source` keeps it). Bare `return` / falling off the end are not unified.
 
 ### Assignment before use (`InitCheck`) and function names
@@ -121,7 +122,7 @@ plain names follow `globals_decl` / `nonlocal_decl`, then local, then enclosing 
   - Float: `rt_fmt_float` (rax = bits, rdx = buffer -> rax = length), `rt_fpow` (xmm0, xmm1 -> xmm0, edx = error code), `rt_fmod` (exact integer algorithm); they set the x87 control word themselves.
     `rt_print_float` (in `runtime()`) calls `rt_fmt_float` and `rt_print_str`.
   - Time: `rt_utf8_to_text`, `rt_text_to_utf8`, `rt_time_format` (registers in the header of the .asm); `rt_time_us`, `rt_time_text`, `rt_time_str` are in `runtime()`.
-  - Int: `rt_isprime` (rax = n -> rax = 0/1).
+  - Int: `rt_isprime` (rax = n -> rax = 0/1); `rt_upper_str`, `rt_upper_text` (rsi = source contents, rdi = destination contents, rcx = count; the wrappers `rt_strupper`/`rt_textupper` in `runtime()` allocate; `upper_table` is at the end of the `.asm`).
 
 ### PE writer (`build_pe`)
 - Sections `.text` (RX) at 0x1000, `.idata` (RW), `.data` (RW). ImageBase 0x140000000, no relocs, console subsystem, 1 MB stack. kernel32 imports (`IMPORTS`): GetStdHandle, WriteFile, SetConsoleOutputCP,

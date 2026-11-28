@@ -1,0 +1,49 @@
+-- a = b = c = e: e is computed once, all the variables get the value
+a = b = c = 1
+print a, b, c                                                        -- => 111
+x = y = 2.5
+print x, y                                                           -- => 2.52.5
+s = t = 'str'
+u = v = "text"
+print s, t, u, v                                                     -- => strstrtexttext
+a = b = c = 7 + 1
+print a, b, c                                                        -- => 888
+function f(p) { print 'f called'; =p * 2 }
+m = n = f(21)
+print m, ' ', n                                                      -- => 42 42
+-- a chain can contain already used variables; they change one after another, the right one first
+a = 1
+a = b = a + 1
+print a, ' ', b                                                      -- => 2 2
+-- constants (once per name) and variables together
+LIMIT = top = 10
+print LIMIT, ' ', top                                                -- => 10 10
+FIRST = SECOND = 3
+print FIRST + SECOND                                                 -- => 6
+-- in functions: locals, globals, enclosing variables
+g1 = g2 = 0
+function setup(n) {
+  loc = ^g1 = ^g2 = n
+  print loc, g1, g2
+}
+setup(5)
+print g1, g2                                                         -- => 55
+function outer() {
+  w = 1
+  function inner() {
+    @w = z = 9
+    =z
+  }
+  inner()
+  print w                                                            -- => 9
+}
+outer()
+-- in one-line bodies and with other statements on the line
+if 1: p = q = 4; print p + q                                         -- => 8
+k = l = 1; print k + l                                               -- => 2
+i = j = 0
+while i < 3: i += 1; j = r = i * 2
+print i, ' ', j, ' ', r                                              -- => 3 6 6
+-- the comparison == is not an assignment
+e = d = 1
+print e == d                                                       -- => 1

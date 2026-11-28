@@ -1,2 +1,0 @@
-f = \x: x
-assert f  -- ERROR: in 'assert'

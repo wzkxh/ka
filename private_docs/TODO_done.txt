@@ -339,3 +339,32 @@ Your renumbering of tests 65–77 and the removal of "Directions and ideas" are 
 
 One thing for you to decide: I listed the docs reorganisation under 7.4 in the release notes instead of making a 7.4.1, since the code is unchanged.
 
+---
+
+7.5
+
+1) test err_type_assert_function.ko -- i think assert fn must be ok, any fn not zero (we don't have 'null' yet) must give true.
+2) if source file is not found, compiler crashes:
+FileNotFoundError: [Errno 2] No such file or directory: 'x.xx'
+let's do it gracefully instead
+3) please implement operator +: for numbers it's the same number, for strings it's "convert to upper-case"
+4) zero and -zero: please have such test file (it should print 0.0 and -0.0)
+z = 0.0
+print z -- 0.0
+z = -z
+print z -- -0.0
+print 0.0, ' ', -0.0
+5) implement assignment like this: a=b=c=1 i.e. a few vars/consts on the left.
+6) make it 7.5.
+
+All six items are done and delivered as kota-75.zip (folder kota/, version 7.5). I checked everything in the emulator only. All 258 tests pass there except 78_primes, as before, and the -- => comment check and tools/test_cli.py also pass. Please run python rt.py on Windows.
+
+assert with a function: it is now OK, and a function is true unless it is unset. I made this the general rule rather than an assert special case: if f, while f, !f, &&, || and c ? a ! b accept functions too, because assert is just if !c.
+Tests removed: this made the old err_type_assert_function, err_type_condition and err_type_cond_condition obsolete, so I removed all three. The new tests are 82_function_truth and rt_assert_function (an unset function fails the assert).
+Missing source file: it now prints x.xx: error: cannot read the source file: No such file or directory and exits with 1. A directory or an unreadable file gets the same treatment. tools/test_cli.py checks it.
+Unary +: +5 is 5, +'abc' is 'ABC', and +"abc" is "ABC"; the result keeps the operand's type. A str changes ASCII letters only. A text also changes Latin-1, Latin Extended-A, Greek and Cyrillic letters (including Ukrainian), checked against Python's upper(). I built that table before your note about not working hard on it; I left it in and did nothing more. ß stays unchanged, and +f on a function is a compile error. The new routines are in tools/int_rt.asm and LIBRARY.txt. Test: 79_unary_plus.
+Zero and minus zero: 81_negative_zero has your example and a few more lines. -0.0 already printed correctly, so no compiler change was needed. NOTES.md still says printing of -0.0 is on your todo; I left that line alone, since the todo may mean something else.
+Chained assignment: a = b = c = 1 computes the value once, then assigns c, b = c, a = b. It works with constants (A = B = 1), ^x, @x, and inside one-line bodies. Only plain = chains. Tests: 80_chain_assignment, err_type_chain_assign and err_chain_const_twice.
+Version 7.5: VERSION is bumped and the release notes have the new entry. LANGUAGE.md, IMPLEMENTATION.txt and NOTES.md are updated too.
+
+

@@ -1,0 +1,14 @@
+-- a function is a truth value: true, unless it is unset (a function that ended without a result)
+f = \x: x
+assert f
+if f: print "if"                                                     -- => if
+print !f, ' ', f && 1, ' ', f || 0, ' ', f ? 'yes' ! 'no'            -- => 0 1 1 yes
+n = 0
+while f && n < 3: n += 1
+print n                                                              -- => 3
+function pick(a) { if a: return \(): 1 }
+g = pick(1)
+h = pick(0)
+assert g
+assert !h, "h is unset"
+print !h, ' ', h ? 'set' ! 'unset'                                   -- => 1 unset

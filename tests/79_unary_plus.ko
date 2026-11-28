@@ -1,0 +1,27 @@
+-- unary +: a number stays as it is, a str or a text goes to upper case
+print +5, ' ', +1.5, ' ', -+3, ' ', +-3, ' ', 2 + +3, ' ', 2++3     -- => 5 1.5 -3 -3 5 5
+x = -2.5
+print +x, ' ', +x * 2, ' ', +0.0                                     -- => -2.5 -5.0 0.0
+print +'Hello, World 123'                                            -- => HELLO, WORLD 123
+print +"Hello, World 123"                                            -- => HELLO, WORLD 123
+s = 'hello'
+t = "hello"
+print +s, ' ', s, ' ', +t, ' ', t                                    -- => HELLO hello HELLO hello
+print +(s + ' you'), ' ', +'a' + 'b'                                 -- => HELLO YOU Ab
+print '[', +'', ']', '[', +"", ']'                                   -- => [][]
+print |+'', ' ', |+"abc", ' ', |+'x^00y'                             -- => 0 3 3
+-- the other bytes and characters are copied: str has ASCII only, text also Latin-1 and Latin Extended-A letters
+print |+'a^e9z', ' ', |+'añ'                                         -- => 3 3
+print +"añé ÿ ž", ' ', +"ß"                                          -- => AÑÉ Ÿ Ž ß
+-- in functions the type follows the argument
+function up_i(v): return +v
+function up_f(v): return +v
+function up_s(v): return +v
+print up_i(3), ' ', up_f(1.5), ' ', up_s('abc'), ' ', up_i(5) + 1     -- => 3 1.5 ABC 6
+function up_t(v) { =+v }
+print up_t("text")                                                   -- => TEXT
+-- an expression statement and a continued line
++s
+total = 1 +
+  +2
+print total                                                          -- => 3

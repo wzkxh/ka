@@ -46,6 +46,9 @@ a1 - a/p a2 - am/pm A1 - A/P A2 - AM/PM
 w4 - weekday Monday..Sunday
 
 
+
+A str changes ASCII letters only. A text also changes Latin-1, Latin Extended-A, Greek and Cyrillic letters (including Ukrainian). ß stays unchanged.
+
 Random numbers
 
 // adult versions:

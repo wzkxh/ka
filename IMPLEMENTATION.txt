@@ -109,6 +109,11 @@ Shifts (user's spelling and rules):
     take the count modulo 64. Rotates use the hardware behaviour, count modulo 64, which is the natural definition.
   - Negative counts (version 6, user): shift the other way (`x >> -n` is `x << n`, ...). For rotates this is automatic (modulo 64).
     Before version 6 a negative count shifted everything out.
+Chained assignment (version 7.5, user): `a = b = c = e` is parsed as `c = e; b = c; a = b` (a `block` node; `e` is computed once, the last name is set first, like C). Every name goes through the normal assignment rules (constants, `^x`, `@x`,
+  types: a mismatch is reported for the name that cannot take the value). Only plain `=` chains; `a = b += 1` is not a chain.
+Unary plus (version 7.5, user): `+x` is a unary operator of the level of `-`; for numbers it is the identity, for `str` and `text` it makes the upper-case string (a new object, the empty string stays 0). The result has the type of the operand
+  (as for `?x`). `str`: ASCII a-z only (bytes are bytes; UTF-8 in a `str` is left as it is). `text`: a table of simple one-to-one mappings (ASCII, Latin-1, Latin Extended-A, Greek, Cyrillic: tools/int_rt.asm, `upper_table`,
+  checked against Python's `upper()` for these blocks); letters whose upper case has several characters (`ß`, `ŉ`) and other scripts are copied unchanged. The user: English letters are the point, the rest is a bonus.
 Compound assignment `x op= e` is sugar for `x = x op e` done in the parser (`&&=`/`||=` become and/or nodes, so they short-circuit). Targets `name`, `^name`, `@name`.
   A consequence of the type rules: `x /= 2` on an int variable is an error since `/` gives a float; use `\=`.
 Division (version 6, user): `/` is always float division, `\` always integer division. Before version 6 `/` truncated for ints and gave a float for floats,
@@ -145,6 +150,8 @@ Floored division and modulo (version 6.2, user: "let's do it mathematically"): `
   id(node) to the type.
 - Runtime arity/not-a-function checks were removed (the checker does it). The null check of a call stays (unset function variable).
 - Truth: `0`, `0.0`, `-0.0` false, NaN true; the empty string false, any other string true (user; the values of strings are in section 6).
+  A function is true unless it is unset (version 7.5, user: "any fn not zero must give true; we don't have 'null' yet"): a closure pointer is tested like any word (`test rax,rax`), so only the checker changed
+  (`need_num(..., "truth")` in the conditions of `if`, `while`, `?!`, the operands of `&&`, `||`, `!`, and so `assert`, which is an `if !c`). `print` and `?` still refuse functions.
 - A function has one signature, so the same function called with arguments of different types is an error: `f(1)` then `f('a')`, `f('a')` then `f("a")`, int then float and so on, in both orders
   (`in argument N of the call: expected X, found Y`; the tests are `err_type_arg_*`). Monomorphic by decision, see the first bullet.
 
@@ -329,6 +336,7 @@ User's design: a unary operator `?x` on numbers; the algorithm is the user's C c
   - `WARN_UNUSED_VALUE` (False): the warning for an expression statement that is not a call (section 3).
   - `CHECK_ASSERTS` (True): `assert` statements (section 3).
 - `VERSION` is a constant in kota.py; there is no option to print it (the user asked for none).
+- A source file that cannot be read (missing, a directory, no permission) gives `NAME: error: cannot read the source file: REASON` and exit code 1 (version 7.5; it was a Python traceback).
 
 
 16. Known issues and limitations
@@ -343,3 +351,4 @@ User's design: a unary operator `?x` on numbers; the algorithm is the user's C c
 - Strings can only be made by literals, `+` and `?'...'`; there are no conversions between `str` and `text`, no indexing, no input (section 6).
 - The prime test is trial division: slow for numbers above 10^12 (section 12). The time needs Windows 8 or newer (section 14).
 - With `CHECK_ASSERTS = False` the dropped asserts are not type-checked (section 3).
+- Upper case (`+s`): only the letters named in section 4 change; no full Unicode case mapping.

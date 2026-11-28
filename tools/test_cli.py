@@ -95,5 +95,7 @@ with tempfile.TemporaryDirectory() as d:
                      (["-k", "-c", "print 1", "p.ko"], "-k -c with a file")):
     code, o, e = run(argv)
     check(f"usage error: {what}", code == 2 and not ran)
+  code, o, e = run(["missing.xx"])
+  check("a missing source file is an error message, not a crash", code == 1 and "missing.xx: error: cannot read the source file" in e and "Traceback" not in e)
 print("all fine" if not failures else f"{failures} failed")
 sys.exit(1 if failures else 0)

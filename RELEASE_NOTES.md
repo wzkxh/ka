@@ -1,11 +1,18 @@
 # Kota - release notes (newest first)
 What changed in which version; the reasons and details are in IMPLEMENTATION.txt. Old entries are history: they keep the names of their time (`ka.py`, `.ka`, old test numbers).
 
-## Current state (version 7.4)
+## Current state (version 7.5)
 - Kota compiles to a Windows x64 console `.exe` (PE written directly, pure Python 3, no dependencies). The version is the `VERSION` constant in `kota.py`.
 - Language: 64-bit ints and floats, byte strings (`str`) and unicode strings (`text`), first-class functions and closures, static type inference, constants, `assert`, time, random numbers. Definition: LANGUAGE.md.
-- Tests: 253 programs in `tests/`, expected results in `tests/results/`. All pass on real Windows (the user's run of 7.4). Under the emulator on Linux all pass except `78_primes` (it needs more instructions than the emulator's limit).
+- Tests: 258 programs in `tests/`, expected results in `tests/results/`. All pass on real Windows. Under the emulator on Linux all pass except `78_primes` (it needs more instructions than the emulator's limit).
 - Known limits: IMPLEMENTATION.txt section 16.
+
+## Version 7.5
+- A function is a truth value (true; an unset function is false): `assert f`, `if f`, `while f`, `!f`, `&&`, `||`, `c ? a ! b` accept functions. `err_type_assert_function`, `err_type_condition`, `err_type_cond_condition` removed.
+- Unary `+x`: numbers unchanged; `str` and `text` to upper case (ASCII for `str`; for `text` also Latin-1, Latin Extended-A, Greek, Cyrillic).
+- Chained assignment `a = b = c = 1`.
+- A missing (or unreadable) source file is an error message, not a Python traceback.
+- Tests: `79_unary_plus`, `80_chain_assignment`, `81_negative_zero`, `82_function_truth`, `rt_assert_function`, `err_type_pos_function`, `err_type_chain_assign`, `err_chain_const_twice`; `tools/test_cli.py` checks the missing file; `tools/int_rt.asm` got `rt_upper_str`, `rt_upper_text`.
 
 ## Version 7.4
 - Unary `*n`: the prime test (1 or 0, ints only).

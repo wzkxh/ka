@@ -17,7 +17,7 @@ The language is described in LANGUAGE.md. Pipeline:
 import argparse, os, re, struct, subprocess, sys, tempfile, time
 
 
-VERSION = "7.4"                   # see RELEASE_NOTES.md
+VERSION = "7.5"                   # see RELEASE_NOTES.md
 
 CHECK_INIT = True                 # runtime checks of variables that are not provably assigned (see InitCheck)
 WARN_UNUSED_VALUE = False         # warning for an expression statement that is not a call; off by default
@@ -301,7 +301,7 @@ def tokenize(src):
 #     ("fn", Scope)  ("block", stmts)  ("skip",)  ("break",)  ("continue",)
 #   expressions:
 #     ("num", n) ("flt", x) ("var", name, line, mode) ("fnlit", Scope) ("call", callee, args, line)
-#     ("bin", op, l, r) ("cmp", ops, operands) ("and"/"or", l, r) ("neg"/"not"/"bnot"/"rand"/"abs"/"prime", e)
+#     ("bin", op, l, r) ("cmp", ops, operands) ("and"/"or", l, r) ("pos"/"neg"/"not"/"bnot"/"rand"/"abs"/"prime", e)
 #   mode: None = plain name, "^" = global (^x), "@" = variable of an enclosing function (@x)
 # ----------------------------------------------------------------------------
 INT_MAX = 2 ** 63 - 1
@@ -586,9 +586,29 @@ class Parser:
     if name in sc.consts:
       raise CompileError(f"line {line}: constant '{name}' is already defined (line {sc.consts[name]})")
 
+  def chain_target(self):
+    """another target of `a = b = c = e` ahead: `name =`, `^name =` or `@name =` (a plain `=`, not a compound operator): consume it, return (name, mode, line), else None"""
+    last = len(self.t) - 1
+    t0, t1, t2 = (self.t[min(self.i + j, last)] for j in range(3))
+    def is_eq(t):
+      return t[0] == "op" and t[1] == "="
+    if t0[0] == "id" and is_eq(t1):
+      self.i += 2
+      return (t0[1], None, t0[2])
+    if t0[0] == "op" and t0[1] in ("^", "@") and t1[0] == "id" and is_eq(t2):
+      self.i += 3
+      return (t1[1], t0[1], t1[2])
+    return None
+
   def assign(self, name, mode):
     optok = self.next()                     # '=' or a compound operator like '+='
     line, op = optok[2], optok[1]
+    targets = [(name, mode, line)]
+    while op == "=":                        # a = b = c = e: the value is computed once, c gets it, then b = c, then a = b
+      t = self.chain_target()
+      if t is None:
+        break
+      targets.append(t)
     e = self.expr()
     if op != "=":                           # x op= e   ->   x = x op e
       if is_const_name(name):
@@ -597,6 +617,13 @@ class Parser:
       bop = COMPOUND[op]
       e = ("and" if bop == "&&" else "or", cur, e) if bop in ("&&", "||") else ("bin", bop, cur, e)
     self.end_stmt()
+    nodes = []
+    for tname, tmode, tline in reversed(targets):          # the last target first
+      nodes.append(self.assign_node(tname, tmode, tline, e))
+      e = ("var", tname, tline, tmode)                     # the next target (to the left) takes the value from this one
+    return nodes[0] if len(nodes) == 1 else ("block", nodes)
+
+  def assign_node(self, name, mode, line, e):
     if is_const_name(name):
       if mode == "@":
         raise CompileError(f"line {line}: '@{name}': a constant cannot be an enclosing function's variable")
@@ -726,7 +753,7 @@ class Parser:
         self.i += 2
         return self.assign(t1[1], v)
       return self.expr_stmt()
-    if k in ("num", "hex", "flt") or (k == "op" and v in ("(", "-", "!", "~", "?", "|", "*")):
+    if k in ("num", "hex", "flt") or (k == "op" and v in ("(", "+", "-", "!", "~", "?", "|", "*")):
       return self.expr_stmt()
     self.err(f"unexpected {describe(self.peek())}")
 
@@ -895,6 +922,8 @@ class Parser:
     return e
 
   def unary(self):
+    if self.accept("+"):                            # +x: a number as it is, a str or a text in upper case (after an operand `+` is the sum)
+      return ("pos", self.unary())
     if self.accept("-"):
       if self.peek()[0] == "num":                 # fold -5 (also -9223372036854775808)
         n = -self.next()[1]
@@ -1133,9 +1162,10 @@ class Checker(Resolver):
 
   # -- numeric constraints
   def need_num(self, t, line, what, strings=False):
-    """t must be a number (int or float); with strings=True also a str or a text (a truth value, or printing)"""
+    """t must be a number (int or float); with strings=True also a str or a text (printing, `?`); with strings="truth" also a function (a truth value:
+    a function is true, only an unset function is false)"""
     t = prune(t)
-    if t.kind == "fn" or (t.kind in ("str", "text") and not strings):
+    if (t.kind == "fn" and strings != "truth") or (t.kind in ("str", "text") and not strings):
       self.err(line, f"type mismatch {what}: expected a number{' or a string' if strings else ''}, found {show(t)}")
     if t.kind == "var":
       self.pending.append(("num", t, line, what, strings))
@@ -1296,11 +1326,11 @@ class Checker(Resolver):
         if kind == "expr":
           self.need_num(self.expr(v, sc, s[2]), s[2], "in 'print' (only numbers, str and text can be printed)", True)
     elif k == "if":
-      self.need_num(self.expr(s[1], sc, s[4]), s[4], "in the condition of 'if'", True)
+      self.need_num(self.expr(s[1], sc, s[4]), s[4], "in the condition of 'if'", "truth")
       self.stmts(s[2], sc)
       self.stmts(s[3], sc)
     elif k == "while":
-      self.need_num(self.expr(s[1], sc, s[3]), s[3], "in the condition of 'while'", True)
+      self.need_num(self.expr(s[1], sc, s[3]), s[3], "in the condition of 'while'", "truth")
       self.stmts(s[2], sc)
     elif k == "exit":
       self.unify(INT, self.expr(s[1], sc, s[2]), s[2], "in 'exit'")
@@ -1387,16 +1417,20 @@ class Checker(Resolver):
           self.constrain(("order", a, b, line, op))
       return INT
     if k == "cond":
-      self.need_num(self.expr(e[1], sc, line), line, "in the condition of '?'", True)
+      self.need_num(self.expr(e[1], sc, line), line, "in the condition of '?'", "truth")
       ta, tb = self.expr(e[2], sc, line), self.expr(e[3], sc, line)
       res = Ty("var")
       self.constrain(("cond", res, ta, tb, line, "in '?!' (both branches must have the same type, or both be numbers)"))
       return res
     if k in ("and", "or"):
       sym = '&&' if k == 'and' else '||'
-      self.need_num(self.expr(e[1], sc, line), line, f"in left operand of '{sym}'", True)
-      self.need_num(self.expr(e[2], sc, line), line, f"in right operand of '{sym}'", True)
+      self.need_num(self.expr(e[1], sc, line), line, f"in left operand of '{sym}'", "truth")
+      self.need_num(self.expr(e[2], sc, line), line, f"in right operand of '{sym}'", "truth")
       return INT
+    if k == "pos":                      # +x has the type of x: int, float, str (upper case), text (upper case)
+      t = self.expr(e[1], sc, line)
+      self.need_num(t, line, "in operand of '+'", True)
+      return t
     if k == "neg":
       t = self.expr(e[1], sc, line)
       self.need_num(t, line, "in operand of '-'")
@@ -1406,7 +1440,7 @@ class Checker(Resolver):
       self.need_num(t, line, "in operand of '?'", True)
       return t
     if k == "not":
-      self.need_num(self.expr(e[1], sc, line), line, e[2] if len(e) > 2 else "in operand of '!'", True)
+      self.need_num(self.expr(e[1], sc, line), line, e[2] if len(e) > 2 else "in operand of '!'", "truth")
       return INT
     if k == "bnot":
       self.operand(e[1], sc, line, "operand of '~'")
@@ -1806,6 +1840,23 @@ INT_RT = {
     "004c89c031d249f7f14885d20f8424000000498d49024c89c031d248f7f14885d20f840f0000004983c106e9bbffffffb801"
     "000000c331c0c3"
   ),
+  "rt_upper_str": bytes.fromhex(
+    "4885c90f84230000000fb6068d509f83fa190f870300000083e820880748ffc648ffc748ffc90f85ddffffffc3"
+  ),
+  "rt_upper_text": bytes.fromhex(
+    "488d05730000004989c04885c90f84660000008b0683f8610f82480000004d89c1418b1185d20f843a00000039d00f822900"
+    "0000413b41040f871f0000004189c24129d2458b590c41ffcb4585da0f850900000041034108e9090000004983c110e9bbff"
+    "ffff89074883c6044883c70448ffc90f859affffffc3610000007a000000e0ffffff01000000b5000000b5000000e7020000"
+    "01000000e0000000f6000000e0ffffff01000000f8000000fe000000e0ffffff01000000ff000000ff000000790000000100"
+    "0000010100002f010000ffffffff02000000310100003101000018ffffff010000003301000037010000ffffffff02000000"
+    "3a01000048010000ffffffff020000004b01000077010000ffffffff020000007a0100007e010000ffffffff020000007f01"
+    "00007f010000d4feffff01000000ac030000ac030000daffffff01000000ad030000af030000dbffffff01000000b1030000"
+    "c1030000e0ffffff01000000c2030000c2030000e1ffffff01000000c3030000cb030000e0ffffff01000000cc030000cc03"
+    "0000c0ffffff01000000cd030000ce030000c1ffffff01000000300400004f040000e0ffffff01000000500400005f040000"
+    "b0ffffff010000006104000081040000ffffffff020000008b040000bf040000ffffffff02000000c2040000ce040000ffff"
+    "ffff02000000cf040000cf040000f1ffffff01000000d10400002f050000ffffffff02000000000000000000000000000000"
+    "00000000"
+  ),
 }
 # ---- END INT_RT
 
@@ -1884,7 +1935,7 @@ class CodeGen(Resolver):
     elif k == "cond":
       for x in e[1:]:
         self.a_expr(x, sc)
-    elif k in ("neg", "not", "bnot", "rand", "abs", "prime"):
+    elif k in ("pos", "neg", "not", "bnot", "rand", "abs", "prime"):
       self.a_expr(e[1], sc)
     elif k == "fnlit":
       self.analyze(e[1].body, e[1])
@@ -2120,6 +2171,11 @@ class CodeGen(Resolver):
       a.jcc(4, "rt_notfn")
       a.emit(0x50)                                     # push rax  (hidden last argument)
       a.emit(0xFF, 0x10)                               # call [rax]
+    elif k == "pos":                                     # +x: numbers stay, strings go to upper case (a new string)
+      self.expr(e[1])
+      tx = self.tk(e[1])
+      if tx in ("str", "text"):
+        a.call("rt_strupper" if tx == "str" else "rt_textupper")
     elif k == "neg":
       self.expr(e[1])
       if self.tk(e[1]) == "float":
@@ -3051,7 +3107,33 @@ class CodeGen(Resolver):
       a.label(name)
       a.emit(blob)
 
-    for name, blob in INT_RT.items():                    # rt_isprime: machine code from tools/int_rt.asm
+    # rt_strupper / rt_textupper: rax = str / text object (0 = empty) -> rax = a new object in upper case (0 for 0). The conversion itself is machine code
+    # from tools/int_rt.asm (rt_upper_str, rt_upper_text: rsi = source contents, rdi = destination contents, rcx = count).
+    for label, elem_shift, conv in (("rt_strupper", 0, "rt_upper_str"), ("rt_textupper", 2, "rt_upper_text")):
+      up_done = a.new_label("up_done")
+      a.label(label)
+      a.emit(prologue)
+      a.emit(0x48, 0x85, 0xC0)                           # test rax,rax
+      a.jcc(4, up_done)                                  # the empty string stays empty (rax = 0)
+      a.emit(0x48, 0x89, 0x45, 0xF8)                     # mov [rbp-8],rax      source object
+      a.emit(0x48, 0x8B, 0x08)                           # mov rcx,[rax]        length
+      a.emit(0x48, 0x89, 0x4D, 0xF0)                     # mov [rbp-16],rcx
+      if elem_shift:
+        a.emit(0x48, 0xC1, 0xE1, elem_shift)             # shl rcx,2            4 bytes per code point
+      a.emit(0x48, 0x83, 0xC1, 0x08)                     # add rcx,8            + the length word
+      a.call("rt_alloc")                                 # rax = new object
+      a.emit(0x48, 0x8B, 0x4D, 0xF0)                     # mov rcx,[rbp-16]
+      a.emit(0x48, 0x89, 0x08)                           # mov [rax],rcx        length
+      a.emit(0x48, 0x89, 0x45, 0xE8)                     # mov [rbp-24],rax     result
+      a.emit(0x48, 0x8B, 0x75, 0xF8)                     # mov rsi,[rbp-8]
+      a.emit(0x48, 0x83, 0xC6, 0x08)                     # add rsi,8            source contents
+      a.emit(0x48, 0x8D, 0x78, 0x08)                     # lea rdi,[rax+8]      destination contents
+      a.call(conv)
+      a.emit(0x48, 0x8B, 0x45, 0xE8)                     # mov rax,[rbp-24]
+      a.label(up_done)
+      a.emit(epilogue)
+
+    for name, blob in INT_RT.items():                    # rt_isprime, rt_upper_str, rt_upper_text: machine code from tools/int_rt.asm
       a.label(name)
       a.emit(blob)
 
@@ -3255,6 +3337,10 @@ def main():
   except CompileError as e:
     print(f"{name}: error: {e}", file=sys.stderr)
     return 1
+  except OSError as e:                                   # the source file is missing, a directory, not readable ...
+    print(f"{name}: error: cannot read the source file: {e.strerror or e}", file=sys.stderr)
+    return 1
+
   for w in warnings:
     print(f"{name}: warning: {w}", file=sys.stderr)
   out = args.output

@@ -1,0 +1,3 @@
+function pick(a) { if a: return \(): 1 }
+h = pick(0)
+assert h  -- => assertion failed (line 3): h (exit code 1)

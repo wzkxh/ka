@@ -333,6 +333,42 @@ int64_t rt_isprime(int64_t n)                        // rax = n  ->  rax = 1 if 
 }                                                    // about sqrt(n) / 3 divisions: n near 2^63 takes some 10^9 of them (several seconds)
 
 
+9a. Upper case (rt_strupper, rt_textupper in kota.py; rt_upper_str, rt_upper_text in tools/int_rt.asm; the unary operator +s)
+-------------------------------------------------------------------------------------------------------------------------
+void *rt_strupper(void *s)                           // rax = str object (0 = empty) -> rax = a new object, 0 for 0
+{
+  if (!s) return 0;
+  uint64_t n = *(uint64_t *)s;
+  uint64_t *r = rt_alloc(8 + n);  *r = n;
+  rt_upper_str((char *)s + 8, (char *)r + 8, n);
+  return r;
+}
+void rt_upper_str(const uint8_t *src, uint8_t *dst, uint64_t n)       // rsi, rdi, rcx
+{
+  for (; n; n--, src++, dst++) *dst = (*src >= 'a' && *src <= 'z') ? *src - 32 : *src;
+}
+void *rt_textupper(void *s)                          // the same for a text: 4 bytes per code point
+{
+  if (!s) return 0;
+  uint64_t n = *(uint64_t *)s;
+  uint64_t *r = rt_alloc(8 + 4 * n);  *r = n;
+  rt_upper_text((uint32_t *)((char *)s + 8), (uint32_t *)((char *)r + 8), n);
+  return r;
+}
+void rt_upper_text(const uint32_t *src, uint32_t *dst, uint64_t n)    // rsi, rdi, rcx
+{
+  for (; n; n--, src++, dst++) {
+    uint32_t c = *src;
+    if (c >= 'a')
+      for (const struct { uint32_t lo, hi; int32_t delta; uint32_t step; } *e = upper_table; e->lo; e++)
+        if (c >= e->lo && c <= e->hi && (c - e->lo) % e->step == 0) { c += e->delta; break; }
+    *dst = c;
+  }
+}
+// upper_table (26 entries, in tools/int_rt.asm): a-z -32; U+00B5; Latin-1 -32; U+00FF; Latin Extended-A pairs (step 2, -1) and U+0131, U+017F;
+// Greek U+03AC..03CE; Cyrillic U+0430..045F, pairs U+0461..052F, U+04CF.
+
+
 10. Operations that the code generator writes in place
 ------------------------------------------------------
 These are not routines (no call), but they behave like library functions and are easy to get wrong.
