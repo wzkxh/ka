@@ -9,10 +9,10 @@
 | & |                  | bitwise and, contains | &=  && logical and &&=      |
 | ~ | bitwise not      | bitwise xor, match    | ~=                          |
 | * | prime, scatter?  | multiply, repeat      | *=     *> <* rotate *>= <*= |
-| + | identity         | plus, concat          | +=     +> arithm.shift +>=  |
+| + | identity, upper  | plus, concat          | +=     +> arithm.shift +>=  |
 | - | negate, reverse  | minus                 | -=                          |
-| < | floor, lower     | less                  | <=  << shift left  <<=      |
-| > | ceil, upper      | greater               | >=  >> shift right >>=      |
+| < | floor            | less                  | <=  << shift left  <<=      |
+| > | ceil             | greater               | >=  >> shift right >>=      |
 | = | return           | assignment            |     == equal                |
 | @ | upper-level var  | char-at               |                             |
 | ^ | global var       | power                 | starts with                 |

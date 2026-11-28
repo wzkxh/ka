@@ -1,12 +1,41 @@
+command line options and pragmas
 
-64 - not so obvious
+-u             warn unused                      %+w
+-i             check init                       %-i
+-a             check assert                     %-a
+-v             check integer overlow            %-v
+-b             check bounds (range, stack)      %-b
+-n             check null?                      %-n
+-z             check zerodiv?                   %-z
+-f             check fp (result inf,nan,ufl)?   %+f
+
+
+inline fns; struct packing -- options
+
+
+Comparison tolerance, output.precision -- not worth, don't do
+-- abs(a-b) and CT*max(abs(a),abs(b))
+
+i think at file level it must be this way: when a piece of code is compiled that
+needs such flag (i.e. int a = b + c;), a global file flag is set "flag is used"
+(if it was set as compiler option, fine). naturally, initially it's "flag not used".
+then when we see construction #pragma check(ovf,on), we check this flag - if it's
+not yet used, great, we just set this option. if it is 'used' - it means that the
+flag is set later than it should have been. That "latch" or "seal" mechanism
+(flag_used state tracking) is a classic, rock-solid compiler design pattern the
+moment any code actually consumes it.
+OVF.is_locked = true
+
 
 
 integer overflow. it's integer overflow which hardware doesn't detect. so we have a flag
 to checking that too. (also for MININT/-1, MININT*-1, -MININT)
 
+jo  overflow_error
+
 zerodiv - always. hardware traps it.
 
+zdiv, fp overflow etc - hw or software?
 
 
 
@@ -18,7 +47,7 @@ Depending on the largest character in a string:
 
 
 
-print -0.0 -----> 0.0
+print -0.0 -----> 0.0 -- now prints -0.0
 signbit(x)
 
 
@@ -46,8 +75,6 @@ a1 - a/p a2 - am/pm A1 - A/P A2 - AM/PM
 w4 - weekday Monday..Sunday
 
 
-
-A str changes ASCII letters only. A text also changes Latin-1, Latin Extended-A, Greek and Cyrillic letters (including Ukrainian). ß stays unchanged.
 
 Random numbers
 

@@ -135,7 +135,7 @@ Precedence, highest to lowest; binary operators are left-associative except `^`:
   A negative count shifts the other way: `x >> -n` is `x << n`, `x << -n` is `x >> n`, `x +> -n` is `x << n`.
   A rotate takes the count modulo 64: `x <* -n` is `x *> n`, `x *> -n` is `x <* n`.
 - **Unary plus**, `+x`: a number as it is (`+x` is `x`, also `+-0.0` is `-0.0`); a `str` or a `text` in upper case, as a new string: `+'abc'` is `'ABC'`. A `str` changes the ASCII letters only (other bytes stay);
-  a `text` also changes the letters of Latin-1, Latin Extended-A, Greek and Cyrillic that have a one-character upper case (the sharp s `ß` stays). `+x + 1` is `(+x) + 1`; after an operand `+` is the sum. Not for functions.
+  a `text` also changes the letters of Latin-1, Latin Extended-A, Greek and Cyrillic that have a one-character upper case (the sharp s `ß` stays). Not for functions.
 - **Absolute value and length**, unary `|x` (after an operand `|` is bitwise or): for an int or a float the absolute value, of the same type (the smallest int stays as it is, `|-0.0` is `0.0`, the sign of NaN is cleared);
   for a `str` the number of bytes, for a `text` the number of characters, an int (0 for the empty string). `|x + 1` is `(|x) + 1`, `|(a - b)` needs the parentheses. Not for functions.
 - **Prime test**, unary `*n` (after an operand `*` is multiplication): for an int `n` the int 1 if `n` is a prime number, else 0 (`*-3`, `*0`, `*1` are 0, `*2` is 1). Ints only.

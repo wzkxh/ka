@@ -367,4 +367,22 @@ Zero and minus zero: 81_negative_zero has your example and a few more lines. -0.
 Chained assignment: a = b = c = 1 computes the value once, then assigns c, b = c, a = b. It works with constants (A = B = 1), ^x, @x, and inside one-line bodies. Only plain = chains. Tests: 80_chain_assignment, err_type_chain_assign and err_chain_const_twice.
 Version 7.5: VERSION is bumped and the release notes have the new entry. LANGUAGE.md, IMPLEMENTATION.txt and NOTES.md are updated too.
 
+----
+
+7.6
+
+unary '<' - fp floor; unary '>' - fp ceil; -s for strings -- reverse. 'abc' --> 'cba'; bytes and unicode chars resp.
+other big change: please  add type void -- if function doesn't return int or other value explicitely, or it returns with 'naked' return, it's considered to return void and it is called as a statement without any warnings and it can't be called inside expressions because it doesn't return a value for expression. other functions, that return values, should return it on all the paths. ideally so, but don't check it for now -- just mention in LANGUAGE that it's not checked (b/c it can be return from loop, and it always returns, and then no sense to add fake return at the end). maybe in the future we'll analyze such cases, now do just minimum to implement that, i.e. void ↔ int/etc. i think that's all about void. (will be version 7.6)
+
+Q:
+<x and >x: should the result stay a float (e.g. <2.7 gives 2.0), or become an int? And should an int operand pass through unchanged?
+Mixed returns: if one path has return 5 and another has a naked return, should that be a compile error? I assume yes, since the function can't be both void and valued.
+Void in a conditional: is c ? f() ! g() allowed as a statement when both calls are void? I assume yes, but it's an edge case. I also assume assigning or printing a void call is a compile error, as is assert on one.
+
+A:
+ah. <x and >x for floats return float. probably not implemented for other types yet.
+yes. return 5 and naked return in the same function is an error.
+c ? f() ! g() where f and g both void fns, i think it's ok and it can be as a statement.
+yes you can't print void and you can't assign void
+
 

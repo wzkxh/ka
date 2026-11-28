@@ -1,12 +1,18 @@
 ## Not in the language (yet)
+- void: fns returning void;
 - fns floor/ceil; or <x >x;
-- multi-assignment a=b=c=v;
 - multi-value assignment (a,b=x,y), not returns;
-- multi-value returns - maybe introduce tuples;
-- multi-value with split (a,b,\*c = x,y,p,q,r);
-- void; fns returning void; warning about calls whose value is not used;
-- short strings 0-7 chars kept in 64-bit words;
+- multi-value returns - maybe introduce tuples; or pass pre-allocated space for results;
 - a garbage collector (GC); or rather reference counter;
+- arrays (lists); literals 1 2 3 \_4, 5.0 6 \_7, [5.0,6,\_7], ["s","tt"];
+- array generator/reshape 0$100, 1.0$10, ""$5, 1 2 3$20 (n$data or data$n?);
+- shape $a;
+- input (no way to read a value yet); get;
+- print --> put;
+- multi-value with split (a,b,\*c = x,y,p,q,r);
+- named and optional fn arguments; \*c in arguments;
+- short strings 0-7 chars kept in 64-bit words;
+- flexible string representation: 1/2/4 byts per chars as needed;
 - maybe string literals in one table;
 - str/text repetition `x*n` `n*x`;
 - float literals: #i #n #p #t #inf -#inf #nan #pi #tau (or like in J?);
@@ -17,13 +23,7 @@
 - fn(x,...) <=> x.fn(...);
 - fn(x) <=> fn x; statement fn x,y,...;
 - `f(1)` and `f(1.5)` cannot both be called in this order, but the reverse is ok;
-- named and optional arguments;
-- input (no way to read a value yet); get;
-- print --> put;
-- arrays (lists); literals 1 2 3 \_4, 5.0 6 \_7, [5.0,6,\_7], ["s","tt"];
-- array generator 0$100, 1.0$10, ""$5, 1 2 3$20 (n$data or data$n?);
-- print -0.0 as 0.0;
-- shape $a;
+- print -0.0 as 0.0; unclear;
 - dictionaries, sets, tuples;
 - structures; classes;
 - enums;
